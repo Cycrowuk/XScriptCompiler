@@ -1,0 +1,105 @@
+XScript Compiler Programming Syntax
+
+Termination:
+All lines are terminated with a semi colon ';'
+
+Variables:
+All variables need to begin with dollar symbol '$', ie $variable
+They can contain letters, numbers, underscore and fullstop/Period.
+The first character after the $ must be a letter
+
+Arrays/Tables:
+To use an array or table, you use the subscript operators '[' and ']'.
+IE, $array[10]
+The subscript can be a single value, or an expression/function.  If the variable is an array, a warning will be displayed with the value is anything but a number.
+Tables will allow any value.
+Arrays can be used within any expression or function
+Arrays can be used against variables, or functions (if the function returns an array type)
+
+Functions:
+The functions will translate to the various X3 script commands, the arguments are between brackets '(' ')' and seperated by commas ','.
+IE, functionName(argument1, argument2);
+The arguments can be other function calls, arrays or expressions
+
+Object Functions:
+When using functions from objects, you use '->'
+IE, $object->functionName();
+
+Numbers:
+The X3 scripts only support integer values (no floating-point)
+So a number is only valid if it contains nothing but '0' to '9'
+
+Assignments:
+The assignment symbol is a single equals '='.  This must be preceded with a variable or an array
+	$variable = 10;
+	$array[1] = 10;
+
+Constants:
+Constants uses a namespace symbol '::' with the constant group name and constant name.
+	TextPage::Menus
+
+Special Constants:
+There are a number of special constants, which are specific to the object the scrpit is being run on.  IF the script is running globally, these will be null
+	this				The current object
+	ThisHomebase		The homebase of the current object
+	ThisEnvironment		The environment of the current object (ie sector or docking ship/station)
+	ThisSector			The sector of the current object
+	ThisOwner			The owner race of the current object
+	DOCKEDAT			The current docking ship/station
+	TRUEOWNER			The "true" owner race.  IE if the object is hiding thier actualy race, like pirates.
+There are also some global constants
+	PLAYERSHIP			The current player ship object (the ship the player is currently in)
+	TRUE				1
+	FALSE				0
+	NULL
+	
+
+Conditionals:
+Conditions use the conditional keyword, with the conditional stationment in brackets.
+Keywords:
+	if
+	else
+	not
+	while
+Keywords can be combined, ie.
+	if not
+	else if
+	else if not
+Unlike in X3, do if and skip if dont exist, these will be used automatically by the compiler depending on the size of the block.
+
+Blocks:
+Blocks are defined using the braces '{' and '}'.  This allows multiple statements to be used with a conditional.
+	if(...) 
+	{
+		...
+		...
+	}
+
+Comments:
+a single line comment uses '//'
+You can also use a multiline comment starting with '/*' and ending with '*/'.  Anything between these will be ignored by the compiler
+
+Expression Operators:
+Most operators are only valid when using with integer values or variables.  Everything else will be converted to a string, and only the '+' is valid for strings.
+	+	Addition (valid for integers and strings)
+	-	Subtraction
+	/	Divide
+	* 	Multiple
+	%	Modulus
+	^	Bitwise XOR
+	&	Bitwise AND
+	|	Bitwise OR
+	~	Bitwise Negate
+
+Logical Operators:
+For use in comparisons and conditional statements
+	&&	And
+	||	Or
+	!	Not
+	==	Equals
+	!=	Not Equals
+	>	Greater Than
+	>=	Greater Than or Equals
+	<	Lesser Than
+	<=	Lesser Than or Equals
+

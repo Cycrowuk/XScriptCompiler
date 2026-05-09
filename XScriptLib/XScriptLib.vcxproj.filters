@@ -1,0 +1,207 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Header Files\ParseTypes">
+      <UniqueIdentifier>{95e2b909-dcc6-47be-b786-bafe234e4cfb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ParseTypes">
+      <UniqueIdentifier>{eb0ff29f-8254-462e-ad15-98c967e13201}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="framework.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XScriptLib.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CScript.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CScriptParser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CScriptData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseSymbol.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseFunction.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseBrackets.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseCondition.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseExpression.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseOperator.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseArguments.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseFail.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseArray.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseInteger.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseConstant.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseString.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseKeyword.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseVariable.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseParse.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ScriptDataReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseNull.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="Utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ScriptRead.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XScriptUDL.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseNamespace.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseProperty.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseLabel.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="ParseDefine.h">
+      <Filter>Header Files\ParseTypes</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="XScriptLib.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CScript.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CScriptParser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CScriptData.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseSymbol.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseFunction.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseBrackets.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseCondition.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseExpression.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseOperator.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseArguments.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseFail.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseArray.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseInteger.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseConstant.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseString.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseKeyword.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseVariable.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="BaseParse.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptDataReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseNull.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptRead.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XScriptUDL.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseNamespace.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseProperty.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseLabel.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="ParseDefine.cpp">
+      <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+</Project>

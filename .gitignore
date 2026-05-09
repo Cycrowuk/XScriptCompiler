@@ -1,0 +1,14 @@
+/BUILD/Data
+*.exe
+*.zip
+/Debug
+/ExtractData/Debug
+*.cpp
+/ExtractData
+/x64
+/XLib/Debug
+/XLib/x64
+/XScript
+/XScriptLib/.vs
+/XScriptLib/Debug
+/XScriptLib/x64

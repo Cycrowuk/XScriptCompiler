@@ -1,0 +1,8 @@
+V0.2
+	Added PCK support for compiling/decompiling script files
+	Updated function data id 100-500
+
+v0.3
+	Updated function data id 500-600
+	Added namespaces to constants
+	Improved error messages for loading xml data
