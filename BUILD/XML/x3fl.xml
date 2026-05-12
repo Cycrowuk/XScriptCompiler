@@ -21564,6 +21564,7 @@
 		<!--<Property name="position" description="The position of the object" getter="794" setter="767"/>-->
 		<Property name="hull" description="The hull amount of a ship" getter="787" setter="1047"/>
 		<Property name="disabled" description="If the ship is disabled" getter="759" setter="793"/>
+		<Property name="exists" description="If the object exists" getter="706"/>
  	</Properties>
 	<!-- Macros currently not supported -->
 	<Macros>
