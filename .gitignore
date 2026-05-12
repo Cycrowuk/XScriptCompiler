@@ -3,7 +3,6 @@
 *.zip
 /Debug
 /ExtractData/Debug
-*.cpp
 /ExtractData
 /x64
 /XLib/Debug
