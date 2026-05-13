@@ -2,13 +2,14 @@
 *.exe
 *.zip
 /Debug
-/ExtractData/Debug
 /ExtractData
 /x64
 /XLib/Debug
 /XLib/x64
-/XScript
 /XScriptLib/.vs
 /XScriptLib/Debug
 /XScriptLib/x64
 /.vs
+/XScript/Data
+/XScript/Debug
+/XScript/x64
