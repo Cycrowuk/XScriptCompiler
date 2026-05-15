@@ -900,6 +900,8 @@
 			<Constant id="834" code="Avoid" globalcode="Blacklist.Avoid" description="Blacklist.Avoid" type="DATATYPE_INT"/>
 			<Constant id="835" code="Block" globalcode="Blacklist.Block" description="Blacklist.Block" type="DATATYPE_INT"/>
 			<Constant id="836" code="Whitelist" globalcode="Blacklist.Whitelist" description="Blacklist.Whitelist" type="DATATYPE_INT"/>
+			<Constant id="837" code="GlobalFF" globalcode="Blacklist.GlobalFF" description="Use global friend/foe as blacklist" type="DATATYPE_INT"/>
+			<Constant id="838" code="AutoSingle" globalcode="Blacklist.AutoSingle" description="" type="DATATYPE_INT"/>
 		</ConstantGroup>
 		<ConstantGroup code="Bulletfxf" description="Bulletfxf" namespace="true">
 			<Constant id="3060" code="Smoke" globalcode="Bulletfxf.Smoke" description="Bulletfxf.Smoke" type="DATATYPE_INT"/>
@@ -1225,6 +1227,8 @@
 			<Constant id="604" code="HeadingClick" globalcode="Menuevent.Headingclick" description="Menuevent.Headingclick" type="5"/>
 			<Constant id="606" code="Data" globalcode="Menuevent.Data" description="Menuevent.Data" type="5"/>
 			<Constant id="607" code="Upkeep" globalcode="Menuevent.Upkeep" description="Menuevent.Upkeep" type="5"/>
+			<Constant id="608" code="TradeFull" globalcode="Menuevent.TradeFull" description="Trade bar full hotkey pressed" type="5"/>
+			<Constant id="609" code="TradeEmpty" globalcode="Menuevent.TradeEmpty" description="Trade bar empty hotkey pressed" type="5"/>
 		</ConstantGroup>
 		<ConstantGroup code="MenuIcons" description="Common icon ids for menus" namespace="true">
 			<Constant id="4200" code="Diplomacy" globalcode="Menuicon.Diplomacy" description="Menuicon.Diplomacy" type="DATATYPE_INT"/>
@@ -1261,6 +1265,7 @@
 			<Constant id="3026" code="Trigger" globalcode="Missileflgf.Triggerboom" description="Missileflgf.Triggerboom" type="DATATYPE_INT"/>
 			<Constant id="3027" code="Torpedo" globalcode="Missileflgf.Torpedo" description="Missileflgf.Torpedo" type="DATATYPE_INT"/>
 			<Constant id="3028" code="Remote" globalcode="Missileflgf.Remote" description="Missileflgf.Remote" type="DATATYPE_INT"/>
+			<Constant id="3029" code="Damage" globalcode="Missileflgf.Damage" description="Missileflgf.Damage" type="DATATYPE_INT"/>
 		</ConstantGroup>
 		<ConstantGroup code="MessageFlag" description="Message flags" namespace="true">
 			<Constant id="3000" code="Display" globalcode="Msgflgf.Display" description="Msgflgf.Display" type="DATATYPE_INT"/>
@@ -1346,6 +1351,7 @@
 			<Constant id="1038" code="DontTalk" globalcode="Raceflag.Donttalk" description="Raceflag.Donttalk" type="DATATYPE_INT"/>
 			<Constant id="1039" code="NotorityLocked" globalcode="Raceflag.Notolocked" description="Raceflag.Notolocked" type="DATATYPE_INT"/>
 			<Constant id="1040" code="DisableDynamic" globalcode="Raceflag.Disabledynamic" description="Raceflag.Disabledynamic" type="DATATYPE_INT"/>
+			<Constant id="1041" code="Inactive" globalcode="Raceflag.Inactive" description="Race is currently inactive" type="DATATYPE_INT"/>
 		</ConstantGroup>
 		<ConstantGroup code="RectColour" description="Rectangle colours" namespace="true">
 			<Constant id="940" code="Bracket" globalcode="Rectcol.Bracket" description="Rectcol.Bracket" type="DATATYPE_INT"/>
@@ -1370,6 +1376,7 @@
 			<Constant id="802" code="NoDeviceCheck" globalcode="Jump.Nodevicecheck" description="Jump.Nodevicecheck" type="DATATYPE_INT"/>
 			<Constant id="803" code="NoEnergyCheck" globalcode="Jump.Noenergycheck" description="Jump.Noenergycheck" type="DATATYPE_INT"/>
 			<Constant id="804" code="NoJumpableCheck" globalcode="Jump.Nojumpablecheck" description="Jump.Nojumpablecheck" type="DATATYPE_INT"/>
+			<Constant id="805" code="NoEnergyUse" globalcode="Jump.NoEnergyUse" description="Jump drive without using any energy" type="DATATYPE_INT"/>
 		</ConstantGroup>
 		<ConstantGroup code="ShipLoadout" description="Ship loadout sizes" namespace="true">
 			<Constant id="246" code="Min" globalcode="Shipload.Min" description="Shipload.Min" type="DATATYPE_INT"/>
@@ -1526,6 +1533,10 @@
 			<Constant id="632" code="Fluff" globalcode="Ware.Fluff" description="Ware.Fluff" type="DATATYPE_INT"/>
 			<Constant id="633" code="Discovery" globalcode="Ware.Discovery" description="Ware.Discovery" type="DATATYPE_INT"/>
 			<Constant id="634" code="Deployable" globalcode="Ware.Deployable" description="Ware.Deployable" type="DATATYPE_INT"/>
+			<Constant id="635" code="NoPrice" globalcode="Ware.NoPrice" description="Ware will not show a price, and cant be bought/sold" type="DATATYPE_INT"/>
+			<Constant id="636" code="Luxury" globalcode="Ware.Luxury" description="Is a luxury ware" type="DATATYPE_INT"/>
+			<Constant id="637" code="NoEject" globalcode="Ware.NoEject" description="Ware cannot be ejected" type="DATATYPE_INT"/>
+			<Constant id="638" code="Permanant" globalcode="Ware.Permanent" description="Ware is perminant and cant be removed" type="DATATYPE_INT"/>
 		</ConstantGroup>
 		<ConstantGroup code="Wing" description="Wing" namespace="true">
 			<Constant id="3030" code="Gold" globalcode="Wing.Gold" description="Wing.Gold" type="DATATYPE_INT"/>
@@ -1537,6 +1548,31 @@
 			<Constant id="3036" code="Silver" globalcode="Wing.Silver" description="Wing.Silver" type="DATATYPE_INT"/>
 			<Constant id="3037" code="Orange" globalcode="Wing.Orange" description="Wing.Orange" type="DATATYPE_INT"/>
 			<Constant id="3038" code="NeedAllShips" globalcode="Wing.Needallships" description="Wing.Needallships" type="DATATYPE_INT"/>
+		</ConstantGroup>
+		<ConstantGroup code="PlotFlag" description="Plot flags used for jobs" namespace="true">
+			<Constant id="4151" code="Xenon1" globalcode="PlotFlg.Xenon1" description="Xenon Dynamic Jobs" type="DATATYPE_INT"/>
+			<Constant id="4152" code="Xenon2" globalcode="PlotFlg.Xenon2" description="Xenon Dynamic Jobs" type="DATATYPE_INT"/>
+			<Constant id="4153" code="Xenon3" globalcode="PlotFlg.Xenon3" description="Xenon Dynamic Jobs" type="DATATYPE_INT"/>
+			<Constant id="4154" code="Xenon4" globalcode="PlotFlg.Xenon4" description="Xenon Dynamic Jobs" type="DATATYPE_INT"/>
+			<Constant id="4155" code="Xenon5" globalcode="PlotFlg.Xenon5" description="Xenon Dynamic Jobs" type="DATATYPE_INT"/>
+			<Constant id="4156" code="HSAP_K1" globalcode="PlotFlg.HSAP_K1" description="Khaak HSAP Jobs" type="DATATYPE_INT"/>
+			<Constant id="4157" code="HSAP_K2" globalcode="PlotFlg.HSAP_K2" description="Khaak HSAP Jobs" type="DATATYPE_INT"/>
+			<Constant id="4158" code="HSAP_X1" globalcode="PlotFlg.HSAP_X1" description="Xenon HSAP Jobs" type="DATATYPE_INT"/>
+			<Constant id="4159" code="HSAP_X2" globalcode="PlotFlg.HSAP_X2" description="Xenon HSAP Jobs" type="DATATYPE_INT"/>
+			<Constant id="4160" code="Terran" globalcode="PlotFlg.Terran" description="Terran sector Jobs" type="DATATYPE_INT"/>
+		</ConstantGroup>
+		<ConstantGroup code="ObjectContextMenu" description="Type of context menus for objects" namespace="true">
+			<Constant id="5001" code="Custom" globalcode="ObjectContext.Custom" description="Custom menu entry" type="DATATYPE_INT"/>
+			<Constant id="5002" code="Advanced" globalcode="ObjectContext.Advanced" description="Advanced submenu" type="DATATYPE_INT"/>
+			<Constant id="5003" code="Sector" globalcode="ObjectContext.Sector" description="Sector submenu" type="DATATYPE_INT"/>
+			<Constant id="5004" code="Orders" globalcode="ObjectContext.Orders" description="Orders submenu" type="DATATYPE_INT"/>
+		</ConstantGroup>
+		<ConstantGroup code="Sidebar" description="Submenus within the sidebar" namespace="true">
+			<Constant id="5101" code="Custom" globalcode="Sidebar.Custom" description="Custom menu entry" type="DATATYPE_INT"/>
+			<Constant id="5102" code="Empire" globalcode="Sidebar.Empire" description="Empire management submenu" type="DATATYPE_INT"/>
+			<Constant id="5103" code="StockEx" globalcode="Sidebar.StockEx" description="Stock Exchange submenu" type="DATATYPE_INT"/>
+			<Constant id="5104" code="Messages" globalcode="Sidebar.Messages" description="Log Messages submenu" type="DATATYPE_INT"/>
+			<Constant id="5105" code="Advanced" globalcode="Sidebar.Advanced" description="Advanced submenu" type="DATATYPE_INT"/>
 		</ConstantGroup>
 	</Constants>
 	<Commands>

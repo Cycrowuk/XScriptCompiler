@@ -50,9 +50,11 @@
 		<KeyWord name="BOOLEAN" func="no"/>
 		<KeyWord name="Beryll" func="no"/>
 		<KeyWord name="Blacklist::Auto" func="no"/>
+		<KeyWord name="Blacklist::AutoSingle" func="no"/>
 		<KeyWord name="Blacklist::Avoid" func="no"/>
 		<KeyWord name="Blacklist::Block" func="no"/>
 		<KeyWord name="Blacklist::Disabled" func="no"/>
+		<KeyWord name="Blacklist::GlobalFF" func="no"/>
 		<KeyWord name="Blacklist::Manual" func="no"/>
 		<KeyWord name="Blacklist::None" func="no"/>
 		<KeyWord name="Blacklist::Whitelist" func="no"/>
@@ -1593,6 +1595,7 @@
 		<KeyWord name="JumpFlags::Manual" func="no"/>
 		<KeyWord name="JumpFlags::NoDeviceCheck" func="no"/>
 		<KeyWord name="JumpFlags::NoEnergyCheck" func="no"/>
+		<KeyWord name="JumpFlags::NoEnergyUse" func="no"/>
 		<KeyWord name="JumpFlags::NoJumpableCheck" func="no"/>
 		<KeyWord name="JumpFlags::Quick" func="no"/>
 		<KeyWord name="Khaak" func="no"/>
@@ -1685,6 +1688,8 @@
 		<KeyWord name="MenuEvent::TabChanged" func="no"/>
 		<KeyWord name="MenuEvent::TradeBar" func="no"/>
 		<KeyWord name="MenuEvent::TradeBarChanged" func="no"/>
+		<KeyWord name="MenuEvent::TradeEmpty" func="no"/>
+		<KeyWord name="MenuEvent::TradeFull" func="no"/>
 		<KeyWord name="MenuEvent::Update" func="no"/>
 		<KeyWord name="MenuEvent::Upkeep" func="no"/>
 		<KeyWord name="MenuIcons::Actions" func="no"/>
@@ -1722,6 +1727,7 @@
 		<KeyWord name="MessageFlag::PlotMessage" func="no"/>
 		<KeyWord name="MessageFlag::Silent" func="no"/>
 		<KeyWord name="MessageFlag::Temporary" func="no"/>
+		<KeyWord name="MissileFlag::Damage" func="no"/>
 		<KeyWord name="MissileFlag::Dumbfire" func="no"/>
 		<KeyWord name="MissileFlag::Heetseek" func="no"/>
 		<KeyWord name="MissileFlag::NoTarget" func="no"/>
@@ -1752,6 +1758,10 @@
 		<KeyWord name="OBJECTCLASS" func="no"/>
 		<KeyWord name="OBJSIGNAL" func="no"/>
 		<KeyWord name="OTAS" func="no"/>
+		<KeyWord name="ObjectContextMenu::Advanced" func="no"/>
+		<KeyWord name="ObjectContextMenu::Custom" func="no"/>
+		<KeyWord name="ObjectContextMenu::Orders" func="no"/>
+		<KeyWord name="ObjectContextMenu::Sector" func="no"/>
 		<KeyWord name="PARDEF" func="no"/>
 		<KeyWord name="PASSENGER" func="no"/>
 		<KeyWord name="PASSENGEROFSHIP" func="no"/>
@@ -1767,6 +1777,16 @@
 		<KeyWord name="PlayerLog::Normal" func="no"/>
 		<KeyWord name="PlayerLog::Own" func="no"/>
 		<KeyWord name="PlayerRace" func="no"/>
+		<KeyWord name="PlotFlag::HSAP_K1" func="no"/>
+		<KeyWord name="PlotFlag::HSAP_K2" func="no"/>
+		<KeyWord name="PlotFlag::HSAP_X1" func="no"/>
+		<KeyWord name="PlotFlag::HSAP_X2" func="no"/>
+		<KeyWord name="PlotFlag::Terran" func="no"/>
+		<KeyWord name="PlotFlag::Xenon1" func="no"/>
+		<KeyWord name="PlotFlag::Xenon2" func="no"/>
+		<KeyWord name="PlotFlag::Xenon3" func="no"/>
+		<KeyWord name="PlotFlag::Xenon4" func="no"/>
+		<KeyWord name="PlotFlag::Xenon5" func="no"/>
 		<KeyWord name="Quest::Aborted" func="no"/>
 		<KeyWord name="Quest::Accepted" func="no"/>
 		<KeyWord name="Quest::Attacked" func="no"/>
@@ -1789,6 +1809,7 @@
 		<KeyWord name="RaceFlag::FixedNotority" func="no"/>
 		<KeyWord name="RaceFlag::HasEconomy" func="no"/>
 		<KeyWord name="RaceFlag::HasMarines" func="no"/>
+		<KeyWord name="RaceFlag::Inactive" func="no"/>
 		<KeyWord name="RaceFlag::IsPirate" func="no"/>
 		<KeyWord name="RaceFlag::Known" func="no"/>
 		<KeyWord name="RaceFlag::Main" func="no"/>
@@ -3215,6 +3236,11 @@
 		<KeyWord name="ShipSize::L" func="no"/>
 		<KeyWord name="ShipSize::M" func="no"/>
 		<KeyWord name="ShipSize::S" func="no"/>
+		<KeyWord name="Sidebar::Advanced" func="no"/>
+		<KeyWord name="Sidebar::Custom" func="no"/>
+		<KeyWord name="Sidebar::Empire" func="no"/>
+		<KeyWord name="Sidebar::Messages" func="no"/>
+		<KeyWord name="Sidebar::StockEx" func="no"/>
 		<KeyWord name="Sound::Fail" func="no"/>
 		<KeyWord name="Sound::Move" func="no"/>
 		<KeyWord name="Sound::Success" func="no"/>
@@ -3361,10 +3387,14 @@
 		<KeyWord name="WareFlag::EquipmentPack" func="no"/>
 		<KeyWord name="WareFlag::EquipmentVolume" func="no"/>
 		<KeyWord name="WareFlag::Fluff" func="no"/>
+		<KeyWord name="WareFlag::Luxury" func="no"/>
 		<KeyWord name="WareFlag::Marine" func="no"/>
+		<KeyWord name="WareFlag::NoEject" func="no"/>
+		<KeyWord name="WareFlag::NoPrice" func="no"/>
 		<KeyWord name="WareFlag::Once" func="no"/>
 		<KeyWord name="WareFlag::Passenger" func="no"/>
 		<KeyWord name="WareFlag::PassengerCiv" func="no"/>
+		<KeyWord name="WareFlag::Permanant" func="no"/>
 		<KeyWord name="WareFlag::Player" func="no"/>
 		<KeyWord name="WareFlag::Software" func="no"/>
 		<KeyWord name="WareFlag::Upgrade" func="no"/>
