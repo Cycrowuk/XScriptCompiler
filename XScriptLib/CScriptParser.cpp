@@ -37,7 +37,7 @@ std::wstring CombineStrings(const std::wstring& str1, const std::wstring& str2)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-CScriptParser::CScriptParser(const CScriptData *data) : 
+CScriptParser::CScriptParser(const CScriptData* data) :
 	_currentScript(NULL),
 	_data(data),
 	_generatedVariables(0),
@@ -195,7 +195,7 @@ BaseParse* CScriptParser::parseConstant(const std::wstring& line) const
 		return new ParseNull(line);
 
 	const ConstantData* c = _data->findConstant(line);
-	if(c)
+	if (c)
 		return new ParseConstant(line, c);
 
 	// Check whether the name matches a DataType's prefix pattern.
@@ -214,13 +214,13 @@ BaseParse* CScriptParser::parseConstant(const std::wstring& line) const
 		return new ParseConstant(line, synthetic);
 	}
 
-	ParseFail *fail = new ParseFail(line, ParseErrors::UnknownConstant);
+	ParseFail* fail = new ParseFail(line, ParseErrors::UnknownConstant);
 	fail->addData(line);
 
 	return fail;
 }
 
-std::vector<const BaseParse*>::iterator CScriptParser::addBracket(std::vector<const BaseParse*>::iterator startItr, const std::vector<const BaseParse*> &list, ParseBrackets* currentBracket)
+std::vector<const BaseParse*>::iterator CScriptParser::addBracket(std::vector<const BaseParse*>::iterator startItr, const std::vector<const BaseParse*>& list, ParseBrackets* currentBracket)
 {
 	currentBracket->setPosition((*startItr)->startingPos(), 0);
 
@@ -277,7 +277,7 @@ std::vector<const BaseParse*>::iterator CScriptParser::addBracket(std::vector<co
 	return itr;
 }
 
-bool CScriptParser::parseListBrackets(std::vector<const BaseParse *> &list)
+bool CScriptParser::parseListBrackets(std::vector<const BaseParse*>& list)
 {
 	bool error = false;
 
@@ -324,7 +324,7 @@ bool CScriptParser::parseListBrackets(std::vector<const BaseParse *> &list)
 	return !error;
 }
 
-std::vector<const BaseParse*>::iterator CScriptParser::_parseEndArray(std::vector<const BaseParse*>& list, std::vector<const BaseParse*>::iterator startItr, ParseArray *arr)
+std::vector<const BaseParse*>::iterator CScriptParser::_parseEndArray(std::vector<const BaseParse*>& list, std::vector<const BaseParse*>::iterator startItr, ParseArray* arr)
 {
 	std::vector<const BaseParse*> internalList;
 	const BaseParse* previous = NULL;
@@ -447,7 +447,7 @@ bool CScriptParser::_findArrays(std::vector<const BaseParse*>& list, bool topLev
 				if (!_parseCompoundAssignment(bracketsList))
 					error = true;
 
-				if(!error)
+				if (!error)
 					error = !_parseArrays(bracketsList, false);
 
 				const_cast<ParseBrackets*>(brackets)->clear();
@@ -860,7 +860,7 @@ bool CScriptParser::_parseArrays(std::vector<const BaseParse*>& list, bool topLe
 	}
 
 	// next, find the assignments and add them to arrays
-	if(!error)
+	if (!error)
 	{
 		std::vector<const BaseParse*> oldList(list);
 		list.clear();
@@ -928,7 +928,7 @@ bool CScriptParser::_parseArrays(std::vector<const BaseParse*>& list, bool topLe
 	}
 
 	// finally, set any assign values
-	if(!error)
+	if (!error)
 	{
 		std::vector<const BaseParse*> oldList(list);
 		list.clear();
@@ -945,7 +945,7 @@ bool CScriptParser::_parseArrays(std::vector<const BaseParse*>& list, bool topLe
 			}
 			if (previous && previous->type() == ParseType::Array)
 			{
-				ParseArray* arr = const_cast<ParseArray *>(dynamic_cast<const ParseArray*>(previous));
+				ParseArray* arr = const_cast<ParseArray*>(dynamic_cast<const ParseArray*>(previous));
 				if (parse->type() == ParseType::Symbol)
 				{
 					const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(parse);
@@ -974,7 +974,7 @@ bool CScriptParser::_parseArrays(std::vector<const BaseParse*>& list, bool topLe
 					}
 				}
 			}
-			
+
 			if (parse && parse->type() == ParseType::Symbol)
 			{
 				const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(parse);
@@ -1053,7 +1053,7 @@ bool CScriptParser::_parseAllConditions(std::vector<const BaseParse*>& list)
 		}
 
 		// check for 2 conditions next to each other
-		if ((*itr)->type()  == ParseType::Condition && previous && previous->type()  == ParseType::Condition)
+		if ((*itr)->type() == ParseType::Condition && previous && previous->type() == ParseType::Condition)
 		{
 			const ParseCondition* c1 = dynamic_cast<const ParseCondition*>(*itr);
 			const ParseCondition* c2 = dynamic_cast<const ParseCondition*>(previous);
@@ -1116,7 +1116,7 @@ bool CScriptParser::_parseAllConditions(std::vector<const BaseParse*>& list)
 			{
 				if (c1->condition() == Conditions::If)
 				{
-					ParseCondition *newCond = new ParseCondition(c1->line(), Conditions::ElseIf);
+					ParseCondition* newCond = new ParseCondition(c1->line(), Conditions::ElseIf);
 					newCond->setLinePosition(c2->linePos());
 					newCond->setFile(_currentFile.back());
 					newCond->setPosition(c2->startingPos(), c1->endingPos());
@@ -1244,7 +1244,7 @@ bool CScriptParser::_parseCompoundAssignment(std::vector<const BaseParse*>& list
 			list.push_back(parse);
 			continue;
 		}
-		else if (parse->type() == ParseType::Brackets) 
+		else if (parse->type() == ParseType::Brackets)
 		{
 			const ParseBrackets* brackets = dynamic_cast<const ParseBrackets*>(parse);
 			std::vector<const BaseParse*> bracketsList(brackets->constList());
@@ -1498,7 +1498,7 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 						}
 					}
 
-					if(!found)
+					if (!found)
 						define->addParse(*itr);
 				}
 
@@ -1566,7 +1566,7 @@ bool CScriptParser::_parseNamespaces(std::vector<const BaseParse*>& list)
 					delete parse;
 					continue;
 				}
-				else if((++itr) == oldList.end() || (*itr)->type() != ParseType::Keyword || symb->hasWhitespaceAfter())
+				else if ((++itr) == oldList.end() || (*itr)->type() != ParseType::Keyword || symb->hasWhitespaceAfter())
 				{
 					_addError(ParseErrors::InvalidNamespace, parse);
 					error = true;
@@ -1648,7 +1648,7 @@ bool CScriptParser::findProperties(const std::vector<const BaseParse*>& list, st
 				prop->setLinePosition(keyword->linePos());
 				prop->setFile(_currentFile.back());
 				prop->setPosition(previous->startingPos(), keyword->endingPos());
-				prop->setObject(const_cast<BaseParse *>(previous));
+				prop->setObject(const_cast<BaseParse*>(previous));
 
 				delete keyword;
 				previous = prop;
@@ -2101,7 +2101,7 @@ bool CScriptParser::parseConstants(const std::vector<const BaseParse*>& list, st
 				delete ns;
 				previous = constant;
 				continue;
-			}	
+			}
 			else
 			{
 				_addError(ParseErrors::UnknownConstant, ns);
@@ -2112,7 +2112,7 @@ bool CScriptParser::parseConstants(const std::vector<const BaseParse*>& list, st
 		}
 		else if ((*itr)->type() == ParseType::Brackets)
 		{
-			ParseBrackets* brackets = const_cast<ParseBrackets *>(dynamic_cast<const ParseBrackets*>(*itr));
+			ParseBrackets* brackets = const_cast<ParseBrackets*>(dynamic_cast<const ParseBrackets*>(*itr));
 
 			// Resolve namespace constants (e.g. RaceFlag::NPC) inside brackets
 			// before recursing into parseConstants — _parseNamespaces was only
@@ -2220,29 +2220,29 @@ bool CScriptParser::_checkListOrder(const BaseParse* parse, ParseErrors errorTyp
 bool CScriptParser::_checkListOrder(const std::vector<const BaseParse*>& list, ParseErrors errorType)
 {
 	auto isBracket = [](const BaseParse* parse)
-	{
-		if (parse->type() == ParseType::Symbol)
 		{
-			const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(parse);
-			switch (sym->symbol())
+			if (parse->type() == ParseType::Symbol)
 			{
-			case SymbolType::CloseBracket:
-			case SymbolType::OpenBracket:
-			case SymbolType::StartBlock:
-			case SymbolType::EndBlock:
-				return true;
+				const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(parse);
+				switch (sym->symbol())
+				{
+				case SymbolType::CloseBracket:
+				case SymbolType::OpenBracket:
+				case SymbolType::StartBlock:
+				case SymbolType::EndBlock:
+					return true;
+				}
 			}
-		}
 
-		return false;
-	};
+			return false;
+		};
 
 	const BaseParse* previous = NULL;
 	for (auto itr = list.begin(); itr != list.end(); itr++)
 	{
 		const BaseParse* parse = *itr;
 		if (parse->type() == ParseType::Brackets || parse->type() == ParseType::Expression)
-		{			
+		{
 			if (!_checkListOrder(parse, errorType))
 				return false;
 			previous = NULL;
@@ -2297,7 +2297,7 @@ bool CScriptParser::_checkListOrder(const std::vector<const BaseParse*>& list, P
 				}
 
 				// check if there is an "else"
-				if (previous->type()  == ParseType::Function && parse->type() == ParseType::Function)
+				if (previous->type() == ParseType::Function && parse->type() == ParseType::Function)
 				{
 					auto prevFunc = dynamic_cast<const ParseFunction*>(previous);
 					if (prevFunc->function() == L"else")
@@ -2329,7 +2329,7 @@ bool CScriptParser::_checkListOrder(const std::vector<const BaseParse*>& list, P
 				// if we have 2 properties next to each other, then allow them
 				if (previous->type() == ParseType::Property && parse->type() == ParseType::Property)
 				{
-					if(dynamic_cast<const ParseProperty *>(previous)->getter() && dynamic_cast<const ParseProperty *>(parse)->setter())
+					if (dynamic_cast<const ParseProperty*>(previous)->getter() && dynamic_cast<const ParseProperty*>(parse)->setter())
 						exception = true;
 				}
 
@@ -2349,7 +2349,7 @@ bool CScriptParser::_checkListOrder(const std::vector<const BaseParse*>& list, P
 	return true;
 }
 
-bool CScriptParser::parseFunctions(const std::vector<const BaseParse *> &originalList, std::vector<const BaseParse *> &parseList)
+bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& originalList, std::vector<const BaseParse*>& parseList)
 {
 	const BaseParse* previous = NULL;
 	ParseFunction* function = NULL;
@@ -2387,7 +2387,7 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse *> &origina
 			const ParseKeyword* keyword = dynamic_cast<const ParseKeyword*>(parse);
 			if (previous && previous->type() == ParseType::Brackets)
 			{
-				ParseBrackets* brackets = const_cast<ParseBrackets *>(dynamic_cast<const ParseBrackets*>(previous));
+				ParseBrackets* brackets = const_cast<ParseBrackets*>(dynamic_cast<const ParseBrackets*>(previous));
 
 				// create the new function parse
 				ParseFunction* func = new ParseFunction(keyword->line(), keyword->keyword());
@@ -2450,7 +2450,7 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse *> &origina
 							args->setFromParse(expr);
 							if (expr->size() == 1)
 							{
-								args->addParse(const_cast<BaseParse *>(expr->list().front()));
+								args->addParse(const_cast<BaseParse*>(expr->list().front()));
 								expr->clearList();
 								delete expr;
 							}
@@ -2568,8 +2568,8 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse *> &origina
 								parseList.erase(parseList.begin());
 								delete previous;
 								dontAdd = true;
-							}							
-							else if(parse->type() != ParseType::Property && !(parse->type() == ParseType::Symbol && dynamic_cast<const ParseSymbol*>(parse)->symbol() == SymbolType::CloseArray))
+							}
+							else if (parse->type() != ParseType::Property && !(parse->type() == ParseType::Symbol && dynamic_cast<const ParseSymbol*>(parse)->symbol() == SymbolType::CloseArray))
 							{
 								_addError(ParseErrors::InvalidReturnValue, parse);
 								error = true;
@@ -2601,52 +2601,52 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse *> &origina
 bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& originalList, std::vector<const BaseParse*>& parseList)
 {
 	auto finalise = [](ParseExpression* expression)
-	{
-		if (expression->condition() && expression->list().front()->type() == ParseType::Brackets && expression->list().size() == 1)
 		{
-			const ParseBrackets* brackets = dynamic_cast<const ParseBrackets*>(expression->list().front());
-			expression->clearList();
-
-			if (brackets->singleItem() && brackets->singleItem()->type() == ParseType::Expression)
+			if (expression->condition() && expression->list().front()->type() == ParseType::Brackets && expression->list().size() == 1)
 			{
-				const ParseExpression* exp = dynamic_cast<const ParseExpression*>(brackets->singleItem());
-				for (auto itr = exp->list().begin(); itr != exp->list().end(); itr++)
-					expression->addParse(const_cast<BaseParse*>(*itr));
-				const_cast<ParseExpression*>(exp)->clearList();
-				delete exp;
+				const ParseBrackets* brackets = dynamic_cast<const ParseBrackets*>(expression->list().front());
+				expression->clearList();
+
+				if (brackets->singleItem() && brackets->singleItem()->type() == ParseType::Expression)
+				{
+					const ParseExpression* exp = dynamic_cast<const ParseExpression*>(brackets->singleItem());
+					for (auto itr = exp->list().begin(); itr != exp->list().end(); itr++)
+						expression->addParse(const_cast<BaseParse*>(*itr));
+					const_cast<ParseExpression*>(exp)->clearList();
+					delete exp;
+				}
+				else
+				{
+					for (auto itr = brackets->list().begin(); itr != brackets->list().end(); itr++)
+						expression->addParse(const_cast<BaseParse*>(*itr));
+				}
+				const_cast<ParseBrackets*>(brackets)->clear();
+				delete brackets;
+			}
+		};
+
+	auto internalExpression = [](ParseExpression* expr, std::vector<const BaseParse*>& newList)
+		{
+			expr->clearList();
+			if (newList.size() == 1)
+			{
+				if (newList.front()->type() == ParseType::Expression)
+				{
+					ParseExpression* iExpr = const_cast<ParseExpression*>(dynamic_cast<const ParseExpression*>(newList.front()));
+					for (auto eItr = iExpr->list().begin(); eItr != iExpr->list().end(); eItr++)
+						expr->addParse(const_cast<BaseParse*>(*eItr));
+					iExpr->clearList();
+					delete iExpr;
+				}
+				else
+					expr->addParse(const_cast<BaseParse*>(newList.front()));
 			}
 			else
 			{
-				for (auto itr = brackets->list().begin(); itr != brackets->list().end(); itr++)
-					expression->addParse(const_cast<BaseParse*>(*itr));
-			}
-			const_cast<ParseBrackets*>(brackets)->clear();
-			delete brackets;
-		}
-	};
-
-	auto internalExpression = [](ParseExpression* expr, std::vector<const BaseParse*> &newList)
-	{
-		expr->clearList();
-		if (newList.size() == 1)
-		{
-			if (newList.front()->type() == ParseType::Expression)
-			{
-				ParseExpression* iExpr = const_cast<ParseExpression*>(dynamic_cast<const ParseExpression*>(newList.front()));
-				for (auto eItr = iExpr->list().begin(); eItr != iExpr->list().end(); eItr++)
+				for (auto eItr = newList.begin(); eItr != newList.end(); eItr++)
 					expr->addParse(const_cast<BaseParse*>(*eItr));
-				iExpr->clearList();
-				delete iExpr;
 			}
-			else
-				expr->addParse(const_cast<BaseParse*>(newList.front()));
-		}
-		else
-		{
-			for (auto eItr = newList.begin(); eItr != newList.end(); eItr++)
-				expr->addParse(const_cast<BaseParse*>(*eItr));
-		}
-	};
+		};
 
 	bool error = false;
 
@@ -2694,7 +2694,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 				continue;
 			}
 		}
-		
+
 		else if (parse->type() == ParseType::Symbol)
 		{
 			const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(parse);
@@ -2801,12 +2801,12 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 		}
 		else if (parse->type() == ParseType::Property)
 		{
-			ParseProperty* prop = const_cast<ParseProperty *>(dynamic_cast<const ParseProperty*>(parse));
+			ParseProperty* prop = const_cast<ParseProperty*>(dynamic_cast<const ParseProperty*>(parse));
 			if (prop->setter())
 			{
 				if (prop->setter()->type() == ParseType::Expression)
 				{
-					ParseExpression* expr = const_cast<ParseExpression *>(dynamic_cast<const ParseExpression*>(prop->setter()));
+					ParseExpression* expr = const_cast<ParseExpression*>(dynamic_cast<const ParseExpression*>(prop->setter()));
 					std::vector<const BaseParse*> newList;
 					if (!_parseExpressions(expr->list(), newList))
 						error = true;
@@ -2850,7 +2850,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 			}
 			else if (arr->assign() && arr->assign()->type() == ParseType::Expression)
 			{
-				ParseExpression* expr = const_cast<ParseExpression *>(dynamic_cast<const ParseExpression*>(arr->assign()));
+				ParseExpression* expr = const_cast<ParseExpression*>(dynamic_cast<const ParseExpression*>(arr->assign()));
 				std::vector<const BaseParse*> newList;
 				if (!_parseExpressions(expr->list(), newList))
 					error = true;
@@ -2927,7 +2927,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 					}
 					else if (p->type() == ParseType::Expression)
 					{
-						ParseExpression* expr = const_cast<ParseExpression *>(dynamic_cast<const ParseExpression*>(p));
+						ParseExpression* expr = const_cast<ParseExpression*>(dynamic_cast<const ParseExpression*>(p));
 						std::vector<const BaseParse*> newList;
 						error = !_parseExpressions(expr->list(), newList);
 
@@ -2935,7 +2935,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 						if (newList.size() == 1)
 						{
 							auto newExpr = newList.front();
-							const_cast<BaseParse *>(newExpr)->setFromParse(expr);
+							const_cast<BaseParse*>(newExpr)->setFromParse(expr);
 							args->addParse(const_cast<BaseParse*>(newExpr));
 							delete expr;
 						}
@@ -2965,8 +2965,8 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 			previous = parse;
 		}
 	}
-	
-	if(expression)
+
+	if (expression)
 		finalise(expression);
 
 	// check for multiple line expression for if
@@ -3020,7 +3020,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
  * \arg str				-	The current string for our status
  * \arg c				-	The current character we are checking
  * \arg line			-	The full line, used when creating a new parse data type
- * 
+ *
  * Returns the new parse type if its created, otherwise just NULL
  */
 BaseParse* CScriptParser::checkStatus(ParseStatus oldStatus, ParseStatus newStatus, std::wstring& str, wchar_t c, const std::wstring& line)
@@ -3191,7 +3191,7 @@ std::wstring CScriptParser::_parseDefine(const std::wstring& line)
 				{
 					if (processLine[checkPos] == '"')
 					{
-						if(processLine[checkPos - 1] != '\\')
+						if (processLine[checkPos - 1] != '\\')
 							inString = !inString;
 					}
 					else if (!inString && processLine[checkPos] == ',')
@@ -3215,7 +3215,7 @@ std::wstring CScriptParser::_parseDefine(const std::wstring& line)
 				if (!variables.empty())
 				{
 					auto& list = itr->second->variables();
-					
+
 					std::wstring oldReplace = replaceLine;
 					replaceLine.clear();
 					auto vItr = list.begin();
@@ -3259,12 +3259,12 @@ std::wstring CScriptParser::_parseDefine(const std::wstring& line)
  * parseLine
  * \arg	linePos		-	The current line position in the file, used for displaying errors/warnings
  * \arg sLine		-	The actual string for the line, should include everything from a line in the file
- * 
+ *
  * This will take the line string and split into various data types, Symbols, Words and String
  * This data is then added to a list which can included data created from a previous line
- * 
+ *
  * The data is then processed once it gets to an end ';' or '}'
- * 
+ *
  * Any errors will add a ParseFail type to the errors list, and will return false to indicate an error was found
  * These errors contains the complete line, and the position within the line the error was found
  */
@@ -3272,18 +3272,18 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 {
 	// adds data to the new parse type
 	// this computes the start and end positions of the current string
-	auto addParse = [](BaseParse* parse, std::vector<const BaseParse*>& parseList, size_t pos, size_t len, size_t linePos, size_t movePosition, const std::wstring &file)
-	{
-		if (parse)
+	auto addParse = [](BaseParse* parse, std::vector<const BaseParse*>& parseList, size_t pos, size_t len, size_t linePos, size_t movePosition, const std::wstring& file)
 		{
-			parse->setLinePosition(linePos);
-			parse->setFile(file);
-			parse->setPosition(pos - len + movePosition, pos + movePosition);
-			if (!parseList.empty())
-				parse->setWhitespaceBefore(parseList.back()->hasWhitespaceAfter());
-			parseList.push_back(parse);
-		}
-	};
+			if (parse)
+			{
+				parse->setLinePosition(linePos);
+				parse->setFile(file);
+				parse->setPosition(pos - len + movePosition, pos + movePosition);
+				if (!parseList.empty())
+					parse->setWhitespaceBefore(parseList.back()->hasWhitespaceAfter());
+				parseList.push_back(parse);
+			}
+		};
 
 	std::wstring str;							// the current string for the status
 	ParseStatus status = ParseStatus::Start;	// the current status
@@ -3292,7 +3292,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 
 	if (_isInComment)
 		status = ParseStatus::Comment;
-	
+
 	// check for any defines
 	std::wstring sLine = _parseDefine(line);
 
@@ -3510,11 +3510,11 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 		return false;
 
 	// if we have a preprocessor commands '#' then always add an end symbol after
-	if (!parseList.empty()) 
+	if (!parseList.empty())
 	{
-		if (parseList.front()->type() == ParseType::Symbol) 
+		if (parseList.front()->type() == ParseType::Symbol)
 		{
-			auto parse = dynamic_cast<const ParseSymbol *>(parseList.front());
+			auto parse = dynamic_cast<const ParseSymbol*>(parseList.front());
 			if (parse->symbol() == SymbolType::Preprocessor)
 			{
 				if (!_parsePreprocessor(parseList))
@@ -3526,7 +3526,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 				}
 
 				return true;
-			}			
+			}
 		}
 	}
 
@@ -3556,12 +3556,12 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 				{
 					// if the processing was successful, we can now actually run it to convert it into actual script commands
 					success = _runDataList(_currentDataList, true);
-					
+
 					if (success && !_deferredLists.empty())
 					{
 						for (auto& deferredList : _deferredLists)
 						{
-							std::vector<const BaseParse*> dl(deferredList);							
+							std::vector<const BaseParse*> dl(deferredList);
 							if (!_runDataList(dl, true))
 							{
 								success = false;
@@ -3606,7 +3606,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 	return !error;
 }
 
-bool CScriptParser::_checkExpressionValidity(const BaseParse *parse)
+bool CScriptParser::_checkExpressionValidity(const BaseParse* parse)
 {
 	// allow null parse
 	if (!parse)
@@ -3952,8 +3952,8 @@ bool CScriptParser::_runArrayFunction(ParseArray* arr, bool isInline, bool doAss
 	if (ret && arr->assignment() && arr->assignment()->type() == ParseType::Array)
 	{
 		const ParseArray* toArray = dynamic_cast<const ParseArray*>(arr->assignment());
-		if(toArray->assignment())
-			ret = _runArrayFunction(const_cast<ParseArray *>(toArray), isInline, false);
+		if (toArray->assignment())
+			ret = _runArrayFunction(const_cast<ParseArray*>(toArray), isInline, false);
 	}
 
 	return ret;
@@ -3965,7 +3965,7 @@ bool CScriptParser::_runFunction(ParseFunction* function, bool isInline)
 		std::unordered_set<DataTypes> dt = _getActualDataTypes(function->object());
 		if (!dt.empty())
 		{
-			if(dt.size() == 1)
+			if (dt.size() == 1)
 			{
 				if (*dt.begin() != DataTypes::Unknown)
 				{
@@ -3974,7 +3974,7 @@ bool CScriptParser::_runFunction(ParseFunction* function, bool isInline)
 						return _doGlobalFunction(func, function, isInline);
 				}
 			}
-			else 
+			else
 			{
 				const Function* func = NULL;
 				int funcCount = 0;
@@ -3985,7 +3985,7 @@ bool CScriptParser::_runFunction(ParseFunction* function, bool isInline)
 						++funcCount;
 				}
 
-				if(func && funcCount == 1)
+				if (func && funcCount == 1)
 					return _doGlobalFunction(func, function, isInline);
 
 				else if (funcCount > 1)
@@ -4083,7 +4083,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		}
 	}
 	// invalid start condition
-	else if (func->returnValueType != RetVarType::NoIfStart && functionData->condition() && dynamic_cast<const ParseCondition *>(functionData->condition())->condition() == Conditions::Start)
+	else if (func->returnValueType != RetVarType::NoIfStart && functionData->condition() && dynamic_cast<const ParseCondition*>(functionData->condition())->condition() == Conditions::Start)
 	{
 		_addError(ParseErrors::InvalidStartCondition, functionData);
 		return false;
@@ -4136,7 +4136,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 					warn.data.push_back(functionData->object()->data());
 					warn.data.push_back(_getDataTypesString(func->refObjType));
 					warn.data.push_back(_getDataTypesString(dt));
-				}			
+				}
 			}
 		}
 	}
@@ -4326,7 +4326,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	if (func->refObjType.size() > 1 && func->refObjType.find(DataTypes::Null) != func->refObjType.end())
 	{
 		auto constData = _data->findConstant(L"NULL");
-		if(constData)
+		if (constData)
 			functionData->setObject(new ParseConstant(functionData->line(), constData));
 		else
 			functionData->setObject(new ParseNull(functionData->line()));
@@ -4390,7 +4390,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 			if (func->arguments.size() >= addArg)
 				pardef = func->arguments[addArg].pardef;
 
-			if(functionData->arguments()->count() >= addArg)
+			if (functionData->arguments()->count() >= addArg)
 				_currentScript->addFunctionArgument(functionData->arguments()->get(addArg), pardef);
 		}
 	}
@@ -4510,7 +4510,7 @@ void CScriptParser::_addExpressionItem(const BaseParse* parse)
 		auto item = bracket->singleItem();
 		if (item)
 		{
-			if(item->type() == ParseType::Expression)
+			if (item->type() == ParseType::Expression)
 				_currentScript->addFunctionArgument(item, ParDef::Unknown);
 			else
 				_addExpressionItem(item);
@@ -4560,7 +4560,7 @@ bool CScriptParser::_addLabel(const ParseKeyword* keyword)
 	return false;
 }
 
-bool CScriptParser::_runExpressionList(const ParseExpression *expression, bool topLevel)
+bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool topLevel)
 {
 	auto& list = expression->list();
 
@@ -4569,7 +4569,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression *expression, bool t
 	if (previousFunc && previousFunc->retvarArgument())
 	{
 		const BaseParse* parse = previousFunc->retvarArgument();
-		if (parse->type() == ParseType::Condition && !dynamic_cast<const ParseCondition *>(parse)->isBlock())
+		if (parse->type() == ParseType::Condition && !dynamic_cast<const ParseCondition*>(parse)->isBlock())
 			addEndBlock = true;
 	}
 
@@ -4625,11 +4625,24 @@ bool CScriptParser::_runExpressionList(const ParseExpression *expression, bool t
 	else if (expression->list().size() == 1 && expression->list().front()->type() == ParseType::Variable && expression->assignment())
 	{
 		auto dt = _getActualDataTypes(expression->list().front());
-		if(!dt.empty())
+		if (!dt.empty())
 			const_cast<ParseExpression*>(expression)->setDataType(*dt.begin());
 	}
+	else if (expression->list().size() == 1 &&
+		(expression->list().front()->type() == ParseType::Function ||
+			expression->list().front()->type() == ParseType::Property))
+	{
+		// Single function/property call — use its actual return datatype directly
+		// rather than the number/string heuristic, which would clobber the
+		// precise type (e.g. DATATYPE_SECTOR) already stored by _doGlobalFunction.
+		auto dt = _getActualDataTypes(expression->list().front());
+		if (!dt.empty() && dt.find(DataTypes::Unknown) == dt.end())
+			const_cast<ParseExpression*>(expression)->setDataType(*dt.begin());
+		else
+			const_cast<ParseExpression*>(expression)->setDataType(DataTypes::Unknown);
+	}
 	else
-	{		
+	{
 
 		// check each data type, if everything is a number, the return will be a number too, otherwise, its always a string
 		bool isNumber = true;
@@ -4659,8 +4672,25 @@ bool CScriptParser::_runExpressionList(const ParseExpression *expression, bool t
 	const ParseVariable* retVar = expression->returnValue();
 	if (retVar)
 	{
-		if(expression->list().size() == 1 && expression->list().front()->type() == ParseType::Variable && expression->assignment())
+		if (expression->list().size() == 1 && expression->list().front()->type() == ParseType::Variable && expression->assignment())
 			_variables[retVar->name()] = _getActualDataTypes(expression->list().front());
+		else if (expression->list().size() == 1 &&
+			(expression->list().front()->type() == ParseType::Function ||
+				expression->list().front()->type() == ParseType::Property))
+		{
+			// For a single function/property, the type was already stored precisely
+			// by _doGlobalFunction/_runProperty. Use that rather than the coarser
+			// expression->dataType() which resolves everything to Number or String.
+			auto dt = _getActualDataTypes(expression->list().front());
+			if (!dt.empty() && dt.find(DataTypes::Unknown) == dt.end())
+				_variables[retVar->name()] = dt;
+			else
+			{
+				std::unordered_set<DataTypes> fallback;
+				fallback.insert(expression->dataType());
+				_variables[retVar->name()] = fallback;
+			}
+		}
 		else
 		{
 			std::unordered_set<DataTypes> dt;
@@ -4677,7 +4707,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression *expression, bool t
 		{
 			if ((*itr)->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(*itr)->isNumericOperator())
 			{
-				auto &warning = _addWarning(ParseWarnings::InvalidExpressionOperator, *itr);
+				auto& warning = _addWarning(ParseWarnings::InvalidExpressionOperator, *itr);
 				warning.data.push_back((*itr)->data());
 				break;
 			}
@@ -4715,14 +4745,14 @@ bool CScriptParser::_runExpressionList(const ParseExpression *expression, bool t
 		failed = true;
 	}
 
-	if(failed)
+	if (failed)
 		return false;
 
 
 	for (auto itr = expression->list().begin(); itr != expression->list().end(); itr++)
 		_addExpressionItem(*itr);
 
-	if(addEndBlock)
+	if (addEndBlock)
 		_currentScript->addEndBlock(true);
 
 	return true;
@@ -4743,7 +4773,7 @@ void CScriptParser::_checkWarnings(const std::vector<const BaseParse*>& list)
 	}
 }
 
-bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse *previous, const ParseCondition *condition, bool topLevel, bool isInline)
+bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous, const ParseCondition* condition, bool topLevel, bool isInline)
 {
 	if (parse->type() == ParseType::Function)
 	{
@@ -4852,7 +4882,7 @@ bool CScriptParser::_runDataList(const std::vector<const BaseParse*>& list, bool
 	return true;
 }
 
-bool CScriptParser::_setArguments(const ParseArguments *arguments)
+bool CScriptParser::_setArguments(const ParseArguments* arguments)
 {
 	if (arguments->count() != 3)
 	{
@@ -4939,7 +4969,7 @@ bool CScriptParser::_setDescription(const ParseArguments* arguments)
 	return true;
 }
 
-bool CScriptParser::_setVersion(const ParseArguments *arguments)
+bool CScriptParser::_setVersion(const ParseArguments* arguments)
 {
 	if (arguments->count() != 1)
 	{
@@ -4966,7 +4996,7 @@ bool CScriptParser::_setVersion(const ParseArguments *arguments)
 	return true;
 }
 
-bool CScriptParser::_setCommand(const ParseArguments *arguments)
+bool CScriptParser::_setCommand(const ParseArguments* arguments)
 {
 	if (arguments->count() != 1)
 	{
@@ -4994,7 +5024,7 @@ bool CScriptParser::_setCommand(const ParseArguments *arguments)
 		return true;
 	}
 
-	if(constant)
+	if (constant)
 		_errorArgumentDatatype(arguments, 0, DataTypes::ParDef);
 	else
 		_errorArgumentDatatype(arguments, 0, DataTypes::ObjectCommand);
@@ -5005,12 +5035,12 @@ DataTypes CScriptParser::_getDataTypeFromParse(const BaseParse* parse) const
 {
 	switch (parse->type())
 	{
-		case ParseType::String:
-			return DataTypes::String;
-		case ParseType::Variable:
-			return DataTypes::Variable;
-		case ParseType::Integer:
-			return DataTypes::Number;
+	case ParseType::String:
+		return DataTypes::String;
+	case ParseType::Variable:
+		return DataTypes::Variable;
+	case ParseType::Integer:
+		return DataTypes::Number;
 	}
 
 	return parse->dataType();
@@ -5019,14 +5049,14 @@ DataTypes CScriptParser::_getDataTypeFromParse(const BaseParse* parse) const
 std::wstring CScriptParser::_getPardefFlagString(ParDefFlags flags) const
 {
 	auto addString = [](std::wstringstream& str, std::wstring s, ParDefFlags flags, ParDefFlags check)
-	{
-		if ((flags & check) == check)
 		{
-			if (!str.str().empty())
-				str << ", ";
-			str << s;
-		}
-	};
+			if ((flags & check) == check)
+			{
+				if (!str.str().empty())
+					str << ", ";
+				str << s;
+			}
+		};
 
 	std::wstringstream str;
 	addString(str, L"Constant", flags, ParDefFlags::Constant);
@@ -5237,7 +5267,7 @@ ParseFail* CScriptParser::_addError(ParseErrors error, const BaseParse* parse)
 	return fail;
 }
 
-Warnings& CScriptParser::_addWarning(ParseWarnings type, const BaseParse *parse)
+Warnings& CScriptParser::_addWarning(ParseWarnings type, const BaseParse* parse)
 {
 	// Check for duplicate warning — same type, same variable name, same line
 	for (auto& existing : _warnings)
@@ -5259,7 +5289,7 @@ Warnings& CScriptParser::_addWarning(ParseWarnings type, const BaseParse *parse)
 		}
 	}
 
-	_warnings.push_back({ type, parse->startingPos(), parse->endingPos(), parse->linePos(), parse->line(), parse->file()});
+	_warnings.push_back({ type, parse->startingPos(), parse->endingPos(), parse->linePos(), parse->line(), parse->file() });
 	return _warnings.back();
 }
 
