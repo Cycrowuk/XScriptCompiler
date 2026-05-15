@@ -321,7 +321,8 @@ std::vector<const BaseParse*>::iterator CScriptParser::_parseEndArray(std::vecto
 				{
 					ParseFail* fail = new ParseFail(sym, ParseErrors::InvalidVariable);
 					_errors.push_back(fail);
-					list.push_back(parse);
+					// Do not push to the outer list — we are inside _parseEndArray
+					// which reads from the outer list but must not modify it.
 					continue;
 				}
 
@@ -577,7 +578,7 @@ bool CScriptParser::_findArrays(std::vector<const BaseParse*>& list, bool topLev
 					// otherwise its an error
 					if (!previous || (previous->type() != ParseType::Function && previous->type() != ParseType::Variable && previous->type() != ParseType::Array))
 					{
-						ParseFail* fail = new ParseFail(previous, ParseErrors::InvalidVariable);
+						ParseFail* fail = new ParseFail(previous ? previous : parse, ParseErrors::InvalidVariable);
 						_errors.push_back(fail);
 						error = true;
 						list.push_back(parse);
@@ -1038,7 +1039,19 @@ bool CScriptParser::_parseAllConditions(std::vector<const BaseParse*>& list)
 			const ParseCondition* c1 = dynamic_cast<const ParseCondition*>(*itr);
 			const ParseCondition* c2 = dynamic_cast<const ParseCondition*>(previous);
 
-			if (c1->condition() == Conditions::Not)
+			// START cannot be combined with any other condition keyword —
+			// it is a standalone execution modifier, not a conditional.
+			// Catch this before the Not/Else combination logic below.
+			if (c2->condition() == Conditions::Start || c1->condition() == Conditions::Start)
+			{
+				error = true;
+				ParseFail* fail = new ParseFail(c2->line(), ParseErrors::InvalidStartCondition);
+				fail->setLinePosition(c2->linePos());
+				fail->setFile(_currentFile.back());
+				fail->setPosition(c2->startingPos(), c1->endingPos());
+				_errors.push_back(fail);
+			}
+			else if (c1->condition() == Conditions::Not)
 			{
 				ParseCondition* newCond = NULL;
 				switch (c2->condition())
@@ -1426,7 +1439,7 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 					}
 
 					// first item should be a close bracket, if not, its missing
-					if (list.empty() || list.front()->type() == ParseType::Symbol && dynamic_cast<const ParseSymbol*>(list.front())->symbol() != SymbolType::CloseBracket)
+					if (list.empty() || (list.front()->type() == ParseType::Symbol && dynamic_cast<const ParseSymbol*>(list.front())->symbol() != SymbolType::CloseBracket))
 					{
 						_addError(ParseErrors::MissingBracket, bracket);
 						delete bracket;
@@ -2081,6 +2094,16 @@ bool CScriptParser::parseConstants(const std::vector<const BaseParse*>& list, st
 		else if ((*itr)->type() == ParseType::Brackets)
 		{
 			ParseBrackets* brackets = const_cast<ParseBrackets *>(dynamic_cast<const ParseBrackets*>(*itr));
+
+			// Resolve namespace constants (e.g. RaceFlag::NPC) inside brackets
+			// before recursing into parseConstants — _parseNamespaces was only
+			// run on the top-level list in _parseDataList, not inside brackets.
+			std::vector<const BaseParse*> nsResolved(brackets->constList());
+			_parseNamespaces(nsResolved);
+			brackets->clear();
+			for (auto bItr = nsResolved.begin(); bItr != nsResolved.end(); bItr++)
+				brackets->addParse(const_cast<BaseParse*>(*bItr));
+
 			std::vector<const BaseParse*> createdList;
 			if (!parseConstants(brackets->constList(), createdList))
 				error = true;
@@ -2635,8 +2658,9 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 				ParseFail* fail = new ParseFail(parse, ParseErrors::InvalidDoubleCondition);
 				_errors.push_back(fail);
 			}
-			else if (expression->condition())
+			else if (expression->size() > 0)
 			{
+				// Condition seen after expression content — start a new expression
 				finalise(expression);
 				expression = new ParseExpression(parse->line());
 				parseList.push_back(expression);
@@ -5016,13 +5040,10 @@ DataTypes CScriptParser::_getActualDataType(const BaseParse* parse) const
 	{
 		const ParseVariable* var = dynamic_cast<const ParseVariable*>(parse);
 		auto findItr = _variables.find(var->name());
-		if (findItr != _variables.end())
-		{
-
-		}
-
-
-		dt = var->currentDataType();
+		if (findItr != _variables.end() && !findItr->second.empty())
+			dt = *findItr->second.begin();
+		else
+			dt = var->currentDataType();
 	}
 	else if (parse->type() == ParseType::Constant)
 	{
