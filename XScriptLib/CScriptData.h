@@ -133,6 +133,7 @@ namespace XScript
 			unsigned short idSize;
 			unsigned short nameSize;
 			unsigned short descSize;
+			unsigned short prefixSize;
 		};
 		struct ParDefFileData
 		{
@@ -307,6 +308,7 @@ namespace XScript
 		const ParDefData* findParDefData(const std::wstring& pardef) const;
 		const ConstantData* findConstant(const std::wstring& constant) const;
 		const ConstantData* findConstant(const std::wstring& ns, const std::wstring& constant) const;
+		const DataTypeData* findDatatypeByPrefix(const std::wstring& name, unsigned int& outId) const;
 		unsigned int findSpecialKeyword(const std::wstring& keyword) const;
 		const DataTypeData* findDatatype(const std::wstring& datatype) const;
 		const DataTypeData* findDatatype(DataTypes datatype) const;

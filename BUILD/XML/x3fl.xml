@@ -24,7 +24,7 @@
     <DataType id="15" keyword="DATATYPE_OPER" isobject="false" name="Operator" description="An operator for expressions"/>
 	  <DataType id="16" keyword="DATATYPE_EXPRESSION" isobject="false" name="Expression" description="An expression"/>
 	  <DataType id="65553" keyword="DATATYPE_OBJECT" isobject="true" name="Object" description="Generic object type"/>
-	  <DataType id="18" keyword="DATATYPE_OBJCMD" isobject="false" name="Object Command" description="A command for an object"/>
+	  <DataType id="18" keyword="DATATYPE_OBJCMD" isobject="false" name="Object Command" prefix="SHIPCOMMAND_" description="A command for an object"/>
 	  <DataType id="19" keyword="DATATYPE_FLRET" isobject="false" name="Flight Return" description="Return values from Flight Commands"/>
 	  <DataType id="20" keyword="DATATYPE_DATATYPE" isobject="false" name="Data Type" description="The Data Type"/>
 	  <DataType id="21" keyword="DATATYPE_ARRAY" isobject="false" name="Array" description="An array data type"/>

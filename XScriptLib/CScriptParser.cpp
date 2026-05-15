@@ -123,6 +123,9 @@ void CScriptParser::_clearData()
 	_errors.clear();
 	_warnings.clear();
 	_defines.clear();
+	for (void* p : _syntheticConstants)
+		delete static_cast<ConstantData*>(p);
+	_syntheticConstants.clear();
 }
 
 bool CScriptParser::hasWarnings() const
@@ -194,6 +197,22 @@ BaseParse* CScriptParser::parseConstant(const std::wstring& line) const
 	const ConstantData* c = _data->findConstant(line);
 	if(c)
 		return new ParseConstant(line, c);
+
+	// Check whether the name matches a DataType's prefix pattern.
+	// Check whether the name matches a DataType's prefix pattern.
+	// e.g. "SHIPCOMMAND_1000" matches a DataType with prefix "SHIPCOMMAND_",
+	// and is accepted as a constant with numeric id 1000, using the DataType's
+	// id as subtype — allowing custom mod commands without pre-defined entries.
+	// Allocated on the heap; tracked in _syntheticConstants (as void* to avoid
+	// including CScriptData.h in the parser header) and deleted in _clearData.
+	unsigned int prefixId = 0;
+	const DataTypeData* prefixDt = _data->findDatatypeByPrefix(line, prefixId);
+	if (prefixDt)
+	{
+		ConstantData* synthetic = new ConstantData(DataTypes::Constant, line, prefixId, prefixDt->id);
+		_syntheticConstants.push_back(static_cast<void*>(synthetic));
+		return new ParseConstant(line, synthetic);
+	}
 
 	ParseFail *fail = new ParseFail(line, ParseErrors::UnknownConstant);
 	fail->addData(line);

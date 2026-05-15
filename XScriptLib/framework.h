@@ -222,6 +222,7 @@ struct DataTypeData
 	bool isObject;
 	std::wstring name;
 	std::wstring desc;
+	std::wstring prefix;
 };
 
 struct GameVersion 

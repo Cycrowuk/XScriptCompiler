@@ -104,6 +104,8 @@ namespace XScript {
 		std::vector<std::wstring> _currentFile;
 		std::vector<std::vector<const BaseParse*>> _deferredLists;
 
+		mutable std::vector<void*> _syntheticConstants;
+
 	public:
 		static BaseParse* CopyParse(const BaseParse* parse);
 

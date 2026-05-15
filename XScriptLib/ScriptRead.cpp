@@ -10,11 +10,11 @@
 
 using namespace XScript;
 
-ScriptRead::ScriptRead(CScriptData* data) : _pData(data),
-_version(0),
-_engine(0),
-_command(0),
-_inserted(0)
+ScriptRead::ScriptRead(CScriptData *data) : _pData(data),
+	_version(0),
+	_engine(0),
+	_command(0),
+	_inserted(0)
 {
 
 }
@@ -34,7 +34,7 @@ bool ScriptRead::read(const std::wstring& filename)
 	XLib::String unpackedData;
 	std::vector<wchar_t>* buffer = NULL;
 
-	if (f.isFileExtension("pck"))
+	if(f.isFileExtension("pck"))
 	{
 		size_t fileSize;
 		char* fileData = f.readAll(&fileSize);
@@ -46,7 +46,7 @@ bool ScriptRead::read(const std::wstring& filename)
 		}
 
 		size_t unpackedSize;
-		unsigned char* unpacked = XLib::UnPCKData((unsigned char*)fileData, fileSize, &unpackedSize);
+		unsigned char *unpacked = XLib::UnPCKData((unsigned char *)fileData, fileSize, &unpackedSize);
 		if (!unpackedSize || !unpacked)
 		{
 			delete[]fileData;
@@ -79,7 +79,7 @@ bool ScriptRead::read(const std::wstring& filename)
 	rapidxml::xml_node<wchar_t>* root_node = doc->first_node(L"script");
 	if (!root_node)
 	{
-		if (buffer)
+		if(buffer)
 			delete buffer;
 		delete doc;
 		throw std::exception("No <script> node found in file");
@@ -116,7 +116,7 @@ bool ScriptRead::read(const std::wstring& filename)
 			arraySize = std::stoi(val);
 	}
 
-	if (!isArray || arraySize != 10)
+	if(!isArray || arraySize != 10)
 	{
 		if (buffer)
 			delete buffer;
@@ -166,7 +166,7 @@ bool ScriptRead::read(const std::wstring& filename)
 		}
 	}
 
-	//	in.close();
+//	in.close();
 
 	if (buffer)
 		delete buffer;
@@ -202,7 +202,7 @@ bool ScriptRead::write(const std::wstring& outfile)
 
 	out << std::endl;
 
-	unsigned int indent = 0;
+	unsigned int indent = 0;	
 	bool isIndentNonBlock = false;
 	int debug = 0;
 	for (auto itr = _commands.begin(); itr != _commands.end(); itr++, debug++)
@@ -317,7 +317,7 @@ bool ScriptRead::write(const std::wstring& outfile)
 				auto findItr = _labels.find(itr->arguments.front());
 				if (findItr == _labels.end())
 					throw std::exception("Missing label entry");
-
+				
 				out << findItr->second;
 			}
 			else
@@ -465,8 +465,8 @@ bool ScriptRead::_readCode(rapidxml::xml_node<wchar_t>* node)
 	}
 
 	// find all label references
-	for (unsigned int i = 0; i < _commands.size(); i++)
-	{
+	for(unsigned int i = 0; i < _commands.size(); i++)
+	{		
 		if (_commands[i].data && _commands[i].data->id == _pData->defineLabelCommand())
 			_labels[std::to_wstring(i)] = _commands[i].arguments.front();
 	}
@@ -664,7 +664,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 					ParDef pd = currentFunction->data->arguments[a].pardef;
 					if (pd == ParDef::CallName)
 					{
-						if (type != L"string")
+						if(type != L"string")
 							throw std::exception(Utils::ws2s(Utils::CombineStrings(L"Invalid sval '", type, L"' for callname pardef, Expected 'string'")).c_str());
 
 						if (currentFunction->arguments.size() <= a)
@@ -708,7 +708,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 					currentFunction->condition = _parseCondition(value, currentFunction->isBlock, currentFunction->isElseCondition);
 					++currentArg;
 				}
-				else if (strArg == L"RefObj")
+				else if(strArg == L"RefObj")
 					argType = std::stoi(value);
 			}
 			else if (argType >= 0)
@@ -732,8 +732,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 					if (currentFunction->arguments.size() <= a)
 						currentFunction->arguments.resize(a + 1);
 
-					// Check whether this argument has a boolean pardef — if so, emit
-					// TRUE/FALSE instead of the raw 0/1 integer value.
+					// Boolean pardef: emit TRUE/FALSE instead of raw 0/1.
 					// VARBOOLEAN = pardef id 63, BOOLEAN = pardef id 64 (from x3fl.xml)
 					ParDef pd = currentFunction->data->arguments[a].pardef;
 					bool isBoolParDef = (pd == ParDef::Boolean || pd == ParDef::VarBoolean
@@ -750,7 +749,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 			}
 		}
 	}
-
+	
 	return true;
 }
 
@@ -768,7 +767,7 @@ bool ScriptRead::_readArguments(rapidxml::xml_node<wchar_t>* node)
 				return false;
 		}
 	}
-
+	
 	return true;
 }
 
@@ -927,6 +926,17 @@ std::wstring ScriptRead::_parseArgument(DataTypes type, const std::wstring& valu
 		auto findItr = commandList->data.find(std::stoi(value));
 		if (findItr != commandList->data.end())
 			return findItr->second.id;
+
+		// Command not found in the known list â€” check if this DataType has a prefix.
+		// If so, emit  PREFIX + id  so the script is valid for XScript even when the
+		// command is from a third-party mod and not in our data file.
+		const DataTypeData* dt = _pData->findDatatype(type);
+		if (dt && !dt->prefix.empty())
+		{
+			std::wstringstream strm;
+			strm << dt->prefix << value;
+			return strm.str();
+		}
 	}
 
 	auto customData = _pData->getCustomDatatype(type);

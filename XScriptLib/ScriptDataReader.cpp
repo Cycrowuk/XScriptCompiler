@@ -202,6 +202,8 @@ void ScriptDataReader::_readDataTypes(rapidxml::xml_node<wchar_t>* root_node)
 						data.isObject = (value == L"true");
 					else if (name == L"name")
 						data.name = value;
+					else if (name == L"prefix")
+						data.prefix = value;
 				}
 				catch(std::exception)
 				{
