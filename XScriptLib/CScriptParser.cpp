@@ -2475,6 +2475,23 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse *> &origina
 				const ParseFunction* func = dynamic_cast<const ParseFunction*>(previous);
 				const_cast<ParseFunction*>(func)->setCondition(const_cast<ParseCondition*>(cond));
 			}
+			else if (!parseList.empty() && parseList.front()->type() == ParseType::Function)
+			{
+				// Handles: START $object->func(...)
+				// After the -> handler consumes the object variable, 'previous' points to the
+				// variable, not the function. The function is at the front of parseList with
+				// its _object already set — attach the condition there instead.
+				const ParseFunction* func = dynamic_cast<const ParseFunction*>(parseList.front());
+				if (func && func->object())
+				{
+					const_cast<ParseFunction*>(func)->setCondition(const_cast<ParseCondition*>(cond));
+				}
+				else
+				{
+					_addError(ParseErrors::InvalidCondition, cond);
+					error = true;
+				}
+			}
 			else
 			{
 				_addError(ParseErrors::InvalidCondition, cond);

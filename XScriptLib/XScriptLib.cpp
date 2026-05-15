@@ -223,6 +223,9 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 		case ParseErrors::InvalidStartCondition:
 			std::cout << "- Invalid START condition, not compatible with function '" << converter.to_bytes((*itr)->data(0)) << "'";
 			break;
+		case ParseErrors::InvalidCondition:
+			std::cout << "- Invalid condition, not compatible with function '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
 		case ParseErrors::InvalidNamespace:
 			std::cout << "- Invalid namespace";
 			break;
