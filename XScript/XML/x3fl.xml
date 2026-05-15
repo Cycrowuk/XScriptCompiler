@@ -25867,7 +25867,7 @@
 		<WareType name="Docks" id="5" textpos="6" file="TDocks"/>
 		<WareType name="Factories" id="6" textpos="6" file="TFactories"/>
 		<WareType name="Ships" id="7" textpos="6" file="TShips"/>
-		<WareType name="Laser" id="8" textpos="6" file="TLasers"/>
+		<WareType name="Laser" id="8" textpos="6" file="TLaser"/>
 		<WareType name="Shields" id="9" textpos="6" file="TShields"/>
 		<WareType name="Missiles" id="10" textpos="6" file="TMissiles"/>
 		<WareType name="Energy" id="11" textpos="6" file="TWareE"/>

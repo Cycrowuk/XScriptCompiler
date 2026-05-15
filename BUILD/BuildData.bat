@@ -1,7 +1,7 @@
 @Echo off
-XScript.exe --builddata XML/x3fl.xml --out default_data.dat
-XScript.exe --builddata XML/x3fl.xml --out Data/XScript_X3FL.dat
-XScript.exe --load_data default_data.dat --exportudl
+XScriptCompiler.exe --builddata XML/x3fl.xml --out default_data.dat
+XScriptCompiler.exe --builddata XML/x3fl.xml --out Data/XScript_X3FL.dat
+XScriptCompiler.exe --load_data default_data.dat --exportudl
 mkdir notepad++
 mkdir notepad++\X3FL
 move xscript.xml notepad++\X3FL\xscript.xml

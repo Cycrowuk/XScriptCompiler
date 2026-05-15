@@ -24,6 +24,7 @@
     <ProjectGuid>{bea9d1a0-ffda-423c-83b8-315ed209ce74}</ProjectGuid>
     <RootNamespace>XScript</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>XScriptCompiler</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

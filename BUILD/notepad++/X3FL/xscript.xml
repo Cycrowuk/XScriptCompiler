@@ -2403,6 +2403,45 @@
 		<KeyWord name="SS_FAC_Y_SHIP_SMALL" func="no"/>
 		<KeyWord name="SS_FAC_Y_UPGRADE_L" func="no"/>
 		<KeyWord name="SS_FAC_Y_UPGRADE_S" func="no"/>
+		<KeyWord name="SS_LASER_CIG" func="no"/>
+		<KeyWord name="SS_LASER_DUMMY1" func="no"/>
+		<KeyWord name="SS_LASER_DUMMY2" func="no"/>
+		<KeyWord name="SS_LASER_EBC" func="no"/>
+		<KeyWord name="SS_LASER_EMP" func="no"/>
+		<KeyWord name="SS_LASER_EMP_1" func="no"/>
+		<KeyWord name="SS_LASER_ESR" func="no"/>
+		<KeyWord name="SS_LASER_FBL" func="no"/>
+		<KeyWord name="SS_LASER_FLAK_ALPHA" func="no"/>
+		<KeyWord name="SS_LASER_FLAK_CLUSTER" func="no"/>
+		<KeyWord name="SS_LASER_FUSIONBEAM" func="no"/>
+		<KeyWord name="SS_LASER_GAUSS" func="no"/>
+		<KeyWord name="SS_LASER_HEPT" func="no"/>
+		<KeyWord name="SS_LASER_IBL" func="no"/>
+		<KeyWord name="SS_LASER_IONC" func="no"/>
+		<KeyWord name="SS_LASER_IOND" func="no"/>
+		<KeyWord name="SS_LASER_IPG" func="no"/>
+		<KeyWord name="SS_LASER_IRE" func="no"/>
+		<KeyWord name="SS_LASER_KH_ALPHA" func="no"/>
+		<KeyWord name="SS_LASER_KH_BETA" func="no"/>
+		<KeyWord name="SS_LASER_KH_GAMMA" func="no"/>
+		<KeyWord name="SS_LASER_MAM" func="no"/>
+		<KeyWord name="SS_LASER_MAM_1" func="no"/>
+		<KeyWord name="SS_LASER_MASS" func="no"/>
+		<KeyWord name="SS_LASER_MINING" func="no"/>
+		<KeyWord name="SS_LASER_PAC" func="no"/>
+		<KeyWord name="SS_LASER_PAL" func="no"/>
+		<KeyWord name="SS_LASER_PBC" func="no"/>
+		<KeyWord name="SS_LASER_PBE" func="no"/>
+		<KeyWord name="SS_LASER_PD" func="no"/>
+		<KeyWord name="SS_LASER_PPC" func="no"/>
+		<KeyWord name="SS_LASER_PRG" func="no"/>
+		<KeyWord name="SS_LASER_PSG" func="no"/>
+		<KeyWord name="SS_LASER_PSP" func="no"/>
+		<KeyWord name="SS_LASER_REPAIR" func="no"/>
+		<KeyWord name="SS_LASER_TERRANANTIFIGHTER" func="no"/>
+		<KeyWord name="SS_LASER_TERRANANTIFIGHTER_1" func="no"/>
+		<KeyWord name="SS_LASER_TRIBEAM" func="no"/>
+		<KeyWord name="SS_LASER_TUG" func="no"/>
 		<KeyWord name="SS_MISSILE_1" func="no"/>
 		<KeyWord name="SS_MISSILE_2" func="no"/>
 		<KeyWord name="SS_MISSILE_3" func="no"/>
@@ -4921,7 +4960,6 @@
 		</KeyWord>
 		<KeyWord name="corpGetShouldUseSpeaker" func="yes" descr="Returns true if this corporation race is configured to use a custom speaker NPC.">
 			<Overload retVal="">
-				<Param name="RACE" descr="Corporation race to query"/>
 			</Overload>
 		</KeyWord>
 		<KeyWord name="corpSetConnectedRace" func="yes" descr="Sets the connected race for this corporation (the race it is affiliated with).">
@@ -4931,7 +4969,6 @@
 		</KeyWord>
 		<KeyWord name="corpSetShouldUseSpeaker" func="yes" descr="Sets whether this corporation race uses a custom speaker NPC.">
 			<Overload>
-				<Param name="RACE" descr="Corporation race to configure"/>
 				<Param name="VARBOOLEAN" descr="Corporation race to configure"/>
 			</Overload>
 		</KeyWord>
@@ -9519,29 +9556,12 @@
 				<Param name="WINGCMD" descr="Wing command upgrade set bitmask to check"/>
 			</Overload>
 		</KeyWord>
-		<KeyWord name="hotkeyRegisterEvent" func="yes" descr="Registers a hotkey that fires a script event. Returns the hotkey handle.">
-			<Overload retVal="">
-				<Param name="CALLNAME" descr="Script name to invoke when hotkey fires"/>
-				<Param name="NUMBER" descr="Primary key code"/>
-				<Param name="NUMBER" descr="Modifier key flags"/>
-				<Param name="NUMBER" descr="Hotkey flags"/>
-			</Overload>
-		</KeyWord>
 		<KeyWord name="hotkeyRegisterEventString" func="yes" descr="Registers a hotkey by display name string that fires a script event. Returns the hotkey handle.">
 			<Overload retVal="">
 				<Param name="VARSTRING" descr="Hotkey display name string"/>
 				<Param name="NUMBER" descr="Primary key code"/>
 				<Param name="NUMBER" descr="Modifier key flags"/>
 				<Param name="NUMBER" descr="Hotkey flags"/>
-			</Overload>
-		</KeyWord>
-		<KeyWord name="hotkeyRegisterMenu" func="yes" descr="Registers a hotkey that opens a menu script. Returns the hotkey handle.">
-			<Overload retVal="">
-				<Param name="CALLNAME" descr="Menu script name to open when hotkey fires"/>
-				<Param name="NUMBER" descr="Primary key code"/>
-				<Param name="NUMBER" descr="Modifier key flags"/>
-				<Param name="NUMBER" descr="Hotkey flags"/>
-				<Param name="VARBOOLEAN" descr="True to show in hotkey list"/>
 			</Overload>
 		</KeyWord>
 		<KeyWord name="hotkeyRegisterMenuString" func="yes" descr="Registers a hotkey by display name string that opens a menu. Returns the hotkey handle.">
@@ -13589,6 +13609,15 @@
 				<Param name="SHIPTYPE" descr="Drone ship type it carries"/>
 			</Overload>
 		</KeyWord>
+		<KeyWord name="registerEventHotkey" func="yes" descr="Registers a hotkey that fires a script event. Returns the hotkey handle.">
+			<Overload retVal="">
+				<Param name="CALLNAME" descr="Script name to invoke when hotkey fires"/>
+				<Param name="NUMBER" descr="Primary key code"/>
+				<Param name="NUMBER" descr="Modifier key flags"/>
+				<Param name="NUMBER" descr="Hotkey flags"/>
+				<Param name="NUMBER" descr="Default key id"/>
+			</Overload>
+		</KeyWord>
 		<KeyWord name="registerHotkey" func="yes" descr="Registers a hotkey with a display name and associated script. Returns the assigned hotkey ID.">
 			<Overload retVal="">
 				<Param name="VARSTRING" descr="Display name for the hotkey"/>
@@ -13613,6 +13642,16 @@
 				<Param name="NUMBER" descr="Text page ID"/>
 				<Param name="NUMBER" descr="Text ID"/>
 				<Param name="VARSTRING" descr="Script name string"/>
+			</Overload>
+		</KeyWord>
+		<KeyWord name="registerMenuHotkey" func="yes" descr="Registers a hotkey that can be used within a menu. Returns the hotkey handle.">
+			<Overload retVal="">
+				<Param name="CALLNAME" descr="Menu script name to open when hotkey fires"/>
+				<Param name="NUMBER" descr="Primary key code"/>
+				<Param name="NUMBER" descr="Modifier key flags"/>
+				<Param name="NUMBER" descr="Hotkey flags"/>
+				<Param name="VARBOOLEAN" descr="True to show in hotkey list"/>
+				<Param name="NUMBER" descr="Default key id"/>
 			</Overload>
 		</KeyWord>
 		<KeyWord name="registerPlugin" func="yes" descr="Registers an AL (Artificial Life) plugin script by name so it will be called by the AL engine.">

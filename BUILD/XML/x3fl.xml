@@ -17347,7 +17347,7 @@
 			</Arguments>
 			<Example>$plain = stringStripColour($colouredString)</Example>
 		</Function>
-		<Function id="2351" name="hotkeyRegisterEvent" description="Registers a hotkey that fires a script event. Returns the hotkey handle.">
+		<Function id="2351" name="registerEventHotkey" description="Registers a hotkey that fires a script event. Returns the hotkey handle.">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
@@ -17356,10 +17356,11 @@
 				<Argument pardef="NUMBER" description="Primary key code"/>
 				<Argument pardef="NUMBER" description="Modifier key flags"/>
 				<Argument pardef="NUMBER" description="Hotkey flags"/>
+				<Argument pardef="NUMBER" description="Default key id"/>
 			</Arguments>
-			<Example>$handle = hotkeyRegisterEvent("my.hotkey.script", 70, 0, 0)</Example>
+			<Example>$handle = registerEventHotkey("my.hotkey.script", 70, 0, 0, 0)</Example>
 		</Function>
-		<Function id="2352" name="hotkeyRegisterMenu" description="Registers a hotkey that opens a menu script. Returns the hotkey handle.">
+		<Function id="2352" name="registerMenuHotkey" description="Registers a hotkey that can be used within a menu. Returns the hotkey handle.">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
@@ -17369,8 +17370,9 @@
 				<Argument pardef="NUMBER" description="Modifier key flags"/>
 				<Argument pardef="NUMBER" description="Hotkey flags"/>
 				<Argument pardef="VARBOOLEAN" description="True to show in hotkey list"/>
+				<Argument pardef="NUMBER" description="Default key id"/>
 			</Arguments>
-			<Example>$handle = hotkeyRegisterMenu("menu.my.menu", 70, 0, 0, true)</Example>
+			<Example>$handle = registerMenuHotkey("menu.my.menu", 70, 0, 0, true)</Example>
 		</Function>
 		<Function id="2353" name="hotkeyRegisterEventString" description="Registers a hotkey by display name string that fires a script event. Returns the hotkey handle.">
 			<Arguments>
@@ -24434,25 +24436,35 @@
 		</Function>
 		<Function id="3183" name="corpGetShouldUseSpeaker" description="Returns true if this corporation race is configured to use a custom speaker NPC.">
 			<Arguments>
+				<RefObject>
+					<RefObjectType>DATATYPE_RACE</RefObjectType>
+				</RefObject>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Corporation race to query"/>
 			</Arguments>
 		</Function>
 		<Function id="3184" name="corpSetShouldUseSpeaker" description="Sets whether this corporation race uses a custom speaker NPC.">
 			<Arguments>
-				<Argument pardef="RACE" description="Corporation race to configure"/>
+				<RefObject>
+					<RefObjectType>DATATYPE_RACE</RefObjectType>
+				</RefObject>
 				<Argument pardef="VARBOOLEAN" description="Corporation race to configure"/>
 			</Arguments>
 		</Function>
 		<Function id="3185" name="corpSetSpeakerRace" description="Sets the race that provides the speaker NPC appearance for this corporation.">
 			<Arguments>
+				<RefObject>
+					<RefObjectType>DATATYPE_RACE</RefObjectType>
+				</RefObject>
 				<Argument pardef="RACE" description="Corporation race to configure"/>
 			</Arguments>
 		</Function>
 		<Function id="3186" name="corpSetConnectedRace" description="Sets the connected race for this corporation (the race it is affiliated with).">
 			<Arguments>
+				<RefObject>
+					<RefObjectType>DATATYPE_RACE</RefObjectType>
+				</RefObject>
 				<Argument pardef="RACE" description="Corporation race to configure"/>
 			</Arguments>
 		</Function>
@@ -25855,7 +25867,7 @@
 		<WareType name="Docks" id="5" textpos="6" file="TDocks"/>
 		<WareType name="Factories" id="6" textpos="6" file="TFactories"/>
 		<WareType name="Ships" id="7" textpos="6" file="TShips"/>
-		<WareType name="Laser" id="8" textpos="6" file="TLasers"/>
+		<WareType name="Laser" id="8" textpos="6" file="TLaser"/>
 		<WareType name="Shields" id="9" textpos="6" file="TShields"/>
 		<WareType name="Missiles" id="10" textpos="6" file="TMissiles"/>
 		<WareType name="Energy" id="11" textpos="6" file="TWareE"/>
