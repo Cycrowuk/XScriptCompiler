@@ -66,7 +66,7 @@ Properties::Properties() :
 
 }
 
-Properties::Properties(unsigned int getter, unsigned int setter, const std::wstring &desc) :
+Properties::Properties(unsigned int getter, unsigned int setter, const std::wstring& desc) :
 	_getter(getter),
 	_setter(setter),
 	_description(desc)
@@ -91,15 +91,15 @@ const std::wstring& Properties::description() const
 //####///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 CScriptData::CScriptData() : _elseCommand(5),
-	_endCommand(4),	
-	_returnCommand(103),
-	_continueCommand(6),
-	_expressionCommand(104),
-	_hiddenGotoCommand(112),
-	_breakCommand(7),
-	_defineLabelCommand(101),
-	_gotoCommand(100),
-	_gosubCommand(1167)
+_endCommand(4),
+_returnCommand(103),
+_continueCommand(6),
+_expressionCommand(104),
+_hiddenGotoCommand(112),
+_breakCommand(7),
+_defineLabelCommand(101),
+_gotoCommand(100),
+_gosubCommand(1167)
 {
 
 	// register all internal functions
@@ -168,7 +168,7 @@ const Function* CScriptData::findObjectFunction(const std::wstring& function) co
 	return NULL;
 }
 
-const Properties *CScriptData::findObjectProperty(const std::wstring& prop) const
+const Properties* CScriptData::findObjectProperty(const std::wstring& prop) const
 {
 	auto itr = _objectProperties.find(prop);
 	if (itr != _objectProperties.end())
@@ -201,7 +201,7 @@ const Function* CScriptData::findObjectTypeFunction(DataTypes type, const std::w
 	if (itr != _objectTypeFunctions.end())
 	{
 		auto findItr = itr->second.find(function);
-		if(findItr != itr->second.end())
+		if (findItr != itr->second.end())
 			return &_functionData[findItr->second];
 	}
 
@@ -356,7 +356,7 @@ const std::vector<Function>& CScriptData::functionData() const
 const ParDefData* CScriptData::getParDefData(ParDef id) const
 {
 	int i = static_cast<int>(id);
-	if(i >= 0 && i < _pardefData.size())
+	if (i >= 0 && i < _pardefData.size())
 		return &_pardefData[i];
 
 	return NULL;
@@ -488,7 +488,7 @@ std::wstring ReadWideString(std::ifstream& in, short size)
 		std::string str(data);
 		std::transform(str.begin(), str.end(), std::back_inserter(read), [](char c) {
 			return (wchar_t)c;
-		});
+			});
 	}
 
 	delete[] data;
@@ -502,7 +502,10 @@ bool CScriptData::saveData(const std::wstring& filename)
 		return false;
 
 	// write the header
-	unsigned int dataCount = 15;
+	// Section count: GAMEDATA, DATATYPE, PARDEF, WARES, CONSTGROUP, CONSTANTNS,
+	//                CONSTANTS, OBJCMDS, GFUNC, OFUNC, SFUNC, SPECIALKEY,
+	//                OTFUNC, RACES, PROPERTIES, CUSTOM = 16 sections
+	unsigned int dataCount = 16;
 	if (!_writeHeader(outfile, "XSCRIPTDATA", DATAVERSION, dataCount))
 		return false;
 
@@ -539,8 +542,8 @@ bool CScriptData::saveData(const std::wstring& filename)
 		if (!WriteWideString(outfile, _gameData.name))
 			return false;
 	}
-	
-	 
+
+
 	// write the data types
 	if (!_writeHeader(outfile, "DATATYPE", 1, static_cast<unsigned int>(_dataTypes.size())))
 		return false;
@@ -578,7 +581,7 @@ bool CScriptData::saveData(const std::wstring& filename)
 
 	for (auto itr = _pardefs.begin(); itr != _pardefs.end(); itr++)
 	{
-		ParDefData *d = &_pardefData[static_cast<size_t>(itr->second)];
+		ParDefData* d = &_pardefData[static_cast<size_t>(itr->second)];
 		ParDefFileData data;
 		data.id = static_cast<unsigned long>(d->id);
 		data.flags = static_cast<unsigned long>(d->flags);
@@ -957,7 +960,7 @@ bool CScriptData::loadData(const std::wstring& filename)
 		return false;
 
 	DataFileHeader mainheader = _readHeader(infile, DATAVERSION);
-	if(!mainheader.success || mainheader.header != "XSCRIPTDATA")
+	if (!mainheader.success || mainheader.header != "XSCRIPTDATA")
 		return false;
 
 	for (unsigned int i = 0; i < mainheader.count; i++)
@@ -1173,7 +1176,7 @@ bool CScriptData::loadData(const std::wstring& filename)
 				_constants[data.id] = id;
 				_constData[id] = ConstantData(DataTypes::Constant, id, data.id, group, static_cast<DataTypes>(data.subtype));
 			}
-			else if (header.header == "OBJCMDS")			
+			else if (header.header == "OBJCMDS")
 			{
 				CommandFileData data;
 				infile.read(reinterpret_cast<char*>(&data), sizeof(data));
@@ -1375,7 +1378,7 @@ bool CScriptData::loadData(const std::wstring& filename)
 bool CScriptData::_writeHeader(std::ofstream& out, const std::string& name, unsigned int version, unsigned int count)
 {
 	DataFileHeaderRaw header;
-	header.version = version;	
+	header.version = version;
 	memset(header.header, 0, sizeof(header.header));
 #ifdef _WIN32
 	strcpy_s(header.header, name.c_str());
@@ -1570,6 +1573,6 @@ bool CScriptData::_readFunction(std::ifstream& in, std::map<const std::wstring, 
 
 		_functionData[data.id].arguments.push_back({ static_cast<ParDef>(aData.id), read, group });
 	}
-		
+
 	return true;
 }
