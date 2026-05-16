@@ -119,276 +119,84 @@ Errors prevent the output file from being written. Warnings are informational �
 
 ## Language Reference
 
+### Line Termination
+
+All statements end with a semicolon `;`:
+
+```xscript
+$x = 10;
+speak($pilot, "Hello", 1000);
+```
+
+### Comments
+
+```xscript
+// Single line comment
+
+/* Multi-line comment
+   anything between these is ignored
+   by the compiler */
+```
+
 ### Variables
 
-Variables are prefixed with `$`. Dot notation is supported for sub-variables.
+Variables begin with `$`. The character immediately after `$` must be a letter. Subsequent characters may be letters, numbers, underscores, or periods (`.`):
 
 ```xscript
-$myVar = 42;
+$count = 0;
 $my.variable = "hello";
-$result = getSectorByCoord(22, 3);
+$ship2 = PLAYERSHIP;
 ```
 
-### Object Methods and Properties
+### Numbers
 
-Object methods and properties both use the `->` operator.
-
-**Methods** call a function on the object and optionally return a value:
+X3 scripts only support **integer** values — no floating point. A number literal may only contain the digits `0` through `9`:
 
 ```xscript
-$name   = $ship->getName();
-$exists = $ship->exists();
-$ship->setCommand(null);
+$x = 42;
+$y = -10;
 ```
 
-**Properties** provide a cleaner syntax for getting and setting values without explicit function call brackets. Each property maps to an underlying getter function (for reads) and optionally a setter function (for writes).
+### Assignments
 
-Reading a property (getter):
+An assignment uses a single `=` and must have a variable or array on the left:
 
 ```xscript
-$name   = $ship->name;
-$speed  = $ship->maxSpeed;
-$sector = $ship->sector;
+$variable = 10;
+$array[1] = 10;
 ```
 
-Writing a property (setter):
+### Expression Operators
 
-```xscript
-$ship->name = "My Freighter";
-$ship->commander = PLAYERSHIP;
-```
+Most operators are only valid with integer values. For strings, only `+` (concatenation) is valid:
 
-Properties can also be used directly in conditions:
+| Operator | Description |
+|----------|-------------|
+| `+` | Addition (integers) or concatenation (strings) |
+| `-` | Subtraction |
+| `*` | Multiply |
+| `/` | Divide |
+| `%` | Modulus |
+| `^` | Bitwise XOR |
+| `&` | Bitwise AND |
+| `\|` | Bitwise OR |
+| `~` | Bitwise Negate |
 
-```xscript
-if $ship->isPlayer
-{
-    speak($pilot, "That is the player", 1000);
-}
+### Logical Operators
 
-do if $ship->exists;
-```
+For use in comparisons and conditional expressions:
 
-Read-only properties have no setter — attempting to assign to them produces a compile error:
-
-```xscript
-$ship->race = 1;    // error if 'race' has no setter defined
-```
-
-Methods and properties can be chained when the return type is an object:
-
-```xscript
-$pilotName = $ship->pilot->name;
-$pilotSector = PLAYERSHIP->sector->name;
-```
-
-### Nested Function Calls
-
-In standard X3 scripts, function return values must always be assigned to a variable before being used elsewhere. XScript removes this restriction — functions can be used directly as arguments to other functions, and the compiler generates the necessary temporary variables automatically.
-
-```xscript
-// Standard X3: requires intermediate variable
-$sector = getSectorByCoord(22, 3);
-$name = $sector->name;
-
-// XScript: function call directly as argument
-$name = getSectorByCoord(22, 3)->name;
-```
-
-```xscript
-// Passing a function's return value as an argument to another function
-speak($pilot, $ship->getName(), 1000);
-
-// Nested object method calls
-$pilotName = PLAYERSHIP->pilot->name;
-
-// Multiple levels of nesting
-if getSectorByCoord(22, 3)->exists()
-{
-    // ...
-}
-```
-
-This applies to global functions, object methods, and properties — any combination can be nested:
-
-```xscript
-$result = getObjectByName(this->sector, "My Station")->cargo[0];
-```
-
-The compiler handles all temporary variable allocation internally — the generated script is fully compatible with the X3 engine.
-
-### Conditions
-
-```xscript
-if ($value > 100)
-{
-    $result = "high";
-}
-else if ($value > 50)
-{
-    $result = "medium";
-}
-else
-{
-    $result = "low";
-}
-
-while ($count < 10)
-{
-    $count += 1;
-}
-
-do if $ship->exists();
-
-skip if $value == 0;
-```
-
-The `not` keyword inverts any condition:
-
-```xscript
-if not $ship->exists()
-{
-    return null;
-}
-```
-
-### Return Values
-
-Functions with return values use the assignment form:
-
-```xscript
-$sector = getSectorByCoord(22, 3);
-```
-
-Conditional return — the function's result is used directly as the condition:
-
-```xscript
-if $ship->exists()
-{
-    speak($pilot, "Ship found", 1000);
-}
-```
-
-Returning from a script:
-
-```xscript
-return $result;
-return null;
-```
-
-### START Modifier
-
-`START` runs a function asynchronously in a separate thread without waiting for a return value:
-
-```xscript
-START speak($pilot, "Hello", 1000);
-START $ship->call("plugin.myscript");
-```
-
-### Constants
-
-**Boolean and null:**
-
-```xscript
-$exists = TRUE;
-$empty  = FALSE;
-$obj    = NULL;
-```
-
-**Script context — the object the script is running on:**
-
-The `this` constant refers to the object that owns the currently running script (the ship, station, or other entity it is attached to). Several related constants provide convenient access to its context:
-
-```xscript
-$self    = this;              // the object this script runs on
-$home    = ThisHomebase;      // this object's homebase
-$env     = ThisEnvironment;   // docking bay or sector this object is in
-$sector  = ThisSector;        // sector this object is in
-$owner   = ThisOwner;         // race that owns this object
-$docked  = DOCKEDAT;          // environment this object is docked at
-$true    = TRUEOWNER;         // true race owner of this object
-```
-
-These can be used directly with `->` to call methods on the owning object:
-
-```xscript
-$name = this->name;
-this->setCommand(null);
-START this->call("plugin.myscript");
-```
-
-**Other built-in constants:**
-
-```xscript
-$player = PLAYERSHIP;         // the player's ship
-```
-
-Namespace constants use `::` syntax:
-
-```xscript
-$flag = RaceFlag::NPC;
-$type = ShipType::M3;
-```
-
-Custom mod commands use a prefix followed by the command ID:
-
-```xscript
-$cmd = SHIPCOMMAND_1000;
-```
-
-### Arrays and Tables
-
-XScript supports two types of indexed collections: **arrays** (integer-indexed) and **tables** (any-type keyed).
-
-**Arrays** use integer indices starting at 0:
-
-```xscript
-$value    = $array[0];
-$array[0] = 42;
-$array[1] = "hello";
-
-// Multi-dimensional
-$value      = $grid[2][3];
-$grid[0][1] = 100;
-```
-
-**Tables** use any datatype as the key — strings, integers, objects, or constants:
-
-```xscript
-$value             = $table["key"];
-$table["name"]     = "My Ship";
-$table[42]         = "answer";
-$table[PLAYERSHIP] = "player";
-$table[RaceFlag::NPC] = TRUE;
-```
-
-Both can be used directly in conditions:
-
-```xscript
-if ($array[0])
-{
-    // ...
-}
-
-if ($table["active"])
-{
-    // ...
-}
-```
-
-Function return values can be used as the index expression:
-
-```xscript
-$value = $array[$ship->cargoCount];
-$data  = $table[$ship->name];
-```
-
-**Utility functions:**
-
-```xscript
-$count = arraySize($array);      // number of entries in an array
-$keys  = tableKeys($table);      // returns an array of all keys in a table
-```
+| Operator | Description |
+|----------|-------------|
+| `&&` | And |
+| `\|\|` | Or |
+| `!` | Not |
+| `==` | Equals |
+| `!=` | Not equals |
+| `>` | Greater than |
+| `>=` | Greater than or equals |
+| `<` | Less than |
+| `<=` | Less than or equals |
 
 ### Compound Assignment
 
@@ -403,28 +211,239 @@ $count++;
 $count--;
 ```
 
-### Labels, Goto and Gosub
+### Constants
 
-`gosub` jumps to a label and returns when `endsub` is reached. Variables assigned inside a sub are visible to the caller.
+Named constants use the `::` namespace separator:
 
 ```xscript
-gosub initialise;
-
-$result = $myVar->exists();    // $myVar is known here, assigned in the sub below
-return null;
-
-initialise:
-    $myVar = PLAYERSHIP;
-endsub;
+$flag = RaceFlag::NPC;
+$page = TextPage::Menus;
+$type = ShipType::M3;
 ```
 
-`goto` is a one-way jump with no return:
+**Built-in constants:**
+
+| Constant | Description |
+|----------|-------------|
+| `TRUE` | Integer value 1 |
+| `FALSE` | Integer value 0 |
+| `NULL` | Null / no object |
+| `PLAYERSHIP` | The ship the player is currently piloting |
+
+**Script context constants** — refer to the object the script is attached to. These are `null` when the script runs globally:
+
+| Constant | Description |
+|----------|-------------|
+| `this` | The object this script is running on |
+| `ThisHomebase` | The homebase of `this` |
+| `ThisEnvironment` | The environment of `this` — the sector or docking ship/station it is in |
+| `ThisSector` | The sector of `this` |
+| `ThisOwner` | The race that owns `this` |
+| `DOCKEDAT` | The ship or station `this` is currently docked at |
+| `TRUEOWNER` | The true owner race — relevant when an object is disguising its race (e.g. pirates) |
+
+```xscript
+$name   = this->name;
+$sector = ThisSector;
+START this->call("plugin.myscript");
+```
+
+**Custom prefix constants** — for mod-added commands not in the data file:
+
+```xscript
+$cmd = SHIPCOMMAND_1000;
+```
+
+### Global Functions
+
+Functions translate to X3 script commands. Arguments are comma-separated inside parentheses:
+
+```xscript
+speak($pilot, "Hello", 1000);
+$sector = getSectorByCoord(22, 3);
+```
+
+### Object Methods and Properties
+
+Object methods and properties use the `->` operator.
+
+**Methods** call a function on the object:
+
+```xscript
+$exists = $ship->exists();
+$ship->setCommand(null);
+```
+
+**Properties** map to getter and setter functions with cleaner syntax — no parentheses needed:
+
+```xscript
+// Reading (getter)
+$name   = $ship->name;
+$sector = $ship->sector;
+
+// Writing (setter)
+$ship->name      = "My Freighter";
+$ship->commander = PLAYERSHIP;
+
+// In conditions
+if $ship->isPlayer
+{
+    speak($pilot, "That is the player", 1000);
+}
+```
+
+Read-only properties have no setter — assigning to them produces a compile error.
+
+### Nested Function Calls
+
+Unlike standard X3 scripts, XScript allows function return values to be used directly as arguments or chained with `->` without first assigning to a variable. The compiler generates the necessary temporary variables automatically:
+
+```xscript
+// Standard X3 requires an intermediate variable:
+$sector = getSectorByCoord(22, 3);
+$name = $sector->name;
+
+// XScript: direct nesting
+$name = getSectorByCoord(22, 3)->name;
+
+// As an argument to another function
+speak($pilot, $ship->getName(), 1000);
+
+// In a condition
+if getSectorByCoord(22, 3)->exists()
+{
+    // ...
+}
+```
+
+This applies to global functions, object methods, and properties in any combination. The generated script is fully compatible with the X3 engine.
+
+### Arrays and Tables
+
+Both use subscript operators `[` and `]`. The subscript can be a value, variable, expression, or function call.
+
+**Arrays** are integer-indexed. A warning is shown if a non-integer subscript is used on an array:
+
+```xscript
+$value      = $array[0];
+$array[1]   = 42;
+
+// Multi-dimensional
+$value      = $grid[2][3];
+$grid[0][1] = 100;
+```
+
+**Tables** accept any datatype as a key — strings, integers, objects, or constants:
+
+```xscript
+$value             = $table["key"];
+$table["name"]     = "My Ship";
+$table[42]         = "answer";
+$table[PLAYERSHIP] = "player";
+$table[RaceFlag::NPC] = TRUE;
+```
+
+Arrays and tables can appear in any expression, condition, or function argument. The subscript operator can also be applied directly to a function return value if it returns an array or table type:
+
+```xscript
+if ($array[$ship->cargoCount])
+{
+    // ...
+}
+```
+
+**Utility functions:**
+
+```xscript
+$count = arraySize($array);   // number of entries in an array
+$keys  = tableKeys($table);   // returns an array of all keys in a table
+```
+
+### Conditions
+
+Condition keywords: `if`, `else`, `not`, `while`
+
+Keywords can be combined:
+
+```xscript
+if ($value > 100) { ... }
+else if ($value > 50) { ... }
+else { ... }
+
+if not $ship->exists() { ... }
+else if not ($count == 0) { ... }
+
+while ($count < 10)
+{
+    $count += 1;
+}
+```
+
+Unlike standard X3, `do if` and `skip if` do not exist as explicit keywords — the compiler automatically selects the appropriate X3 instruction based on the size of the block.
+
+### Blocks
+
+Braces `{` `}` group multiple statements under a conditional. A single-statement condition does not require braces:
+
+```xscript
+if ($x > 0)
+{
+    $a = 1;
+    $b = 2;
+}
+
+if ($x > 0)
+    $a = 1;
+```
+
+### Return Values
+
+```xscript
+return $result;
+return null;
+```
+
+A function's return value can be used directly as a condition:
+
+```xscript
+if $ship->exists()
+{
+    speak($pilot, "Ship found", 1000);
+}
+```
+
+### START Modifier
+
+Runs a function asynchronously without waiting for a return value:
+
+```xscript
+START speak($pilot, "Hello", 1000);
+START $ship->call("plugin.myscript");
+START this->call("plugin.myscript");
+```
+
+### Labels, Goto and Gosub
+
+**`goto`** is a one-way jump to a label:
 
 ```xscript
 goto cleanup;
 
 cleanup:
     $ship->setCommand(null);
+```
+
+**`gosub`** jumps to a label and returns when `endsub` is reached. Variables assigned inside a sub are visible to the caller — the compiler pre-scans the sub before compiling the calling code:
+
+```xscript
+gosub initialise;
+
+$result = $myVar->exists();    // $myVar known here — assigned in the sub below
+return null;
+
+initialise:
+    $myVar = PLAYERSHIP;
+endsub;
 ```
 
 ### Defines (Macros)
@@ -437,7 +456,6 @@ $limit = MAX_COUNT;
 $sum   = ADD($x, $y);
 ```
 
----
 
 ## Type Checking
 
