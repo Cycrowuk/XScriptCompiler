@@ -6,3 +6,13 @@ v0.3
 	Updated function data id 500-600
 	Added namespaces to constants
 	Improved error messages for loading xml data
+
+v0.4
+	Updated function data id 600-900
+	Added properties
+
+v0.5	Updated all remaining function data
+	Added #define preprocessor
+	Added increment/decrement symbols (++/--)
+	Various compiling fixes
+	Improved variable warnings when using gosubs
