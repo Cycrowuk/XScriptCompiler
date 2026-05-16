@@ -1000,6 +1000,7 @@
 		<KeyWord name="Variation::XL" func="no"/>
 		<KeyWord name="WARE" func="no"/>
 		<KeyWord name="WAREOFSHIP" func="no"/>
+		<KeyWord name="WARETRUE" func="no"/>
 		<KeyWord name="WARPGATE" func="no"/>
 		<KeyWord name="WING" func="no"/>
 		<KeyWord name="WINGCMD" func="no"/>
@@ -12016,7 +12017,7 @@
 		<KeyWord name="setCommandUpgrade" func="yes" descr="Sets the equipment needed for the ship command">
 			<Overload>
 				<Param name="OBJCMD" descr="The ship command to set equipment too"/>
-				<Param name="WARE" descr="The equipment ware"/>
+				<Param name="WARETRUE" descr="The equipment ware"/>
 			</Overload>
 		</KeyWord>
 		<KeyWord name="setCommandUpgradeScript" func="yes" descr="Sets the equipment needs for a ship command and sets a check script">
