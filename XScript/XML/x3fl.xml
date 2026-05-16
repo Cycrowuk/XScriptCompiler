@@ -2,7 +2,7 @@
 <XScript>
 	<!-- Defines the game to extract data from -->
 	<Game id="X3FL" name="X3 Farnhams Legacy" directory="addon2" language="44">
-		<EngineVersion min="55" max="60"/>
+		<EngineVersion min="55" max="74"/>
 		<TextPrefix value="39"/>
 	</Game>
   <DataTypes>

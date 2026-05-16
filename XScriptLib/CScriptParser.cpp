@@ -218,7 +218,11 @@ BaseParse* CScriptParser::parseConstant(const std::wstring& line) const
 	const DataTypeData* prefixDt = _data->findDatatypeByPrefix(line, prefixId);
 	if (prefixDt)
 	{
-		ConstantData* synthetic = new ConstantData(DataTypes::Constant, line, prefixId, prefixDt->id);
+		// Use the prefix's actual DataType as the constant's type so the script
+		// serialiser writes the correct sval type to the binary output.
+		// Using DataTypes::Constant here causes the engine to misinterpret it
+		// as a generic constant instead of e.g. DATATYPE_SHIPCOMMAND.
+		ConstantData* synthetic = new ConstantData(prefixDt->id, line, prefixId, prefixDt->id);
 		_syntheticConstants.push_back(static_cast<void*>(synthetic));
 		return new ParseConstant(line, synthetic);
 	}
@@ -3646,13 +3650,13 @@ void CScriptParser::resetForRealPass()
 	_pVariables = &_variables;
 
 	for (auto itr = _errors.begin(); itr != _errors.end(); itr++)
-		delete* itr;
+		delete *itr;
 	_errors.clear();
 	_warnings.clear();
 	for (auto itr = _currentDataList.begin(); itr != _currentDataList.end(); itr++)
-		delete* itr;
+		delete *itr;
 	for (auto itr = _createdData.begin(); itr != _createdData.end(); itr++)
-		delete* itr;
+		delete *itr;
 	_currentDataList.clear();
 	_createdData.clear();
 	_deferredLists.clear();
@@ -4420,8 +4424,9 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 
 	_currentScript->addFunction(func->id, functionData, functionData->isPostRun());
 
-	// if the function has a refobj of null, add a null item
-	if (func->refObjType.size() > 1 && func->refObjType.find(DataTypes::Null) != func->refObjType.end())
+	// if the function has a refobj of null, add a null item — but only
+	// when no object has already been provided by the caller.
+	if (!functionData->object() && func->refObjType.size() > 1 && func->refObjType.find(DataTypes::Null) != func->refObjType.end())
 	{
 		auto constData = _data->findConstant(L"NULL");
 		if (constData)

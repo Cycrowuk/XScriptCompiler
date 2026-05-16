@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "CScript.h"
 
 #include "BaseParse.h"
@@ -31,7 +31,7 @@ void ScriptFunction::addArgument(const BaseParse* parse, ParDef pardef)
 }
 
 
-CScript::CScript(const CScriptData *data) :
+CScript::CScript(const CScriptData* data) :
     _pScriptData(data),
     _version(0),
     _command(0)
@@ -46,7 +46,7 @@ CScript::~CScript()
 }
 
 
-void CScript::addArgument(const std::wstring& variable, const std::wstring& description, ParDef parameterDefinition, const std::wstring &parDefName)
+void CScript::addArgument(const std::wstring& variable, const std::wstring& description, ParDef parameterDefinition, const std::wstring& parDefName)
 {
     _arguments.push_back(ScriptArguments({ variable, description, parameterDefinition, parDefName }));
     addVariable(variable);
@@ -86,7 +86,7 @@ void CScript::addVariable(const std::wstring& variable)
 void CScript::addNewExpression(const ParseCondition* cond)
 {
     _functions.push_back({ _pScriptData->expressionCommand(), nullptr });
-	_lastAddedIndex = static_cast<int>(_functions.size() - 1);
+    _lastAddedIndex = static_cast<int>(_functions.size() - 1);
     _lastAddedIsPost = false;
     flushPostRun();
     lastFunc()->retvarID = static_cast<int>(lastFunc()->argumentCount());
@@ -104,22 +104,22 @@ void CScript::addNewExpression(const ParseVariable* vari)
     lastFunc()->addArgument(vari, ParDef::Var);
 }
 
-void CScript::addFunction(unsigned int id, const ParseFunction *func, bool postRun)
+void CScript::addFunction(unsigned int id, const ParseFunction* func, bool postRun)
 {
     if (postRun)
     {
-        // Store pending � don't add to _functions yet so _functions.back()
+        // Store pending � don't add to _functions yet so _functions.back()
         // remains the current normal function for addRetVar/addFunctionArgument
         _pendingPostRun.push_back(ScriptFunction(id, func));
         _lastAddedIndex = static_cast<int>(_pendingPostRun.size() - 1);
         _lastAddedIsPost = true;
-		lastFunc()->isPost = true;
+        lastFunc()->isPost = true;
         return;
     }
 
     _functions.push_back({ id, func });
     _lastAddedIndex = static_cast<int>(_functions.size() - 1);
-	_lastAddedIsPost = false;
+    _lastAddedIsPost = false;
 
     flushPostRun();
 }
@@ -128,8 +128,8 @@ void CScript::flushPostRun()
 {
     for (auto& func : _pendingPostRun)
         _functions.push_back(func);
-    if(_lastAddedIsPost)
-		_lastAddedIndex = static_cast<int>(_functions.size() - 1);
+    if (_lastAddedIsPost)
+        _lastAddedIndex = static_cast<int>(_functions.size() - 1);
     _pendingPostRun.clear();
 }
 
@@ -371,7 +371,7 @@ bool CScript::isIfOpen() const
     return false;
 }
 
-const ScriptFunction *CScript::previousFunction() 
+const ScriptFunction* CScript::previousFunction()
 {
     return lastFunc();
 }
@@ -481,7 +481,7 @@ bool CScript::finalise()
         previousIsElse = false;
         if (itr->id == _pScriptData->elseCommand())
             previousIsElse = true;
-        else if(itr->retvarID >= 0)
+        else if (itr->retvarID >= 0)
         {
             auto arg = itr->retvarArgument();
             if (arg && arg->type() == ParseType::Condition)
@@ -506,7 +506,7 @@ bool CScript::finalise()
             if (itr->retvarID >= 0)
             {
                 auto arg = itr->retvarArgument();
-                if (arg && arg->type()  == ParseType::Condition)
+                if (arg && arg->type() == ParseType::Condition)
                 {
                     const ParseCondition* cond = dynamic_cast<const ParseCondition*>(arg);
                     if (cond->condition() == Conditions::ElseIf || cond->condition() == Conditions::ElseIfNot)
@@ -526,7 +526,7 @@ bool CScript::finalise()
                 inWhile.pop();
             }
 
-            if(itr->id != _pScriptData->endCommand())
+            if (itr->id != _pScriptData->endCommand())
                 ++start;
             ++itr;
         }
@@ -570,7 +570,7 @@ bool CScript::finalise()
         else if (itr->retvarID >= 0 && itr->endBlock != -1)
         {
             auto arg = itr->retvarArgument();
-            if (arg && arg->type()  == ParseType::Condition)
+            if (arg && arg->type() == ParseType::Condition)
             {
                 itr->endLine = gotoPosition.back();
                 const ParseCondition* cond = dynamic_cast<const ParseCondition*>(arg);
@@ -579,7 +579,7 @@ bool CScript::finalise()
                     gotoPosition.pop_back();
                     endPosition.pop_back();
                 }
-                else if(cond->condition() == Conditions::Else)
+                else if (cond->condition() == Conditions::Else)
                     gotoPosition[gotoPosition.size() - 1] = lines;
                 else if (cond->condition() == Conditions::ElseIf || cond->condition() == Conditions::ElseIfNot)
                     gotoPosition[gotoPosition.size() - 1] = lines - 1;
@@ -610,7 +610,7 @@ bool CScript::finalise()
     return true;
 }
 
-void CScript::writeArguments(std::wofstream &out, const ScriptFunction &func, const BaseParse *parse, bool isRetvar) const
+void CScript::writeArguments(std::wofstream& out, const ScriptFunction& func, const BaseParse* parse, bool isRetvar) const
 {
     bool hasDatatype = true;
     if (parse->pardef() == ParDef::CallName)
@@ -698,13 +698,13 @@ void CScript::writeArguments(std::wofstream &out, const ScriptFunction &func, co
         out << L"      <sval type=\"int\" val=\"" << condId << L"\"/>" << std::endl;
     }
     // for labels, we dont need any datatype, just the label name string
-    else if(func.id == _pScriptData->defineLabelCommand())
+    else if (func.id == _pScriptData->defineLabelCommand())
         out << L"      <sval type=\"string\" val=\"" << parse->stringData() << L"\"/>" << std::endl;
     else
     {
-        if(hasDatatype)
+        if (hasDatatype)
             out << L"      <sval type=\"int\" val=\"" << static_cast<int>(parse->dataType()) << L"\"/>" << std::endl;
-        if(_isDatatypeString(parse->dataType()))
+        if (_isDatatypeString(parse->dataType()))
             out << L"      <sval type=\"string\" val=\"" << parse->stringData() << L"\"/>" << std::endl;
         else
             out << L"      <sval type=\"int\" val=\"" << parse->stringData() << L"\"/>" << std::endl;
@@ -765,7 +765,7 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
     out << L"  <sval type=\"int\" val=\"0\"/>" << std::endl;
 
     // script variables
-    if(_variables.empty())
+    if (_variables.empty())
         out << L"  <sval type=\"int\" val=\"0\"/>" << std::endl;
     else
     {
@@ -775,8 +775,41 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
         out << L"  </sval>" << std::endl;
     }
 
-    // script code
-    bool shouldIncludeReturn = true;
+    // Calculate once whether we need to append a final return null.
+    // Must be determined BEFORE cmdCount is written to the XML — changing it
+    // afterwards would cause a size/entry mismatch.
+    // Suppress the auto-return only when the last entry is a returnCommand AND
+    // it is not inside a conditional (with or without a block).
+    // Cases where the auto-return IS still needed:
+    //   [..., conditional, return]    — single-line condition (no end block)
+    //   [..., return, end]            — return inside a block
+    const bool shouldIncludeReturn = [&]() -> bool
+        {
+            if (_functions.empty()) return true;
+
+            // If the last entry is not a return, we always need the auto-return
+            if (_functions.back().id != _pScriptData->returnCommand()) return true;
+
+            // Last entry is a return — check if it's inside a conditional.
+            // Case 1: [..., end] — return before end means it was inside a block
+            // (handled: back() would be end, not return, so we'd have returned true above)
+
+            // Case 2: [..., conditional, return] — single-line condition, no end block.
+            // Check the second-to-last entry for a function with a condition retvar.
+            if (_functions.size() >= 2)
+            {
+                const auto& prev = _functions[_functions.size() - 2];
+                if (prev.retvarID >= 0)
+                {
+                    const auto* arg = prev.retvarArgument();
+                    if (arg && arg->type() == ParseType::Condition)
+                        return true; // return is inside a conditional — auto-return still needed
+                }
+            }
+
+            return false; // last entry is a top-level return — no auto-return needed
+        }();
+
     size_t cmdCount = _functions.size();
     if (shouldIncludeReturn)
         ++cmdCount;
@@ -838,12 +871,12 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
             // check for negate
             for (auto nItr = args.begin(); nItr != args.end(); nItr++)
             {
-                if ((*nItr)->type()  == ParseType::Operator)
+                if ((*nItr)->type() == ParseType::Operator)
                 {
                     const ParseOperator* oper = dynamic_cast<const ParseOperator*>(*nItr);
                     if (oper->operType() == Operators::Subtract)
                     {
-                        const_cast<ParseOperator *>(oper)->switchType(Operators::Negate);
+                        const_cast<ParseOperator*>(oper)->switchType(Operators::Negate);
                         break;
                     }
                     else if (oper->operType() != Operators::OpenBracket && oper->operType() != Operators::CloseBracket)
@@ -878,7 +911,7 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
                 {
                     auto findItr = std::find(postfix.begin(), postfix.end(), parse);
                     if (findItr != postfix.end())
-                        out << L"      <sval type=\"int\" val=\"" << (- 1 - std::distance(postfix.begin(), findItr)) << L"\"/>" << std::endl;
+                        out << L"      <sval type=\"int\" val=\"" << (-1 - std::distance(postfix.begin(), findItr)) << L"\"/>" << std::endl;
                     // shouldn't happen (TODO: throw an error)
                     else
                         out << L"      <sval type=\"int\" val=\"" << -1 << L"\"/>" << std::endl;
@@ -916,12 +949,9 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
                     out << L"      <sval type=\"int\" val=\"" << itr->undefinedArgs << L"\"/>" << std::endl;
 
                 writeArguments(out, *itr, *aItr, aItr == retItr);
-
-                // if function is a return, then we dont need an additional return after
-                shouldIncludeReturn = (itr->id != _pScriptData->returnCommand());
             }
 
-            if(hasCallNoArguments)
+            if (hasCallNoArguments)
                 out << L"      <sval type=\"int\" val=\"" << 0 << L"\"/>" << std::endl;
         }
 
@@ -941,7 +971,7 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
     out << L"  </sval>" << std::endl;
 
     // script argument definitions
-    if(_arguments.empty())
+    if (_arguments.empty())
         out << L"  <sval type=\"int\" val=\"0\"/>" << std::endl;
     else
     {
@@ -987,9 +1017,9 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
     return true;
 }
 
-void CScript::_simplifyExpression(const BaseParse* parse, std::vector<const BaseParse *> &newArgs)
+void CScript::_simplifyExpression(const BaseParse* parse, std::vector<const BaseParse*>& newArgs)
 {
-    if (parse->type()  == ParseType::Brackets)
+    if (parse->type() == ParseType::Brackets)
     {
         const ParseBrackets* brackets = dynamic_cast<const ParseBrackets*>(parse);
 
@@ -1012,10 +1042,10 @@ void CScript::_simplifyExpression(const BaseParse* parse, std::vector<const Base
         }
 
         for (auto itr = newList.begin(); itr != newList.end(); itr++)
-            const_cast<ParseBrackets*>(brackets)->addParse(const_cast<BaseParse *>(*itr));
+            const_cast<ParseBrackets*>(brackets)->addParse(const_cast<BaseParse*>(*itr));
         newList.clear();
     }
-    else if (parse->type()  == ParseType::Expression)
+    else if (parse->type() == ParseType::Expression)
     {
         const ParseExpression* expression = dynamic_cast<const ParseExpression*>(parse);
 
@@ -1038,21 +1068,21 @@ void CScript::_simplifyExpression(const BaseParse* parse, std::vector<const Base
         }
 
         for (auto itr = newList.begin(); itr != newList.end(); itr++)
-            const_cast<ParseExpression*>(expression)->addParse(const_cast<BaseParse *>(*itr));
+            const_cast<ParseExpression*>(expression)->addParse(const_cast<BaseParse*>(*itr));
         newList.clear();
     }
 
     newArgs.push_back(parse);
 }
 
-void CScript::_parseExpressionList(const std::vector<const BaseParse*>& list, std::vector<const BaseParse*>::const_iterator ignoreItem, std::vector<const BaseParse *> &output)
+void CScript::_parseExpressionList(const std::vector<const BaseParse*>& list, std::vector<const BaseParse*>::const_iterator ignoreItem, std::vector<const BaseParse*>& output)
 {
     for (auto itr = list.begin(); itr != list.end(); itr++)
     {
         if (itr == ignoreItem)
             continue;
 
-        if ((*itr)->type()  == ParseType::Brackets)
+        if ((*itr)->type() == ParseType::Brackets)
         {
             const ParseBrackets* bracket = dynamic_cast<const ParseBrackets*>(*itr);
             if (bracket->singleItem())
@@ -1096,7 +1126,7 @@ void CScript::_parseExpressionList(const std::vector<const BaseParse*>& list, st
         else if ((*itr)->type() == ParseType::Array)
         {
             const ParseArray* arr = dynamic_cast<const ParseArray*>(*itr);
-            if(arr->assignment())
+            if (arr->assignment())
                 output.push_back(arr->assignment());
         }
         else if ((*itr)->type() == ParseType::Expression)
@@ -1158,7 +1188,7 @@ int CScript::_operatorPriority(const ParseOperator* oper) const
 std::vector<const BaseParse*> CScript::_convertToPostfixExpression(const std::vector<const BaseParse*>& list) const
 {
     std::vector<const BaseParse*> newList;
-    std::stack<const ParseOperator *> s;
+    std::stack<const ParseOperator*> s;
 
     for (auto itr = list.begin(); itr != list.end(); itr++)
     {

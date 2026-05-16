@@ -147,7 +147,7 @@ void ScriptDataReader::_readGameData(rapidxml::xml_node<wchar_t>* root_node)
 					if (name == L"min")
 						_pData->_gameData.engineMin = std::stoi(attr->value());
 					if (name == L"max")
-						_pData->_gameData.engineMin = std::stoi(attr->value());
+						_pData->_gameData.engineMax = std::stoi(attr->value());
 
 				}
 			}
