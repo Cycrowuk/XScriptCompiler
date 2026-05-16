@@ -20,21 +20,82 @@ XScript Compiler translates human-readable XScript source files (`.xs`) into the
 
 ```
 XScriptCompiler.exe --load_data <datafile> --compile <input.xs> --out <output.xml>
+XScriptCompiler.exe --builddata <x3fl.xml> --out <output.dat>
+XScriptCompiler.exe --load_data <datafile> --decompile <input.xml> --out <output.xs>
+```
+
+### Compile a script
+
+```
+XScriptCompiler.exe --load_data default_data.dat --compile myscript.xs --out myscript.xml
 ```
 
 **Arguments:**
 
 | Argument | Description |
 |----------|-------------|
-| `--load_data <file>` | Path to the game data file (`default_data.dat` or `x3fl.dat`) |
-| `--compile <file>` | Path to the XScript source file to compile |
-| `--out <file>` | Path for the compiled XML output file |
+| `--load_data <file>` | Path to the compiled game data file (`default_data.dat` or `x3fl.dat`) |
+| `--compile <file>` | Path to the XScript source file (`.xs`) to compile |
+| `--out <file>` | Path for the compiled XML script output |
 
-**Example:**
+---
+
+### Build the data file
+
+Compiles `x3fl.xml` and the associated game data files into a binary `.dat` file. This must be done before compiling or decompiling scripts, and must be re-run whenever `x3fl.xml` is updated.
 
 ```
-XScriptCompiler.exe --load_data default_data.dat --compile myscript.xs --out myscript.xml
+XScriptCompiler.exe --builddata x3fl.xml --out default_data.dat
 ```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `--builddata <file>` | Path to the XScript definition XML file (`x3fl.xml`) |
+| `--out <file>` | Path for the compiled binary data file output |
+
+**Required game files:**
+
+The build process reads several files from the X3 Farnham's Legacy game data directory. These must be present in a `Data\` subdirectory relative to the working directory when the compiler is run.
+
+| File | Description |
+|------|-------------|
+| `Data\0001-L044.xml` | Game text file — provides display names and descriptions for object commands and ware types. The language and text page prefixes are configured in `x3fl.xml` under `<GameData>`. |
+| `Data\<name>.txt` | Ware type files — one per `<WareType>` entry in `x3fl.xml`. Each file contains the list of ware identifiers (ship types, station types, missile types, etc.) for that category. The filename for each type is specified via the `file` attribute in the `<WareType>` definition. |
+
+A typical directory layout for running `--builddata`:
+
+```
+XScriptCompiler.exe
+x3fl.xml
+Data\
+    0001-L044.xml
+    TShips.txt
+    TDocks.txt
+    TMissiles.txt
+    ... (other ware type files as referenced in x3fl.xml)
+```
+
+---
+
+### Decompile a script
+
+Converts a compiled X3 XML script back into human-readable XScript source.
+
+```
+XScriptCompiler.exe --load_data default_data.dat --decompile myscript.xml --out myscript.xs
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `--load_data <file>` | Path to the compiled game data file |
+| `--decompile <file>` | Path to the compiled XML script to decompile |
+| `--out <file>` | Path for the XScript source output |
+
+The decompiler resolves command IDs back to their function names, constants back to their symbolic names (e.g. `TRUE`/`FALSE`, `PLAYERSHIP`, `RaceFlag::NPC`), and boolean arguments to `TRUE`/`FALSE`. Commands from third-party mods that use a DataType prefix (e.g. `SHIPCOMMAND_1000`) are emitted using the prefix notation rather than raw integers.
 
 ---
 
@@ -70,21 +131,91 @@ $result = getSectorByCoord(22, 3);
 
 ### Object Methods and Properties
 
-Object methods use the `->` operator. Properties use the same syntax.
+Object methods and properties both use the `->` operator.
+
+**Methods** call a function on the object and optionally return a value:
 
 ```xscript
-$ship = PLAYERSHIP;
-$name = $ship->getName();
+$name   = $ship->getName();
 $exists = $ship->exists();
-$ship->setName("My Ship");
+$ship->setCommand(null);
 ```
 
-### Global Functions
+**Properties** provide a cleaner syntax for getting and setting values without explicit function call brackets. Each property maps to an underlying getter function (for reads) and optionally a setter function (for writes).
+
+Reading a property (getter):
 
 ```xscript
-$sector = getSectorByCoord(22, 3);
-speak($pilot, $text, 1000);
+$name   = $ship->name;
+$speed  = $ship->maxSpeed;
+$sector = $ship->sector;
 ```
+
+Writing a property (setter):
+
+```xscript
+$ship->name = "My Freighter";
+$ship->commander = PLAYERSHIP;
+```
+
+Properties can also be used directly in conditions:
+
+```xscript
+if $ship->isPlayer
+{
+    speak($pilot, "That is the player", 1000);
+}
+
+do if $ship->exists;
+```
+
+Read-only properties have no setter — attempting to assign to them produces a compile error:
+
+```xscript
+$ship->race = 1;    // error if 'race' has no setter defined
+```
+
+Methods and properties can be chained when the return type is an object:
+
+```xscript
+$pilotName = $ship->pilot->name;
+$pilotSector = PLAYERSHIP->sector->name;
+```
+
+### Nested Function Calls
+
+In standard X3 scripts, function return values must always be assigned to a variable before being used elsewhere. XScript removes this restriction — functions can be used directly as arguments to other functions, and the compiler generates the necessary temporary variables automatically.
+
+```xscript
+// Standard X3: requires intermediate variable
+$sector = getSectorByCoord(22, 3);
+$name = $sector->name;
+
+// XScript: function call directly as argument
+$name = getSectorByCoord(22, 3)->name;
+```
+
+```xscript
+// Passing a function's return value as an argument to another function
+speak($pilot, $ship->getName(), 1000);
+
+// Nested object method calls
+$pilotName = PLAYERSHIP->pilot->name;
+
+// Multiple levels of nesting
+if getSectorByCoord(22, 3)->exists()
+{
+    // ...
+}
+```
+
+This applies to global functions, object methods, and properties — any combination can be nested:
+
+```xscript
+$result = getObjectByName(this->sector, "My Station")->cargo[0];
+```
+
+The compiler handles all temporary variable allocation internally — the generated script is fully compatible with the X3 engine.
 
 ### Conditions
 
@@ -156,11 +287,40 @@ START $ship->call("plugin.myscript");
 
 ### Constants
 
+**Boolean and null:**
+
 ```xscript
 $exists = TRUE;
 $empty  = FALSE;
 $obj    = NULL;
-$player = PLAYERSHIP;
+```
+
+**Script context — the object the script is running on:**
+
+The `this` constant refers to the object that owns the currently running script (the ship, station, or other entity it is attached to). Several related constants provide convenient access to its context:
+
+```xscript
+$self    = this;              // the object this script runs on
+$home    = ThisHomebase;      // this object's homebase
+$env     = ThisEnvironment;   // docking bay or sector this object is in
+$sector  = ThisSector;        // sector this object is in
+$owner   = ThisOwner;         // race that owns this object
+$docked  = DOCKEDAT;          // environment this object is docked at
+$true    = TRUEOWNER;         // true race owner of this object
+```
+
+These can be used directly with `->` to call methods on the owning object:
+
+```xscript
+$name = this->name;
+this->setCommand(null);
+START this->call("plugin.myscript");
+```
+
+**Other built-in constants:**
+
+```xscript
+$player = PLAYERSHIP;         // the player's ship
 ```
 
 Namespace constants use `::` syntax:
@@ -176,23 +336,58 @@ Custom mod commands use a prefix followed by the command ID:
 $cmd = SHIPCOMMAND_1000;
 ```
 
-### Arrays
+### Arrays and Tables
+
+XScript supports two types of indexed collections: **arrays** (integer-indexed) and **tables** (any-type keyed).
+
+**Arrays** use integer indices starting at 0:
 
 ```xscript
-$value = $array[0];
+$value    = $array[0];
 $array[0] = 42;
+$array[1] = "hello";
 
 // Multi-dimensional
-$value = $grid[2][3];
+$value      = $grid[2][3];
+$grid[0][1] = 100;
 ```
 
-Arrays can be used directly in conditions:
+**Tables** use any datatype as the key — strings, integers, objects, or constants:
+
+```xscript
+$value             = $table["key"];
+$table["name"]     = "My Ship";
+$table[42]         = "answer";
+$table[PLAYERSHIP] = "player";
+$table[RaceFlag::NPC] = TRUE;
+```
+
+Both can be used directly in conditions:
 
 ```xscript
 if ($array[0])
 {
     // ...
 }
+
+if ($table["active"])
+{
+    // ...
+}
+```
+
+Function return values can be used as the index expression:
+
+```xscript
+$value = $array[$ship->cargoCount];
+$data  = $table[$ship->name];
+```
+
+**Utility functions:**
+
+```xscript
+$count = arraySize($array);      // number of entries in an array
+$keys  = tableKeys($table);      // returns an array of all keys in a table
 ```
 
 ### Compound Assignment
