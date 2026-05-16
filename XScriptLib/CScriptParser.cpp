@@ -461,7 +461,7 @@ bool CScriptParser::_findArrays(std::vector<const BaseParse*>& list, bool topLev
 					error = true;
 
 				if (!error)
-					error = !_parseArrays(bracketsList, false);
+					error = !_findArrays(bracketsList, false);
 
 				const_cast<ParseBrackets*>(brackets)->clear();
 				// if the brackets only have 1 entry in them, then we dont need to brackets, so just add the data and remove the brackets
@@ -3650,13 +3650,13 @@ void CScriptParser::resetForRealPass()
 	_pVariables = &_variables;
 
 	for (auto itr = _errors.begin(); itr != _errors.end(); itr++)
-		delete *itr;
+		delete* itr;
 	_errors.clear();
 	_warnings.clear();
 	for (auto itr = _currentDataList.begin(); itr != _currentDataList.end(); itr++)
-		delete *itr;
+		delete* itr;
 	for (auto itr = _createdData.begin(); itr != _createdData.end(); itr++)
-		delete *itr;
+		delete* itr;
 	_currentDataList.clear();
 	_createdData.clear();
 	_deferredLists.clear();
