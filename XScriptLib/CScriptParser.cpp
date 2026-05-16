@@ -4622,7 +4622,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	// first search for any comparision operators
 	if (expression->isComparison())
 		const_cast<ParseExpression*>(expression)->setDataType(DataTypes::Number);
-	else if (expression->list().size() == 1 && expression->list().front()->type() == ParseType::Variable && expression->assignment())
+	else if (expression->list().size() == 1 && (expression->list().front()->type() == ParseType::Variable || expression->list().front()->type() == ParseType::Constant) && expression->assignment())
 	{
 		auto dt = _getActualDataTypes(expression->list().front());
 		if (!dt.empty())
@@ -4641,9 +4641,13 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		else
 			const_cast<ParseExpression*>(expression)->setDataType(DataTypes::Unknown);
 	}
+	else if (expression->list().size() == 1)
+	{
+		auto dts = _getActualDataTypes(*expression->list().begin());
+		const_cast<ParseExpression*>(expression)->setDataType(*dts.begin());
+	}
 	else
 	{
-
 		// check each data type, if everything is a number, the return will be a number too, otherwise, its always a string
 		bool isNumber = true;
 		for (auto itr = expression->list().begin(); itr != expression->list().end(); itr++)

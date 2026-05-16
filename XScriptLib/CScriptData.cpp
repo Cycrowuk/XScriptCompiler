@@ -539,7 +539,7 @@ bool CScriptData::saveData(const std::wstring& filename)
 		return false;
 
 	// write the header
-	unsigned int dataCount = 15;
+	unsigned int dataCount = 16;
 	if (!_writeHeader(outfile, "XSCRIPTDATA", DATAVERSION, dataCount))
 		return false;
 

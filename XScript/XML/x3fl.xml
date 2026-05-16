@@ -837,6 +837,16 @@
 				<DataType id="DATATYPE_WING"/>
 			</DataTypes>
 		</ParDef>
+		<ParDef id="1000" keyword="WARETRUE" name="Var/Ware/TRUE" description="A ware data type or variable or [TRUE]">
+			<Flags>
+				<Flag value="Constant"/>
+				<Flag value="Variable"/>
+			</Flags>
+			<DataTypes>
+				<DataType id="9"/>
+				<DataType id="DATATYPE_INT"/>
+			</DataTypes>
+		</ParDef>
 	</ParDefs>
 	<Constants>
 		<Constant id="1" code="this" description="The current object the script is running on" type="DATATYPE_OBJECT"/>
@@ -2077,7 +2087,7 @@
 		<Function id="144" name="setCommandUpgrade" description="Sets the equipment needed for the ship command">
 			<Arguments>
 				<Argument pardef="OBJCMD" description="The ship command to set equipment too"/>
-				<Argument pardef="WARE" description="The equipment ware"/>
+				<Argument pardef="WARETRUE" description="The equipment ware"/>
 			</Arguments>
 		</Function>
 		<Function id="145" name="getCommandUpgrade" description="Gets the currently set equipment for a ship command">
@@ -5236,6 +5246,7 @@
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
 					<RefObjectType>DATATYPE_STATION</RefObjectType>
+					<RefObjectType>DATATYPE_SECTOR</RefObjectType>
 				</RefObject>
 				<Argument pardef="RACE" description="Race to set as the new owner"/>
 			</Arguments>
@@ -8062,7 +8073,6 @@
 					<RefObjectType>DATATYPE_STATION</RefObjectType>
 				</RefObject>
 				<ReturnValue type="start">
-					<ReturnValue>0</ReturnValue>
 				</ReturnValue>
 				<Argument pardef="11" description="Script name to run"/>
 				<Argument pardef="VALUE" description="Argument 1"/>
@@ -8935,7 +8945,6 @@
 		<Function id="1510" name="audioSpeakArray" description="Plays a sequence of audio/voice lines from an array. Returns when playback starts.">
 			<Arguments>
 				<ReturnValue type="start">
-					<ReturnValue>0</ReturnValue>
 				</ReturnValue>
 				<Argument pardef="VALUE" description="Array of audio line IDs or references to play"/>
 				<Argument pardef="NUMBER" description="Playback flags"/>
@@ -10830,7 +10839,6 @@
 					<RefObjectType>DATATYPE_STATION</RefObjectType>
 				</RefObject>
 				<ReturnValue type="start">
-					<ReturnValue>0</ReturnValue>
 				</ReturnValue>
 				<Argument pardef="7" description="Menu script name to open"/>
 				<Argument pardef="VALUE" description="Parameter to pass to the menu"/>
@@ -10850,7 +10858,6 @@
 					<RefObjectType>DATATYPE_OBJECT</RefObjectType>
 				</RefObject>
 				<ReturnValue type="if">
-					<ReturnValue>0</ReturnValue>
 				</ReturnValue>
 				<Argument pardef="11" description="Info key name to retrieve"/>
 			</Arguments>
@@ -11227,7 +11234,6 @@
 		<Function id="1739" name="tableNext" description="Gets the next key after the specified key in the table, for iterating all entries. Returns 0 when done.">
 			<Arguments>
 				<ReturnValue type="if">
-					<ReturnValue>0</ReturnValue>
 				</ReturnValue>
 				<Argument pardef="74" description="Table to iterate"/>
 				<Argument pardef="VALUE" description="Current key (null to get the first key)"/>
@@ -15533,7 +15539,6 @@
 					<RefObjectType>DATATYPE_STATION</RefObjectType>
 				</RefObject>
 				<ReturnValue type="start">
-					<ReturnValue>0</ReturnValue>
 				</ReturnValue>
 				<Argument pardef="11" description="Menu script display name string"/>
 				<Argument pardef="VALUE" description="Parameter to pass to the menu"/>
@@ -21584,7 +21589,6 @@
 		<Function id="2807" name="showTimer" description="Displays an on-screen timer with the specified label and duration.">
 			<Arguments>
 				<ReturnValue type="start">
-					<ReturnValue>0</ReturnValue>
 				</ReturnValue>
 				<Argument pardef="11" description="Label text to display on the timer"/>
 				<Argument pardef="NUMBER" description="Duration in milliseconds"/>

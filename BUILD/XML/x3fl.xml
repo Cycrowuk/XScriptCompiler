@@ -837,6 +837,16 @@
 				<DataType id="DATATYPE_WING"/>
 			</DataTypes>
 		</ParDef>
+		<ParDef id="1000" keyword="WARETRUE" name="Var/Ware/TRUE" description="A ware data type or variable or [TRUE]">
+			<Flags>
+				<Flag value="Constant"/>
+				<Flag value="Variable"/>
+			</Flags>
+			<DataTypes>
+				<DataType id="9"/>
+				<DataType id="DATATYPE_INT"/>
+			</DataTypes>
+		</ParDef>
 	</ParDefs>
 	<Constants>
 		<Constant id="1" code="this" description="The current object the script is running on" type="DATATYPE_OBJECT"/>
@@ -2077,7 +2087,7 @@
 		<Function id="144" name="setCommandUpgrade" description="Sets the equipment needed for the ship command">
 			<Arguments>
 				<Argument pardef="OBJCMD" description="The ship command to set equipment too"/>
-				<Argument pardef="WARE" description="The equipment ware"/>
+				<Argument pardef="WARETRUE" description="The equipment ware"/>
 			</Arguments>
 		</Function>
 		<Function id="145" name="getCommandUpgrade" description="Gets the currently set equipment for a ship command">
