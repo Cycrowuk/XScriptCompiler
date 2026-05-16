@@ -339,33 +339,60 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
 	if (!g_scriptData)
 		throw std::exception("Unable to Compile script, No game data loaded");
 
-	// load the script parser
 	XScript::CScriptParser parser(g_scriptData);
-
-	// read the script file using the parser
 	parser.addCurrentFile(filename);
-	std::wifstream infile(filename);
-	std::wstring line;
-	int iLine = 0;
-	while (std::getline(infile, line))
-	{
-		++iLine;
-		if (!parser.parseLine(iLine, line))
-			break;
 
+	// ── Pass 1: pre-pass ────────────────────────────────────────────────────
+	// Read the whole file with _prePassMode on.  Only variable type assignments
+	// inside label subs are recorded (into per-sub maps).  No CScript output
+	// is produced.  Errors are silently discarded — they will be reported
+	// properly in pass 2.
+	{
+		std::wifstream infile(filename);
+		std::wstring line;
+		int iLine = 0;
+		while (std::getline(infile, line))
+		{
+			++iLine;
+			parser.prePassLine(iLine, line);
+			// Ignore return value — errors are discarded in resetForRealPass
+		}
+		infile.close();
 	}
+
+	// Reset between passes — preserves _subVariables, clears everything else
+	parser.resetForRealPass();
+
+	// ── Pass 2: real compile ────────────────────────────────────────────────
+	// When a gosub is encountered, the parser merges that sub's pre-collected
+	// variable types into _variables before continuing, so later lines see the
+	// correct types without false "unknown variable" warnings.
+	std::wstring lastLine;
+	{
+		std::wifstream infile(filename);
+		std::wstring line;
+		int iLine = 0;
+		while (std::getline(infile, line))
+		{
+			++iLine;
+			lastLine = line;
+			if (!parser.parseLine(iLine, line))
+				break;
+		}
+		infile.close();
+	}
+
 	parser.removeCurrentFile();
-	infile.close();
 
 	if (!parser.errorData().empty())
 	{
-		displayError(parser, line);
+		displayError(parser, lastLine);
 		return false;
 	}
 
 	if (!parser.finalise())
 	{
-		displayError(parser, line);
+		displayError(parser, lastLine);
 		return false;
 	}
 

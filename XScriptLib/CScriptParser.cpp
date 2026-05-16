@@ -44,7 +44,9 @@ CScriptParser::CScriptParser(const CScriptData* data) :
 	_tabSize(6),
 	_isInComment(false),
 	_prePassMode(false),
-	_subEndedOnLine(false)
+	_subEndedOnLine(false),
+	_prePassDepth(0),
+	_pVariables(&_variables)
 {
 	_currentScript = new CScript(data);
 }
@@ -128,10 +130,11 @@ void CScriptParser::_clearData()
 	for (void* p : _syntheticConstants)
 		delete static_cast<ConstantData*>(p);
 	_syntheticConstants.clear();
-	_rawLines.clear();
-	_labelLines.clear();
-	_prePassedLabels.clear();
+	_subVariables.clear();
+	_currentSubLabel.clear();
 	_subEndedOnLine = false;
+	_prePassDepth = 0;
+	_pVariables = &_variables;
 }
 
 bool CScriptParser::hasWarnings() const
@@ -3282,10 +3285,6 @@ std::wstring CScriptParser::_parseDefine(const std::wstring& line)
  */
 bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 {
-	// Store the raw line so _prePassSub can re-scan individual subs on demand.
-	// Skip storing during pre-pass (we're replaying already-stored lines).
-	if (!_prePassMode)
-		_rawLines.push_back({ linePos, line });
 	// adds data to the new parse type
 	// this computes the start and end positions of the current string
 	auto addParse = [](BaseParse* parse, std::vector<const BaseParse*>& parseList, size_t pos, size_t len, size_t linePos, size_t movePosition, const std::wstring& file)
@@ -3624,65 +3623,28 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 
 bool CScriptParser::prePassLine(size_t linePos, const std::wstring& line)
 {
-	// Store every raw line so we can pre-scan individual subs on demand.
-	// This is called by the same loop that calls parseLine — the caller
-	// feeds each line to prePassLine first to build the raw line store,
-	// then feeds it to parseLine for the real compile.
-	_rawLines.push_back({ linePos, line });
-	return true;
+	// Thin wrapper — just run parseLine in pre-pass mode.
+	// The two-pass logic (reading the file twice) is handled in compileScriptFile.
+	_prePassMode = true;
+	bool result = parseLine(linePos, line);
+	_prePassMode = false;
+	return result;
 }
 
 void CScriptParser::resetForRealPass()
 {
-	// No-op: the raw line store is already built by prePassLine.
-	// Variable types are populated lazily when gosub is encountered.
-}
-
-void CScriptParser::_prePassSub(const std::wstring& label)
-{
-	// Find the line number this label was defined at.
-	auto labelItr = _labelLines.find(label);
-	if (labelItr == _labelLines.end())
-		return; // label not seen yet — can't pre-scan
-
-	// Check if we've already pre-scanned this sub to avoid redundant work.
-	if (_prePassedLabels.find(label) != _prePassedLabels.end())
-		return;
-	_prePassedLabels.insert(label);
-
-	// Pre-scan from the label line to the first 'return' (or end of file),
-	// populating _variables without emitting anything to _currentScript.
-	_prePassMode = true;
-	bool savedIsInComment = _isInComment;
-	_isInComment = false;
-
-	size_t startLine = labelItr->second;
-	unsigned int depth = 0; // track nested subs (gosub inside a sub)
-
-	for (size_t i = startLine; i < _rawLines.size(); i++)
-	{
-		const std::wstring& rawLine = _rawLines[i].line;
-
-		// Feed the line through the normal parseLine machinery — in
-		// pre-pass mode it tracks variables but emits nothing.
-		parseLine(_rawLines[i].linePos, rawLine);
-
-		// Check if this line contains a 'return' at the top level.
-		// We do a simple keyword scan rather than re-parsing; parseLine
-		// above handles all the real type tracking.
-		// The return command ends the sub — stop pre-scanning here.
-		if (_subEndedOnLine)
-		{
-			_subEndedOnLine = false;
-			break;
-		}
-	}
-
-	_isInComment = savedIsInComment;
+	// Called between pass 1 and pass 2.
+	// _subVariables is preserved — that's the output of pass 1.
+	// Everything else is reset so the real compile starts clean.
+	_currentSubLabel.clear();
+	_subEndedOnLine = false;
+	_prePassDepth = 0;
 	_prePassMode = false;
+	_isInComment = false;
+	_generatedVariables = 0;
+	_variables.clear();
+	_pVariables = &_variables;
 
-	// Discard any errors/created data from the pre-scan — they will be
-	// re-reported correctly during the real pass.
 	for (auto itr = _errors.begin(); itr != _errors.end(); itr++)
 		delete* itr;
 	_errors.clear();
@@ -3897,7 +3859,7 @@ bool CScriptParser::_runProperty(ParseProperty* prop, bool isInline, bool doAssi
 					retVar->clearDataTypes();
 					for (auto dt : funcData->returnValue)
 						retVar->addDataType(dt);
-					_variables[retVar->name()] = funcData->returnValue;
+					(*_pVariables)[retVar->name()] = funcData->returnValue;
 				}
 				else
 				{
@@ -3905,7 +3867,7 @@ bool CScriptParser::_runProperty(ParseProperty* prop, bool isInline, bool doAssi
 					retVar->addDataType(DataTypes::Unknown);
 					std::unordered_set<DataTypes> dt;
 					dt.insert(DataTypes::Unknown);
-					_variables[retVar->name()] = dt;
+					(*_pVariables)[retVar->name()] = dt;
 				}
 
 				if (!_doGlobalFunction(funcData, func, isInline))
@@ -4150,8 +4112,9 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		}
 	}
 
-	// When we encounter a gosub during the real pass, pre-scan the target sub
-	// so that any variables it assigns are known to the caller's subsequent lines.
+	// When we encounter a gosub during the real pass, merge that sub's
+	// pre-collected variable types into _variables so that the code
+	// following the gosub can use them without false "unknown type" warnings.
 	if (!_prePassMode && func->id == _data->gosubCommand())
 	{
 		if (functionData->arguments() && functionData->arguments()->count() > 0)
@@ -4160,14 +4123,31 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 			if (arg->type() == ParseType::Label)
 			{
 				const ParseLabel* label = dynamic_cast<const ParseLabel*>(arg);
-				_prePassSub(label->label());
+				auto subItr = _subVariables.find(label->label());
+				if (subItr != _subVariables.end())
+				{
+					// Sub variables always take precedence over the current global map —
+					// they represent the actual runtime state after the sub executes.
+					for (const auto& subVar : subItr->second)
+					{
+						if (!subVar.second.empty())
+							(*_pVariables)[subVar.first] = subVar.second;
+					}
+				}
 			}
 		}
 	}
 
-	// During pre-pass, a 'return' command signals the end of the current sub.
-	if (_prePassMode && func->id == _data->returnCommand())
+	// During pre-pass, endsub/return at the top level (depth 0) ends the sub.
+	// If we're inside a condition block (depth > 0) it's a conditional return —
+	// the sub continues, so don't terminate the pre-scan yet.
+	if (_prePassMode && _prePassDepth == 0 &&
+		(func->id == _data->returnCommand() || func->id == _data->endCommand()))
+	{
 		_subEndedOnLine = true;
+		_currentSubLabel.clear();
+		_pVariables = &_variables; // redirect writes back to global map
+	}
 
 	ParseExpression* runExpr = NULL;
 
@@ -4185,7 +4165,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		{
 			_generatedVariables++;
 			ParseVariable* var = new ParseVariable(functionData->line(), L"$VarGen." + std::to_wstring(_generatedVariables), &func->returnValue);
-			_variables[var->name()] = func->returnValue;
+			(*_pVariables)[var->name()] = func->returnValue;
 			functionData->setReturnVariable(var);
 		}
 		else
@@ -4205,7 +4185,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	{
 		_generatedVariables++;
 		ParseVariable* var = new ParseVariable(functionData->line(), L"$VarGen." + std::to_wstring(_generatedVariables), &func->returnValue);
-		_variables[var->name()] = func->returnValue;
+		(*_pVariables)[var->name()] = func->returnValue;
 		functionData->setReturnVariable(var);
 
 		ParseExpression* expr = new ParseExpression(functionData->line());
@@ -4323,7 +4303,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 			{
 				_generatedVariables++;
 				ParseVariable* var = new ParseVariable(functionData->line(), L"$VarGen." + std::to_wstring(_generatedVariables), &func->returnValue);
-				_variables[var->name()] = func->returnValue;
+				(*_pVariables)[var->name()] = func->returnValue;
 				const_cast<ParseExpression*>(expr)->setAssignment(var);
 			}
 
@@ -4346,7 +4326,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		{
 			const ParseVariable* vari = dynamic_cast<const ParseVariable*>(arg);
 			auto dts = vari->currentDataTypes();
-			if (dts.empty()) dts = _variables[vari->name()];
+			if (dts.empty()) dts = (*_pVariables)[vari->name()];
 			// not data types
 			if (dts.empty())
 			{
@@ -4410,7 +4390,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		if (functionData->returnVariable())
 		{
 			functionData->returnVariable()->setDataTypes(func->returnValue);
-			_variables[functionData->returnVariable()->name()] = func->returnValue;
+			(*_pVariables)[functionData->returnVariable()->name()] = func->returnValue;
 		}
 
 		if (func->returnArgument > 0)
@@ -4421,7 +4401,8 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 				if (arg->type() == ParseType::Variable)
 				{
 					const ParseVariable* varArg = dynamic_cast<const ParseVariable*>(arg);
-					_variables[varArg->name()] = func->returnValue;
+					(*_pVariables)[varArg->name()] = func->returnValue;
+
 					if (!_prePassMode)
 						_currentScript->addVariable(varArg->name());
 
@@ -4440,7 +4421,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	_currentScript->addFunction(func->id, functionData, functionData->isPostRun());
 
 	// if the function has a refobj of null, add a null item
-	if (func->refObjType.size() > 1 && func->refObjType.find(DataTypes::Null) != func->refObjType.end() && !functionData->object())
+	if (func->refObjType.size() > 1 && func->refObjType.find(DataTypes::Null) != func->refObjType.end())
 	{
 		auto constData = _data->findConstant(L"NULL");
 		if (constData)
@@ -4464,11 +4445,11 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 				const ParseVariable* vari = dynamic_cast<const ParseVariable*>(functionData->returnVariable());
 				if (func->returnValue.empty())
 				{
-					_variables[vari->name()].clear();
-					_variables[vari->name()].insert(DataTypes::Unknown);
+					(*_pVariables)[vari->name()].clear();
+					(*_pVariables)[vari->name()].insert(DataTypes::Unknown);
 				}
 				else
-					_variables[vari->name()] = func->returnValue;
+					(*_pVariables)[vari->name()] = func->returnValue;
 
 				_currentScript->addRetVar(functionData->returnVariable());
 			}
@@ -4657,7 +4638,7 @@ void CScriptParser::_addExpressionItem(const BaseParse* parse)
 			std::unordered_set<DataTypes> types;
 			types.insert(DataTypes::Unknown);
 			ParseVariable* var = new ParseVariable(arr->line(), L"$VarGen." + std::to_wstring(_generatedVariables), &types);
-			_variables[var->name()] = types;
+			(*_pVariables)[var->name()] = types;
 			const_cast<ParseArray*>(arr)->setAssignment(var);
 		}
 		_currentScript->addFunctionArgument(parse, ParDef::Unknown);
@@ -4668,14 +4649,19 @@ void CScriptParser::_addExpressionItem(const BaseParse* parse)
 
 bool CScriptParser::_addLabel(const ParseKeyword* keyword)
 {
-	// In pre-pass mode, don't register labels — they'll be added in the real pass.
 	if (_prePassMode)
+	{
+		// During pre-pass, record which sub we're entering so variable
+		// assignments can be stored in that sub's map.
+		_currentSubLabel = keyword->keyword();
+		_subVariables[_currentSubLabel]; // ensure entry exists
+		_pVariables = &_subVariables[_currentSubLabel]; // redirect writes to sub map
+		_prePassDepth = 0;
 		return true;
+	}
 
 	if (_currentScript->addLabel(keyword))
 	{
-		// Record the line index so _prePassSub can find this sub's start
-		_labelLines[keyword->keyword()] = _rawLines.size(); // next line after the label
 		_createdData.push_back(keyword);
 		return true;
 	}
@@ -4796,7 +4782,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	if (retVar)
 	{
 		if (expression->list().size() == 1 && (expression->list().front()->type() == ParseType::Variable || expression->list().front()->type() == ParseType::Constant) && expression->assignment())
-			_variables[retVar->name()] = _getActualDataTypes(expression->list().front());
+			(*_pVariables)[retVar->name()] = _getActualDataTypes(expression->list().front());
 		else if (expression->list().size() == 1 &&
 			(expression->list().front()->type() == ParseType::Function ||
 				expression->list().front()->type() == ParseType::Property))
@@ -4806,19 +4792,19 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 			// expression->dataType() which resolves everything to Number or String.
 			auto dt = _getActualDataTypes(expression->list().front());
 			if (!dt.empty() && dt.find(DataTypes::Unknown) == dt.end())
-				_variables[retVar->name()] = dt;
+				(*_pVariables)[retVar->name()] = dt;
 			else
 			{
 				std::unordered_set<DataTypes> fallback;
 				fallback.insert(expression->dataType());
-				_variables[retVar->name()] = fallback;
+				(*_pVariables)[retVar->name()] = fallback;
 			}
 		}
 		else
 		{
 			std::unordered_set<DataTypes> dt;
 			dt.insert(expression->dataType());
-			_variables[retVar->name()] = dt;
+			(*_pVariables)[retVar->name()] = dt;
 		}
 	}
 
@@ -4924,6 +4910,9 @@ bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous,
 		const ParseSymbol* symb = dynamic_cast<const ParseSymbol*>(parse);
 		if (symb->symbol() == SymbolType::StartBlock)
 		{
+			if (_prePassMode)
+				_prePassDepth++;
+
 			if (previous && previous->type() == ParseType::Function)
 			{
 				const ParseFunction* func = dynamic_cast<const ParseFunction*>(previous);
@@ -4957,6 +4946,8 @@ bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous,
 				_errors.push_back(fail);
 				return false;
 			}
+			if (_prePassMode && _prePassDepth > 0)
+				_prePassDepth--;
 		}
 	}
 	else if (parse->type() == ParseType::Expression)
@@ -5060,9 +5051,9 @@ bool CScriptParser::_setArguments(const ParseArguments* arguments)
 		return false;
 	}
 
-	_variables[var] = pardef->datatypes;
-	if (_variables[var].empty())
-		_variables[var].insert(DataTypes::Unknown);
+	(*_pVariables)[var] = pardef->datatypes;
+	if ((*_pVariables)[var].empty())
+		(*_pVariables)[var].insert(DataTypes::Unknown);
 	_currentScript->addArgument(var, desc, pardef->id, pardef->name);
 
 	return true;
@@ -5274,7 +5265,13 @@ std::unordered_set<DataTypes> CScriptParser::_getActualDataTypes(const BaseParse
 		const ParseConstant* constant = dynamic_cast<const ParseConstant*>(parse);
 
 		std::unordered_set<DataTypes> dt;
-		dt.insert(constant->dataType());
+		// Use the subtype — the actual game datatype the constant refers to
+		// (e.g. PLAYERSHIP has type=Constant but subtype=DATATYPE_SHIP).
+		// Fall back to dataType() only if subtype is Unknown.
+		DataTypes resolved = constant->subType();
+		if (resolved == DataTypes::Unknown)
+			resolved = constant->dataType();
+		dt.insert(resolved);
 		return dt;
 	}
 
@@ -5316,7 +5313,7 @@ ParseVariable* CScriptParser::_generateTempVariable(const BaseParse* source)
 		L"$VarGen." + std::to_wstring(_generatedVariables),
 		&types);
 	var->setFromParse(source);
-	_variables[var->name()] = types;
+	(*_pVariables)[var->name()] = types;
 	return var;
 }
 
@@ -5395,6 +5392,12 @@ ParseFail* CScriptParser::_addError(ParseErrors error, const BaseParse* parse)
 
 Warnings& CScriptParser::_addWarning(ParseWarnings type, const BaseParse* parse)
 {
+	// During pre-pass, suppress all warnings — they will be re-evaluated
+	// and reported correctly during the real compile pass.
+	static Warnings dummy{};
+	if (_prePassMode)
+		return dummy;
+
 	// Check for duplicate warning — same type, same variable name, same line
 	for (auto& existing : _warnings)
 	{

@@ -1,7 +1,7 @@
 #pragma once
 
 /*
-* 
+*
 *	Format for datatypes
 *		$variable
 *		[Constant]
@@ -13,7 +13,6 @@
 */
 
 #include "BaseParse.h"
-#include <set>
 
 namespace XScript {
 	class CScript;
@@ -88,10 +87,11 @@ namespace XScript {
 	class CScriptParser
 	{
 	private:
-		CScript*				_currentScript;
-		const CScriptData*		_data;
+		CScript* _currentScript;
+		const CScriptData* _data;
 
 		std::map<const std::wstring, std::unordered_set<DataTypes>> _variables;
+		std::map<const std::wstring, std::unordered_set<DataTypes>>* _pVariables; // points to _variables or current sub map
 		std::vector<Warnings> _warnings;
 
 		std::vector<const ParseFail*> _errors;
@@ -104,14 +104,15 @@ namespace XScript {
 		bool		 _isInComment;
 		bool		 _prePassMode;
 		bool		 _subEndedOnLine;
+		int			 _prePassDepth;  // brace depth during pre-pass, endsub/return only terminates sub at depth 0
 		std::vector<std::wstring> _currentFile;
 		std::vector<std::vector<const BaseParse*>> _deferredLists;
 
-		// Raw line store and label index for targeted sub pre-scanning
-		struct RawLine { size_t linePos; std::wstring line; };
-		std::vector<RawLine>                       _rawLines;
-		std::map<std::wstring, size_t>             _labelLines;
-		std::set<std::wstring>                     _prePassedLabels;
+		// Per-label variable type maps built during pass 1 (prePassLine).
+		// Key: label name. Value: map of variable name → DataTypes set.
+		// Merged into _variables during pass 2 when gosub is encountered.
+		std::map<std::wstring, std::map<const std::wstring, std::unordered_set<DataTypes>>> _subVariables;
+		std::wstring _currentSubLabel; // which sub we are currently collecting for in pass 1
 
 		mutable std::vector<void*> _syntheticConstants;
 
@@ -119,11 +120,11 @@ namespace XScript {
 		static BaseParse* CopyParse(const BaseParse* parse);
 
 	public:
-		CScriptParser(const CScriptData *data);
+		CScriptParser(const CScriptData* data);
 		~CScriptParser();
 
 		CScript* currentScript() const;
-		const std::vector<const ParseFail *>& errorData() const;
+		const std::vector<const ParseFail*>& errorData() const;
 		bool hasWarnings() const;
 		const std::vector<Warnings>& warnings() const;
 
@@ -131,14 +132,14 @@ namespace XScript {
 		void removeCurrentFile();
 		BaseParse* parseCondition(const std::wstring& line) const;
 		BaseParse* parseConstant(const std::wstring& line) const;
-		bool parseLine(size_t linePos, const std::wstring &line);
-		bool prePassLine(size_t linePos, const std::wstring &line);
+		bool parseLine(size_t linePos, const std::wstring& line);
+		bool prePassLine(size_t linePos, const std::wstring& line);
 		void resetForRealPass();
 		bool finalise();
 
 	private:
 		std::wstring _parseDefine(const std::wstring& line);
-		bool _checkListOrder(const BaseParse *parse, ParseErrors errorType);
+		bool _checkListOrder(const BaseParse* parse, ParseErrors errorType);
 		bool _checkListOrder(const std::vector<const BaseParse*>& list, ParseErrors errorType);
 		bool findProperties(const std::vector<const BaseParse*>& list, std::vector<const BaseParse*>& newList);
 		bool parseProperties(const std::vector<const BaseParse*>& list, std::vector<const BaseParse*>& newList);
@@ -157,10 +158,9 @@ namespace XScript {
 		bool _checkExpressionValidity(const std::vector<const BaseParse*>& list, bool topLevel);
 		bool _checkExpressionValidity(const BaseParse* parse);
 
-		std::vector<const BaseParse*>::iterator addBracket(std::vector<const BaseParse*>::iterator startItr, const std::vector<const BaseParse*> &list, ParseBrackets* currentBracket);
+		std::vector<const BaseParse*>::iterator addBracket(std::vector<const BaseParse*>::iterator startItr, const std::vector<const BaseParse*>& list, ParseBrackets* currentBracket);
 
 		void _clearData();
-		void _prePassSub(const std::wstring& label);
 
 		bool _runProperty(ParseProperty* property, bool isInline, bool doAssignment);
 		bool _runArrayFunction(ParseArray* function, bool isInline, bool doAssignment);
@@ -191,9 +191,9 @@ namespace XScript {
 		std::wstring _getDataTypesString(std::unordered_set<DataTypes> datatypes) const;
 		ParseVariable* _generateTempVariable(const BaseParse* source);
 
-		Warnings &_addWarning(ParseWarnings type, const BaseParse *parse);
+		Warnings& _addWarning(ParseWarnings type, const BaseParse* parse);
 		ParseFail* _addError(ParseErrors error, const BaseParse* parse);
-		void _errorArgumentDatatype(const ParseArguments *arguments, unsigned int i, DataTypes wanted);
+		void _errorArgumentDatatype(const ParseArguments* arguments, unsigned int i, DataTypes wanted);
 		std::wstring _formatString(DataTypes dt, const std::wstring& str);
 	};
 
