@@ -16,3 +16,4 @@ v0.5	Updated all remaining function data
 	Added increment/decrement symbols (++/--)
 	Various compiling fixes
 	Improved variable warnings when using gosubs
+	Added support for Visual Studio Code
