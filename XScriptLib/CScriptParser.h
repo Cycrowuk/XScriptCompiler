@@ -13,6 +13,7 @@
 */
 
 #include "BaseParse.h"
+#include <set>
 
 namespace XScript {
 	class CScript;
@@ -101,8 +102,16 @@ namespace XScript {
 		unsigned int _generatedVariables;
 		unsigned int _tabSize;
 		bool		 _isInComment;
+		bool		 _prePassMode;
+		bool		 _subEndedOnLine;
 		std::vector<std::wstring> _currentFile;
 		std::vector<std::vector<const BaseParse*>> _deferredLists;
+
+		// Raw line store and label index for targeted sub pre-scanning
+		struct RawLine { size_t linePos; std::wstring line; };
+		std::vector<RawLine>                       _rawLines;
+		std::map<std::wstring, size_t>             _labelLines;
+		std::set<std::wstring>                     _prePassedLabels;
 
 		mutable std::vector<void*> _syntheticConstants;
 
@@ -123,6 +132,8 @@ namespace XScript {
 		BaseParse* parseCondition(const std::wstring& line) const;
 		BaseParse* parseConstant(const std::wstring& line) const;
 		bool parseLine(size_t linePos, const std::wstring &line);
+		bool prePassLine(size_t linePos, const std::wstring &line);
+		void resetForRealPass();
 		bool finalise();
 
 	private:
@@ -149,6 +160,7 @@ namespace XScript {
 		std::vector<const BaseParse*>::iterator addBracket(std::vector<const BaseParse*>::iterator startItr, const std::vector<const BaseParse*> &list, ParseBrackets* currentBracket);
 
 		void _clearData();
+		void _prePassSub(const std::wstring& label);
 
 		bool _runProperty(ParseProperty* property, bool isInline, bool doAssignment);
 		bool _runArrayFunction(ParseArray* function, bool isInline, bool doAssignment);
