@@ -893,11 +893,18 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
             {
                 if (aItr == retItr)
                     ++size;
+                else if ((*aItr)->pardef() == ParDef::CallName)
+                    ++size;
                 else
                     size += 2;
             }
 
             if (itr->undefinedArgs)
+                ++size;
+
+            // special handling for "call", we need an extra item for number of "optional" arguments if no arguments are added
+            bool hasCallNoArguments = itr->id == 102 && itr->arguments().size() == 3;
+            if (hasCallNoArguments)
                 ++size;
 
             out << L"    <sval type=\"array\" size=\"" << size << L"\">" << std::endl;
@@ -913,6 +920,9 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
                 // if function is a return, then we dont need an additional return after
                 shouldIncludeReturn = (itr->id != _pScriptData->returnCommand());
             }
+
+            if(hasCallNoArguments)
+                out << L"      <sval type=\"int\" val=\"" << 0 << L"\"/>" << std::endl;
         }
 
         out << L"    </sval>" << std::endl;
