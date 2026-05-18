@@ -120,6 +120,8 @@ namespace XScript
 		bool isIfOpen() const;
 		bool isInWhile() const;
 		const ScriptFunction* previousFunction();
+		size_t functionCount() const;
+		void duplicateFunction(size_t index);
 		const std::vector<ScriptFunction>& functions() const;
 		bool isLabelValid(const std::wstring& label) const;
 

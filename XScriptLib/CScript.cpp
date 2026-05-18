@@ -381,6 +381,17 @@ const std::vector<ScriptFunction>& CScript::functions() const
     return _functions;
 }
 
+size_t CScript::functionCount() const
+{
+    return _functions.size();
+}
+
+void CScript::duplicateFunction(size_t index)
+{
+    if (index < _functions.size())
+        _functions.push_back(_functions[index]);
+}
+
 bool CScript::isLabelValid(const std::wstring& label) const
 {
     auto findItr = _labels.find(label);

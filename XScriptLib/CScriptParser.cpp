@@ -41,6 +41,7 @@ CScriptParser::CScriptParser(const CScriptData* data) :
 	_currentScript(NULL),
 	_data(data),
 	_generatedVariables(0),
+	_whileGeneratedVariables(0),
 	_tabSize(6),
 	_isInComment(false),
 	_prePassMode(false),
@@ -135,6 +136,8 @@ void CScriptParser::_clearData()
 	_subEndedOnLine = false;
 	_prePassDepth = 0;
 	_pVariables = &_variables;
+	_conditionStack.clear();
+	_whileGeneratedVariables = 0;
 }
 
 bool CScriptParser::hasWarnings() const
@@ -3007,6 +3010,35 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 					newExpr->addParse(endBrace);
 					parseList.push_back(newExpr);
 				}
+				else if (prevExpr->condition() && !prevExpr->condition()->isBlock())
+				{
+					// If the single-line body contains continue or break, force a block.
+					// This ensures the re-evaluation code can be inserted inside the
+					// block before the continue, instead of becoming do if which has
+					// no block to insert into.
+					bool hasContinueOrBreak = false;
+					for (auto item : expr->list())
+					{
+						if (item->type() == ParseType::Function)
+						{
+							const ParseFunction* fn = dynamic_cast<const ParseFunction*>(item);
+							if (fn->function() == L"continue" || fn->function() == L"break")
+							{
+								hasContinueOrBreak = true;
+								break;
+							}
+						}
+					}
+					if (hasContinueOrBreak)
+					{
+						const_cast<ParseCondition*>(prevExpr->condition())->setBlock(true);
+						const_cast<ParseCondition*>(prevExpr->condition())->setBlockCount(1);
+						ParseSymbol* endBrace = new ParseSymbol(L"}", L"}");
+						ParseExpression* newExpr = new ParseExpression(L"}");
+						newExpr->addParse(endBrace);
+						parseList.push_back(newExpr);
+					}
+				}
 			}
 
 			previous = parse;
@@ -3646,6 +3678,7 @@ void CScriptParser::resetForRealPass()
 	_prePassMode = false;
 	_isInComment = false;
 	_generatedVariables = 0;
+	_whileGeneratedVariables = 0;
 	_variables.clear();
 	_pVariables = &_variables;
 
@@ -4114,6 +4147,11 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 			_addError(ParseErrors::MissingWhile, functionData);
 			return false;
 		}
+
+		// Before continue, re-emit the nearest while's temp var assignments
+		// so the while condition re-evaluates with fresh values.
+		if (func->id == _data->continueCommand())
+			_emitWhileReEval();
 	}
 
 	// When we encounter a gosub during the real pass, merge that sub's
@@ -4167,8 +4205,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		// generate a return value
 		if (isInline)
 		{
-			_generatedVariables++;
-			ParseVariable* var = new ParseVariable(functionData->line(), L"$VarGen." + std::to_wstring(_generatedVariables), &func->returnValue);
+			ParseVariable* var = new ParseVariable(functionData->line(), _makeTempVarName(), &func->returnValue);
 			(*_pVariables)[var->name()] = func->returnValue;
 			functionData->setReturnVariable(var);
 		}
@@ -4187,8 +4224,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	// return type not compatable with condition
 	else if (func->returnValueType == RetVarType::Return && functionData->condition())
 	{
-		_generatedVariables++;
-		ParseVariable* var = new ParseVariable(functionData->line(), L"$VarGen." + std::to_wstring(_generatedVariables), &func->returnValue);
+		ParseVariable* var = new ParseVariable(functionData->line(), _makeTempVarName(), &func->returnValue);
 		(*_pVariables)[var->name()] = func->returnValue;
 		functionData->setReturnVariable(var);
 
@@ -4305,13 +4341,12 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 			// add the generated variable assignment
 			if (!expr->assignment())
 			{
-				_generatedVariables++;
-				ParseVariable* var = new ParseVariable(functionData->line(), L"$VarGen." + std::to_wstring(_generatedVariables), &func->returnValue);
+				ParseVariable* var = new ParseVariable(functionData->line(), _makeTempVarName(), &func->returnValue);
 				(*_pVariables)[var->name()] = func->returnValue;
 				const_cast<ParseExpression*>(expr)->setAssignment(var);
 			}
 
-			if (!_runExpressionList(expr, false))
+			if (!_runExpressionList(expr, false, nullptr))
 				return false;
 
 			if (expr->dataType() != DataTypes::Unknown)
@@ -4509,7 +4544,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 
 	if (runExpr)
 	{
-		if (!_runExpressionList(runExpr, true))
+		if (!_runExpressionList(runExpr, true, nullptr))
 			return false;
 	}
 
@@ -4605,6 +4640,54 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 	return true;
 }
 
+void CScriptParser::_emitWhileReEval()
+{
+	// Find the nearest While entry on the condition stack and re-run only the
+	// nodes that produced $VarGenWhile temp variables, so the while condition
+	// gets fresh values before 'continue' and before the closing '}'.
+	for (auto itr = _conditionStack.rbegin(); itr != _conditionStack.rend(); ++itr)
+	{
+		if (itr->type != ConditionType::While || !itr->whileExpression)
+			continue;
+
+		_emitWhileReEvalList(itr->whileExpression->list());
+		return; // innermost while only
+	}
+}
+
+void CScriptParser::_emitWhileReEvalList(const std::vector<const BaseParse*>& list)
+{
+	// Recursively walk the parse list, re-running only nodes that produced
+	// $VarGenWhile temp variables or are inline properties/arrays that may have.
+	for (auto item : list)
+	{
+		if (item->type() == ParseType::Expression)
+		{
+			// Recurse into nested expressions
+			const ParseExpression* expr = dynamic_cast<const ParseExpression*>(item);
+			_emitWhileReEvalList(expr->list());
+		}
+		else if (item->type() == ParseType::Function)
+		{
+			// Only re-run if this function produced a $VarGenWhile temp var
+			const ParseFunction* fn = dynamic_cast<const ParseFunction*>(item);
+			if (fn->returnVariable() &&
+				fn->returnVariable()->name().substr(0, 13) == L"$VarGenWhile.")
+			{
+				_runParse(item, nullptr, nullptr, false, true);
+			}
+		}
+		else if (item->type() == ParseType::Property ||
+			item->type() == ParseType::Array)
+		{
+			// ParseProperty and ParseArray generate temp vars on internal ParseFunction
+			// objects — we can't check returnVariable() directly.
+			// Re-run them unconditionally if they appear in the while expression.
+			_runParse(item, nullptr, nullptr, false, true);
+		}
+	}
+}
+
 void CScriptParser::_addExpressionItem(const BaseParse* parse)
 {
 	if (parse->type() == ParseType::Brackets)
@@ -4642,7 +4725,7 @@ void CScriptParser::_addExpressionItem(const BaseParse* parse)
 			_generatedVariables++;
 			std::unordered_set<DataTypes> types;
 			types.insert(DataTypes::Unknown);
-			ParseVariable* var = new ParseVariable(arr->line(), L"$VarGen." + std::to_wstring(_generatedVariables), &types);
+			ParseVariable* var = new ParseVariable(arr->line(), _makeTempVarName(), &types);
 			(*_pVariables)[var->name()] = types;
 			const_cast<ParseArray*>(arr)->setAssignment(var);
 		}
@@ -4674,7 +4757,7 @@ bool CScriptParser::_addLabel(const ParseKeyword* keyword)
 	return false;
 }
 
-bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool topLevel)
+bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool topLevel, const ParseExpression* previousExpr)
 {
 	auto& list = expression->list();
 
@@ -4687,6 +4770,25 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 			addEndBlock = true;
 	}
 
+	// Push the condition stack entry immediately so that any inline functions
+	// processed in the first loop below know what condition context they're in.
+	if (!_prePassMode && expression->condition())
+	{
+		const ParseCondition* cond = dynamic_cast<const ParseCondition*>(expression->condition());
+		Conditions condType = cond->condition();
+		bool isWhile = (condType == Conditions::While || condType == Conditions::WhileNot);
+
+		if (isWhile)
+			_conditionStack.push_back(ConditionEntry(ConditionType::While, expression));
+		else if (condType == Conditions::If || condType == Conditions::IfNot ||
+			condType == Conditions::SkipIf || condType == Conditions::SkipIfNot)
+			_conditionStack.push_back(ConditionEntry(ConditionType::If));
+		else if (condType == Conditions::ElseIf || condType == Conditions::ElseIfNot)
+			_conditionStack.push_back(ConditionEntry(ConditionType::ElseIf));
+		else if (condType == Conditions::Else)
+			_conditionStack.push_back(ConditionEntry(ConditionType::Else));
+	}
+
 	// first do all the functions
 	const BaseParse* previous = NULL;
 	for (auto itr = list.begin(); itr != list.end(); itr++)
@@ -4694,7 +4796,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		const BaseParse* parse = *itr;
 		if (parse->type() == ParseType::Expression)
 		{
-			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), false))
+			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), false, previousExpr))
 				return false;
 		}
 		else if (parse->type() == ParseType::Brackets)
@@ -4727,8 +4829,20 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		break;
 	}
 
-	if (!anyExpression && !expression->assignment() && !expression->condition())
+	if (!anyExpression && !expression->assignment() && !expression->condition()) {
+		if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
+		{
+			_conditionStack.pop_back();
+			{
+				bool anyWhile = false;
+				for (auto& e : _conditionStack)
+					if (e.type == ConditionType::While) { anyWhile = true; break; }
+				if (!anyWhile)
+					_whileGeneratedVariables = 0;
+			}
+		}
 		return true;
+	}
 
 	bool failed = false;
 
@@ -4828,8 +4942,6 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		}
 	}
 
-	_currentScript->previousFunction();
-
 	// now create the actual expression
 	if (_prePassMode)
 		return true;
@@ -4837,7 +4949,41 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	if (expression->assignment())
 		_currentScript->addNewExpression(expression->assignment());
 	else if (expression->condition())
-		_currentScript->addNewExpression(expression->condition());
+	{
+		const ParseCondition* cond = dynamic_cast<const ParseCondition*>(expression->condition());
+
+		_currentScript->addNewExpression(cond);
+
+		// Run expression items
+		for (auto itr = expression->list().begin(); itr != expression->list().end(); itr++)
+			_addExpressionItem(*itr);
+
+		if (addEndBlock)
+		{
+			// Single-line condition — pop immediately, no StartBlock/EndBlock will fire
+			if (!_conditionStack.empty())
+			{
+				_conditionStack.pop_back();
+				bool anyWhile = false;
+				for (auto& e : _conditionStack)
+					if (e.type == ConditionType::While) { anyWhile = true; break; }
+				if (!anyWhile)
+					_whileGeneratedVariables = 0;
+			}
+			_currentScript->addEndBlock(true);
+		}
+		else if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
+		{
+			_conditionStack.pop_back();
+			bool anyWhile = false;
+			for (auto& e : _conditionStack)
+				if (e.type == ConditionType::While) { anyWhile = true; break; }
+			if (!anyWhile)
+				_whileGeneratedVariables = 0;
+		}
+
+		return true;
+	}
 	// not a top level, so we can assign a generated variable
 	else if (!topLevel)
 		return true;
@@ -4864,7 +5010,6 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 
 	if (failed)
 		return false;
-
 
 	for (auto itr = expression->list().begin(); itr != expression->list().end(); itr++)
 		_addExpressionItem(*itr);
@@ -4944,12 +5089,33 @@ bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous,
 		}
 		else if (symb->symbol() == SymbolType::EndBlock)
 		{
-			if (!_prePassMode && !_currentScript->addEndBlock(false))
+			if (!_prePassMode)
 			{
-				//missing start block
-				ParseFail* fail = new ParseFail(parse, ParseErrors::MissingStartBrace);
-				_errors.push_back(fail);
-				return false;
+				// Before closing the block, check if the top of the condition stack
+				// is a while — if so, emit the re-eval before the end command.
+				if (!_conditionStack.empty() && _conditionStack.back().type == ConditionType::While)
+					_emitWhileReEval();
+
+				if (!_currentScript->addEndBlock(false))
+				{
+					ParseFail* fail = new ParseFail(parse, ParseErrors::MissingStartBrace);
+					_errors.push_back(fail);
+					return false;
+				}
+
+				// Pop the condition that this block closed
+				if (!_conditionStack.empty())
+				{
+					_conditionStack.pop_back();
+					// Reset the while counter only when no while blocks remain on the stack
+					{
+						bool anyWhile = false;
+						for (auto& e : _conditionStack)
+							if (e.type == ConditionType::While) { anyWhile = true; break; }
+						if (!anyWhile)
+							_whileGeneratedVariables = 0;
+					}
+				}
 			}
 			if (_prePassMode && _prePassDepth > 0)
 				_prePassDepth--;
@@ -4957,7 +5123,7 @@ bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous,
 	}
 	else if (parse->type() == ParseType::Expression)
 	{
-		if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), topLevel))
+		if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), topLevel, nullptr))
 			return false;
 	}
 	else if (parse->type() == ParseType::Brackets)
@@ -4977,7 +5143,7 @@ bool CScriptParser::_runDataList(const std::vector<const BaseParse*>& list, bool
 		const BaseParse* parse = *itr;
 		if (parse->type() == ParseType::Expression)
 		{
-			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), topLevel))
+			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), topLevel, dynamic_cast<const ParseExpression*>(previous)))
 				return false;
 		}
 		else if (parse->type() == ParseType::Brackets)
@@ -5308,14 +5474,41 @@ std::wstring CScriptParser::_getDataTypesString(std::unordered_set<DataTypes> da
 	return str.str();
 }
 
+std::wstring CScriptParser::_makeTempVarName()
+{
+	// Check if we're currently inside a while block on the condition stack.
+	// If so, use a separate while-scoped counter so while temp vars don't
+	// get reused by subsequent loop iterations — $VarGenWhile.N stays alive
+	// for the whole while loop, whereas $VarGen.N is recycled after 10 uses.
+	bool insideWhile = false;
+	for (auto itr = _conditionStack.rbegin(); itr != _conditionStack.rend(); ++itr)
+	{
+		if (itr->type == ConditionType::While)
+		{
+			insideWhile = true;
+			break;
+		}
+	}
+
+	if (insideWhile)
+	{
+		_whileGeneratedVariables++;
+		return L"$VarGenWhile." + std::to_wstring(_whileGeneratedVariables);
+	}
+	else
+	{
+		_generatedVariables++;
+		return L"$VarGen." + std::to_wstring(_generatedVariables);
+	}
+}
+
 ParseVariable* CScriptParser::_generateTempVariable(const BaseParse* source)
 {
-	_generatedVariables++;
 	std::unordered_set<DataTypes> types;
 	types.insert(DataTypes::Unknown);
 	ParseVariable* var = new ParseVariable(
 		source->line(),
-		L"$VarGen." + std::to_wstring(_generatedVariables),
+		_makeTempVarName(),
 		&types);
 	var->setFromParse(source);
 	(*_pVariables)[var->name()] = types;

@@ -100,6 +100,7 @@ namespace XScript {
 		std::map<const std::wstring, const ParseDefine*> _defines;
 
 		unsigned int _generatedVariables;
+		unsigned int _whileGeneratedVariables; // separate counter for while-scoped temp vars
 		unsigned int _tabSize;
 		bool		 _isInComment;
 		bool		 _prePassMode;
@@ -115,6 +116,20 @@ namespace XScript {
 		std::wstring _currentSubLabel; // which sub we are currently collecting for in pass 1
 
 		mutable std::vector<void*> _syntheticConstants;
+
+		// Condition depth stack — one entry per open block.
+		// Pushed when a condition with a block opens (if, while, etc.)
+		// Popped when the matching '}' or end block is reached.
+		// Used to determine what re-evaluation is needed before 'continue'.
+		enum class ConditionType { If, ElseIf, Else, While };
+		struct ConditionEntry
+		{
+			ConditionType type;
+			const ParseExpression* whileExpression; // only set for While entries
+			ConditionEntry(ConditionType t, const ParseExpression* expr = nullptr)
+				: type(t), whileExpression(expr) {}
+		};
+		std::vector<ConditionEntry> _conditionStack;
 
 	public:
 		static BaseParse* CopyParse(const BaseParse* parse);
@@ -169,11 +184,13 @@ namespace XScript {
 		bool _doGlobalFunction(const Function* func, ParseFunction* functionData, bool isInline);
 		bool _runDataList(const std::vector<const BaseParse*>& list, bool topLevel);
 		void _checkWarnings(const std::vector<const BaseParse*>& list);
-		bool _runExpressionList(const ParseExpression* expression, bool topLevel);
+		bool _runExpressionList(const ParseExpression* expression, bool topLevel, const ParseExpression* previous);
 		bool _runParse(const BaseParse* parse, const BaseParse* previous, const ParseCondition* condition, bool topLevel, bool isInline);
 		bool _parseDataList(std::vector<const BaseParse*>& list);
 		void _addExpressionItem(const BaseParse* parse);
 		bool _addLabel(const ParseKeyword* keyword);
+		void _emitWhileReEval(); // re-emit temp var assignments for the innermost while
+		void _emitWhileReEvalList(const std::vector<const BaseParse*>& list);
 
 		bool _setArguments(const ParseArguments* arguments);
 		bool _setDescription(const ParseArguments* arguments);
@@ -190,6 +207,7 @@ namespace XScript {
 		bool _isValidDataType(std::unordered_set<DataTypes> _from, std::unordered_set<DataTypes> _to) const;
 		std::wstring _getDataTypesString(std::unordered_set<DataTypes> datatypes) const;
 		ParseVariable* _generateTempVariable(const BaseParse* source);
+		std::wstring _makeTempVarName(); // returns $VarGenWhile.N inside a while, else $VarGen.N
 
 		Warnings &_addWarning(ParseWarnings type, const BaseParse *parse);
 		ParseFail* _addError(ParseErrors error, const BaseParse* parse);
