@@ -267,12 +267,14 @@ bool CScript::addEndBlock(bool forceBlock)
                     itr->firstArg());
                 if (cond->isBlock() || forceBlock)
                 {
+                    if (forceBlock && !cond->isBlock())
+                        const_cast<ParseCondition*>(cond)->setBlock(true);
                     const_cast<ParseCondition*>(cond)->setBlockCount(count);
                     itr->endBlock = static_cast<int>(_functions.size());
+                    flushPostRun(); // flush before end so post-run appears inside the block
                     _functions.push_back({ _pScriptData->endCommand(), nullptr });
                     _lastAddedIndex = static_cast<int>(_functions.size() - 1);
                     _lastAddedIsPost = false;
-                    flushPostRun();
                     return true;
                 }
             }
@@ -285,12 +287,14 @@ bool CScript::addEndBlock(bool forceBlock)
                         parse);
                     if (cond->isBlock() || forceBlock)
                     {
+                        if (forceBlock && !cond->isBlock())
+                            const_cast<ParseCondition*>(cond)->setBlock(true);
                         const_cast<ParseCondition*>(cond)->setBlockCount(count);
                         itr->endBlock = static_cast<int>(_functions.size());
+                        flushPostRun(); // flush before end so post-run appears inside the block
                         _functions.push_back({ _pScriptData->endCommand(), nullptr });
                         _lastAddedIndex = static_cast<int>(_functions.size() - 1);
                         _lastAddedIsPost = false;
-                        flushPostRun();
                         return true;
                     }
                 }
@@ -316,34 +320,39 @@ bool CScript::addLabel(const ParseKeyword* parse)
 }
 bool CScript::isInWhile() const
 {
-    unsigned int inWhile = 0;
-    bool whileNonBlock = false;
+    // Use a stack to track what each open block is (while or non-while).
+    // Only pop the while counter when an endCommand closes a while block,
+    // not when it closes an if/else block.
+    std::vector<bool> blockStack; // true = while, false = if/else
+
     for (auto itr = _functions.begin(); itr != _functions.end(); itr++)
     {
-        if (whileNonBlock)
-        {
-            --inWhile;
-            whileNonBlock = false;
-        }
         if (itr->retvarID >= 0)
         {
             auto arg = itr->retvarArgument();
             if (arg && arg->type() == ParseType::Condition)
             {
                 const ParseCondition* cond = dynamic_cast<const ParseCondition*>(arg);
-                if (cond->condition() == Conditions::While || cond->condition() == Conditions::WhileNot)
+                if (cond->isBlock())
                 {
-                    if (!cond->isBlock())
-                        whileNonBlock = true;
-                    ++inWhile;
+                    bool isWhile = (cond->condition() == Conditions::While ||
+                        cond->condition() == Conditions::WhileNot);
+                    blockStack.push_back(isWhile);
                 }
             }
         }
         if (itr->id == _pScriptData->endCommand())
-            --inWhile;
+        {
+            if (!blockStack.empty())
+                blockStack.pop_back();
+        }
     }
 
-    return (inWhile > 0);
+    // We're in a while if any entry in the current block stack is a while
+    for (bool isWhile : blockStack)
+        if (isWhile) return true;
+
+    return false;
 }
 bool CScript::isIfOpen() const
 {

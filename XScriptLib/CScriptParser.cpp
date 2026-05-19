@@ -4142,10 +4142,19 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	// first check if continue or break are inside a while loop
 	if (func->id == _data->breakCommand() || func->id == _data->continueCommand())
 	{
-		if (!_currentScript->isInWhile())
+		if (!_prePassMode)
 		{
-			_addError(ParseErrors::MissingWhile, functionData);
-			return false;
+			// Use the condition stack directly — more reliable than CScript::isInWhile()
+			// which scans _functions and can miscount when if blocks precede the while.
+			bool inWhile = false;
+			for (const auto& entry : _conditionStack)
+				if (entry.type == ConditionType::While) { inWhile = true; break; }
+
+			if (!inWhile)
+			{
+				_addError(ParseErrors::MissingWhile, functionData);
+				return false;
+			}
 		}
 
 		// Before continue, re-emit the nearest while's temp var assignments
@@ -4642,15 +4651,37 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 
 void CScriptParser::_emitWhileReEval()
 {
-	// Find the nearest While entry on the condition stack and re-run only the
-	// nodes that produced $VarGenWhile temp variables, so the while condition
-	// gets fresh values before 'continue' and before the closing '}'.
+	// Find the nearest While entry on the condition stack and:
+	// 1. Re-run inline functions that generated $VarGenWhile temp vars
+	// 2. Run any captured post-run (inc/dec) nodes that were suppressed at the while level
+	// 3. Duplicate any post-run entries that were flushed into _functions
 	for (auto itr = _conditionStack.rbegin(); itr != _conditionStack.rend(); ++itr)
 	{
 		if (itr->type != ConditionType::While || !itr->whileExpression)
 			continue;
 
+		// Re-run inline functions that generated $VarGenWhile temp vars
 		_emitWhileReEvalList(itr->whileExpression->list());
+
+		// Run captured inc/dec nodes at continue/end.
+		// For post-increment (isPostRun==true originally): clear flag so addFunction
+		// writes immediately, then restore.
+		// For pre-increment (isPostRun==false): just run directly, no flag change.
+		for (const BaseParse* node : itr->whilePostRunNodes)
+		{
+			ParseFunction* fn = const_cast<ParseFunction*>(dynamic_cast<const ParseFunction*>(node));
+			bool wasPostRun = fn->isPostRun();
+			if (wasPostRun)
+				fn->setPostRun(false);
+			_runParse(node, nullptr, nullptr, false, false);
+			if (wasPostRun)
+				fn->setPostRun(true);
+		}
+
+		// Duplicate any post-run entries flushed into _functions (other cases)
+		for (size_t i = 0; i < itr->whilePostRunCount; i++)
+			_currentScript->duplicateFunction(itr->whilePostRunStart + i);
+
 		return; // innermost while only
 	}
 }
@@ -4678,7 +4709,7 @@ void CScriptParser::_emitWhileReEvalList(const std::vector<const BaseParse*>& li
 			}
 		}
 		else if (item->type() == ParseType::Property ||
-			item->type() == ParseType::Array)
+			     item->type() == ParseType::Array)
 		{
 			// ParseProperty and ParseArray generate temp vars on internal ParseFunction
 			// objects — we can't check returnVariable() directly.
@@ -4763,12 +4794,8 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 
 	const ScriptFunction* previousFunc = _currentScript->previousFunction();
 	bool addEndBlock = false;
-	if (previousFunc && previousFunc->retvarArgument())
-	{
-		const BaseParse* parse = previousFunc->retvarArgument();
-		if (parse->type() == ParseType::Condition && !dynamic_cast<const ParseCondition*>(parse)->isBlock())
-			addEndBlock = true;
-	}
+	if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
+		addEndBlock = true;
 
 	// Push the condition stack entry immediately so that any inline functions
 	// processed in the first loop below know what condition context they're in.
@@ -4781,7 +4808,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		if (isWhile)
 			_conditionStack.push_back(ConditionEntry(ConditionType::While, expression));
 		else if (condType == Conditions::If || condType == Conditions::IfNot ||
-			condType == Conditions::SkipIf || condType == Conditions::SkipIfNot)
+			     condType == Conditions::SkipIf || condType == Conditions::SkipIfNot)
 			_conditionStack.push_back(ConditionEntry(ConditionType::If));
 		else if (condType == Conditions::ElseIf || condType == Conditions::ElseIfNot)
 			_conditionStack.push_back(ConditionEntry(ConditionType::ElseIf));
@@ -4790,10 +4817,54 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	}
 
 	// first do all the functions
+	// For while conditions, collect inc/dec nodes that need re-emitting at continue/end.
+	// Post-increment (isPostRun==true): skip in first loop entirely, emit only at continue/end.
+	// Pre-increment (isPostRun==false, fn is inc/dec): runs normally in first loop (before while),
+	// but ALSO needs re-emitting at continue/end — stored separately.
+	if (!_prePassMode && expression->condition())
+	{
+		const ParseCondition* cond = dynamic_cast<const ParseCondition*>(expression->condition());
+		Conditions condType = cond->condition();
+		if ((condType == Conditions::While || condType == Conditions::WhileNot) &&
+			!_conditionStack.empty() && _conditionStack.back().type == ConditionType::While)
+		{
+			for (auto itr = list.begin(); itr != list.end(); itr++)
+			{
+				if ((*itr)->type() == ParseType::Function)
+				{
+					const ParseFunction* fn = dynamic_cast<const ParseFunction*>(*itr);
+					if (fn->isPostRun() ||
+						fn->function() == L"inc" || fn->function() == L"dec")
+					{
+						_conditionStack.back().whilePostRunNodes.push_back(fn);
+					}
+				}
+			}
+		}
+	}
+
 	const BaseParse* previous = NULL;
 	for (auto itr = list.begin(); itr != list.end(); itr++)
 	{
 		const BaseParse* parse = *itr;
+
+		// Skip post-run nodes (post-increment) that have been stored for deferred
+		// emission — they must not run here at all.
+		// Pre-increment nodes ARE allowed to run here (they go before the while),
+		// but are also stored in whilePostRunNodes for re-emission at continue/end.
+		if (!_conditionStack.empty() && _conditionStack.back().type == ConditionType::While)
+		{
+			if (parse->type() == ParseType::Function)
+			{
+				const ParseFunction* fn = dynamic_cast<const ParseFunction*>(parse);
+				if (fn->isPostRun()) // only skip post-run, not pre-increment
+				{
+					previous = parse;
+					continue;
+				}
+			}
+		}
+
 		if (parse->type() == ParseType::Expression)
 		{
 			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), false, previousExpr))
@@ -4832,13 +4903,27 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	if (!anyExpression && !expression->assignment() && !expression->condition()) {
 		if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
 		{
-			_conditionStack.pop_back();
+			const ParseCondition* prevCond = dynamic_cast<const ParseCondition*>(previousExpr->condition());
+			Conditions prevType = prevCond->condition();
+			bool prevIsWhile = (prevType == Conditions::While || prevType == Conditions::WhileNot);
+
+			if (!_conditionStack.empty())
 			{
+				// For single-line while, explicitly add the end block so the parser
+				// controls placement — finalise would insert it too late (after post-run).
+				// addEndBlock calls flushPostRun() before the endCommand, so $i++ lands inside.
+				if (prevIsWhile)
+					_emitWhileReEval();
+
+				_conditionStack.pop_back();
 				bool anyWhile = false;
 				for (auto& e : _conditionStack)
 					if (e.type == ConditionType::While) { anyWhile = true; break; }
 				if (!anyWhile)
 					_whileGeneratedVariables = 0;
+
+				if (prevIsWhile)
+					_currentScript->addEndBlock(true);
 			}
 		}
 		return true;
@@ -4951,8 +5036,27 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	else if (expression->condition())
 	{
 		const ParseCondition* cond = dynamic_cast<const ParseCondition*>(expression->condition());
+		Conditions condType = cond->condition();
+		bool isWhile = (condType == Conditions::While || condType == Conditions::WhileNot);
+
+		// Capture function count before so we can identify post-run entries after flush
+		size_t funcCountBefore = isWhile ? _currentScript->functionCount() : 0;
 
 		_currentScript->addNewExpression(cond);
+
+		// After addNewExpression, any pending post-run has been flushed into _functions.
+		// Store the index range so _emitWhileReEval can duplicate them before continue/}.
+		if (isWhile && !_conditionStack.empty() &&
+			_conditionStack.back().type == ConditionType::While)
+		{
+			size_t postRunStart = funcCountBefore + 1;
+			size_t funcCountAfter = _currentScript->functionCount();
+			if (postRunStart < funcCountAfter)
+			{
+				_conditionStack.back().whilePostRunStart = postRunStart;
+				_conditionStack.back().whilePostRunCount = funcCountAfter - postRunStart;
+			}
+		}
 
 		// Run expression items
 		for (auto itr = expression->list().begin(); itr != expression->list().end(); itr++)
@@ -4974,12 +5078,15 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		}
 		else if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
 		{
-			_conditionStack.pop_back();
-			bool anyWhile = false;
-			for (auto& e : _conditionStack)
-				if (e.type == ConditionType::While) { anyWhile = true; break; }
-			if (!anyWhile)
-				_whileGeneratedVariables = 0;
+			if (!_conditionStack.empty())
+			{
+				_conditionStack.pop_back();
+				bool anyWhile = false;
+				for (auto& e : _conditionStack)
+					if (e.type == ConditionType::While) { anyWhile = true; break; }
+				if (!anyWhile)
+					_whileGeneratedVariables = 0;
+			}
 		}
 
 		return true;
@@ -5015,7 +5122,22 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		_addExpressionItem(*itr);
 
 	if (addEndBlock)
+	{
+		if (!_conditionStack.empty())
+		{
+			// If this is a single-line while body, emit the re-eval before the end block.
+			if (_conditionStack.back().type == ConditionType::While)
+				_emitWhileReEval();
+
+			_conditionStack.pop_back();
+			bool anyWhile = false;
+			for (auto& e : _conditionStack)
+				if (e.type == ConditionType::While) { anyWhile = true; break; }
+			if (!anyWhile)
+				_whileGeneratedVariables = 0;
+		}
 		_currentScript->addEndBlock(true);
+	}
 
 	return true;
 }
@@ -5106,7 +5228,7 @@ bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous,
 				// Pop the condition that this block closed
 				if (!_conditionStack.empty())
 				{
-					_conditionStack.pop_back();
+	_conditionStack.pop_back();
 					// Reset the while counter only when no while blocks remain on the stack
 					{
 						bool anyWhile = false;

@@ -126,8 +126,11 @@ namespace XScript {
 		{
 			ConditionType type;
 			const ParseExpression* whileExpression; // only set for While entries
+			size_t whilePostRunStart; // index of first post-run function in _functions
+			size_t whilePostRunCount; // number of post-run functions to duplicate
+			std::vector<const BaseParse*> whilePostRunNodes; // ParseFunction* nodes for inc/dec
 			ConditionEntry(ConditionType t, const ParseExpression* expr = nullptr)
-				: type(t), whileExpression(expr) {}
+				: type(t), whileExpression(expr), whilePostRunStart(0), whilePostRunCount(0) {}
 		};
 		std::vector<ConditionEntry> _conditionStack;
 
