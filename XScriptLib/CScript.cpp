@@ -265,13 +265,13 @@ bool CScript::addEndBlock(bool forceBlock)
             {
                 const ParseCondition* cond = dynamic_cast<const ParseCondition*>(
                     itr->firstArg());
-                if (cond->isBlock() || forceBlock)
+                if (cond->condition() != Conditions::None && (cond->isBlock() || forceBlock))
                 {
+                    flushPostRun(); // flush before end so post-run appears inside the block
                     if (forceBlock && !cond->isBlock())
                         const_cast<ParseCondition*>(cond)->setBlock(true);
                     const_cast<ParseCondition*>(cond)->setBlockCount(count);
                     itr->endBlock = static_cast<int>(_functions.size());
-                    flushPostRun(); // flush before end so post-run appears inside the block
                     _functions.push_back({ _pScriptData->endCommand(), nullptr });
                     _lastAddedIndex = static_cast<int>(_functions.size() - 1);
                     _lastAddedIsPost = false;
@@ -285,13 +285,13 @@ bool CScript::addEndBlock(bool forceBlock)
                 {
                     const ParseCondition* cond = dynamic_cast<const ParseCondition*>(
                         parse);
-                    if (cond->isBlock() || forceBlock)
+                    if (cond->condition() != Conditions::None && (cond->isBlock() || forceBlock))
                     {
+                        flushPostRun(); // flush before end so post-run appears inside the block
                         if (forceBlock && !cond->isBlock())
                             const_cast<ParseCondition*>(cond)->setBlock(true);
                         const_cast<ParseCondition*>(cond)->setBlockCount(count);
                         itr->endBlock = static_cast<int>(_functions.size());
-                        flushPostRun(); // flush before end so post-run appears inside the block
                         _functions.push_back({ _pScriptData->endCommand(), nullptr });
                         _lastAddedIndex = static_cast<int>(_functions.size() - 1);
                         _lastAddedIsPost = false;
