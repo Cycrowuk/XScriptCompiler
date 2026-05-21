@@ -1305,24 +1305,18 @@ bool CScriptParser::_parseCompoundAssignment(std::vector<const BaseParse*>& list
 			func->setLinePosition(parse->linePos());
 			func->setFile(_currentFile.back());
 			func->setPosition(parse->startingPos(), sym->endingPos());
-			func->setPostRun(true); // post — deferred via flushPostRun
+			func->setPostRun(true); // post — deferred via flushPostRun at statement level
 
 			ParseArguments* args = new ParseArguments(parse->line());
 			args->setLinePosition(parse->linePos());
 			args->setFile(_currentFile.back());
 			args->setPosition(parse->startingPos(), sym->endingPos());
-
-			// Consume the variable directly as the argument — same as pre-increment
-			// The previous token (variable) is removed from list and goes into args
 			args->addParse(const_cast<BaseParse*>(parse));
 			func->setArguments(args);
 
 			delete sym;
 			itr = nextItr;
 
-			// Only the function goes into the list — not the variable
-			// The inc/dec return argument carries the variable reference
-			// and flushPostRun emits it after the current statement
 			list.push_back(func);
 			continue;
 		}
@@ -4466,7 +4460,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	if (_prePassMode)
 		return true;
 
-	_currentScript->addFunction(func->id, functionData, functionData->isPostRun());
+	_currentScript->addFunction(func->id, functionData, functionData->isPostRun(), isInline);
 
 	// if the function has a refobj of null, add a null item — but only
 	// when no object has already been provided by the caller.

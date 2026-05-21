@@ -104,7 +104,7 @@ void CScript::addNewExpression(const ParseVariable* vari)
     lastFunc()->addArgument(vari, ParDef::Var);
 }
 
-void CScript::addFunction(unsigned int id, const ParseFunction* func, bool postRun)
+void CScript::addFunction(unsigned int id, const ParseFunction* func, bool postRun, bool suppressFlush)
 {
     if (postRun)
     {
@@ -121,7 +121,8 @@ void CScript::addFunction(unsigned int id, const ParseFunction* func, bool postR
     _lastAddedIndex = static_cast<int>(_functions.size() - 1);
     _lastAddedIsPost = false;
 
-    flushPostRun();
+    if (!suppressFlush)
+        flushPostRun();
 }
 
 void CScript::flushPostRun()

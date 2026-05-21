@@ -108,7 +108,7 @@ namespace XScript
 		void addNewExpression(const ParseVariable* vari);
 		void addNewExpression(const ParseCondition* cond);
 		void addVariable(const std::wstring& variable);
-		void addFunction(unsigned int id, const ParseFunction *func, bool postRun);
+		void addFunction(unsigned int id, const ParseFunction *func, bool postRun, bool suppressFlush = false);
 		void addRetVar(const BaseParse* arg);
 		void addFunctionArgument(const BaseParse* arg, ParDef pardef);
 		void addFunctionCondition(const ParseCondition *c);
