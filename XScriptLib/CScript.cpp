@@ -383,6 +383,11 @@ bool CScript::isIfOpen() const
 
 const ScriptFunction* CScript::previousFunction()
 {
+    // Skip past any pending post-run entries to find the last real function.
+    // Post-run entries (inc/dec) should not be seen as the "previous function"
+    // for purposes like setting isBlock on a condition when '{' is encountered.
+    if (_lastAddedIsPost && !_functions.empty())
+        return &_functions.back();
     return lastFunc();
 }
 

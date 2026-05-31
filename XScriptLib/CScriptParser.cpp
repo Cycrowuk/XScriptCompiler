@@ -138,6 +138,7 @@ void CScriptParser::_clearData()
 	_pVariables = &_variables;
 	_conditionStack.clear();
 	_whileGeneratedVariables = 0;
+	_createdExpressions.clear();
 }
 
 bool CScriptParser::hasWarnings() const
@@ -2742,18 +2743,50 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 			{
 				if (previous && (previous->type() == ParseType::Function || previous->type() == ParseType::Array))
 				{
-					if (expression->size() == 0 && !parseList.empty() && parseList.back() == expression)
+					// If previous is a post-run function (e.g. inc from $i++), the condition
+					// belongs to the last finalised expression in parseList, not the current one.
+					const ParseFunction* prevFn = (previous->type() == ParseType::Function)
+						? dynamic_cast<const ParseFunction*>(previous) : nullptr;
+					if (prevFn && prevFn->isPostRun() && parseList.size() >= 2)
 					{
-						if (!parseList.empty() && parseList.back()->type() == ParseType::Expression)
+						// After finalise(), a new empty expression is at parseList.back().
+						// The if($i++) expression is at parseList[size-2].
+						const ParseExpression* expr = nullptr;
+						for (int pi = static_cast<int>(parseList.size()) - 1; pi >= 0; pi--)
 						{
-							parseList.pop_back();
-							delete expression;
-							expression = const_cast<ParseExpression*>(dynamic_cast<const ParseExpression*>(parseList.back()));
+							if (parseList[pi]->type() == ParseType::Expression)
+							{
+								const ParseExpression* candidate = dynamic_cast<const ParseExpression*>(parseList[pi]);
+								if (candidate->condition())
+								{
+									expr = candidate;
+									break;
+								}
+							}
+						}
+						if (expr)
+						{
+							const_cast<ParseCondition*>(expr->condition())->setBlock(true);
+							finalise(const_cast<ParseExpression*>(expr));
+							delete parse;
+							parse = NULL;
 						}
 					}
-					expression->addParse(const_cast<BaseParse*>(parse));
-					finalise(expression);
-					expression = NULL;
+					else
+					{
+						if (expression->size() == 0 && !parseList.empty() && parseList.back() == expression)
+						{
+							if (!parseList.empty() && parseList.back()->type() == ParseType::Expression)
+							{
+								parseList.pop_back();
+								delete expression;
+								expression = const_cast<ParseExpression*>(dynamic_cast<const ParseExpression*>(parseList.back()));
+							}
+						}
+						expression->addParse(const_cast<BaseParse*>(parse));
+						finalise(expression);
+						expression = NULL;
+					}
 				}
 				else if (previous && previous->type() == ParseType::Expression)
 				{
@@ -4227,21 +4260,52 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	// return type not compatable with condition
 	else if (func->returnValueType == RetVarType::Return && functionData->condition())
 	{
-		ParseVariable* var = new ParseVariable(functionData->line(), _makeTempVarName(), &func->returnValue);
-		(*_pVariables)[var->name()] = func->returnValue;
-		functionData->setReturnVariable(var);
+		const ParseCondition* cond = dynamic_cast<const ParseCondition*>(functionData->condition());
+		bool isWhileCondition = (cond->condition() == Conditions::While || cond->condition() == Conditions::WhileNot);
 
-		ParseExpression* expr = new ParseExpression(functionData->line());
-		expr->setFromParse(functionData);
-		expr->setCondition(functionData->condition());
+		if (!isWhileCondition)
+		{
+			// For functions like inc/dec where returnArgument > 0, the argument at
+			// that index doubles as the return value — use it directly instead of
+			// generating a temp variable.
+			ParseVariable* var = nullptr;
+			if (func->returnArgument > 0 && functionData->arguments() &&
+				(int)functionData->arguments()->count() > func->returnArgument - 1)
+			{
+				const BaseParse* arg = functionData->arguments()->get(func->returnArgument - 1);
+				if (arg && arg->type() == ParseType::Variable)
+				{
+					const ParseVariable* argVar = dynamic_cast<const ParseVariable*>(arg);
+					// Create a fresh ParseVariable with the same name — owned by
+					// functionData via setReturnVariable, not added to _createdData.
+					// Do NOT pre-register in _pVariables here — the normal argument
+					// processing path will handle it, preserving uninitialised warnings.
+					var = new ParseVariable(functionData->line(), argVar->name(), &func->returnValue);
+					var->setFromParse(functionData);
+				}
+			}
+			if (!var)
+			{
+				var = new ParseVariable(functionData->line(), _makeTempVarName(), &func->returnValue);
+				(*_pVariables)[var->name()] = func->returnValue;
+			}
+			functionData->setReturnVariable(var);
 
-		ParseVariable* newVar = new ParseVariable(functionData->line(), var->name(), &func->returnValue);
-		newVar->setFromParse(functionData);
-		expr->addParse(newVar);
+			ParseExpression* expr = new ParseExpression(functionData->line());
+			expr->setFromParse(functionData);
+			expr->setCondition(functionData->condition());
 
-		_createdData.push_back(expr);
-		functionData->setCondition(NULL);
-		runExpr = expr;
+			ParseVariable* newVar = new ParseVariable(functionData->line(), var->name(), &func->returnValue);
+			newVar->setFromParse(functionData);
+			expr->addParse(newVar);
+
+			_createdData.push_back(expr);
+			functionData->setCondition(NULL);
+			runExpr = expr;
+			// Store the mapping so the StartBlock handler can find this expression
+			// when '{' follows the function in the parse list.
+			_createdExpressions[functionData] = expr;
+		}
 	}
 
 	if (functionData->object())
@@ -4703,7 +4767,7 @@ void CScriptParser::_emitWhileReEvalList(const std::vector<const BaseParse*>& li
 			}
 		}
 		else if (item->type() == ParseType::Property ||
-			     item->type() == ParseType::Array)
+			item->type() == ParseType::Array)
 		{
 			// ParseProperty and ParseArray generate temp vars on internal ParseFunction
 			// objects — we can't check returnVariable() directly.
@@ -4802,7 +4866,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		if (isWhile)
 			_conditionStack.push_back(ConditionEntry(ConditionType::While, expression));
 		else if (condType == Conditions::If || condType == Conditions::IfNot ||
-			     condType == Conditions::SkipIf || condType == Conditions::SkipIfNot)
+			condType == Conditions::SkipIf || condType == Conditions::SkipIfNot)
 			_conditionStack.push_back(ConditionEntry(ConditionType::If));
 		else if (condType == Conditions::ElseIf || condType == Conditions::ElseIfNot)
 			_conditionStack.push_back(ConditionEntry(ConditionType::ElseIf));
@@ -5187,6 +5251,27 @@ bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous,
 					const ParseCondition* cond = dynamic_cast<const ParseCondition*>(func->condition());
 					const_cast<ParseCondition*>(cond)->setBlock(true);
 				}
+				else
+				{
+					// Function has no condition — check if it created a runExpr that carries one
+					// (e.g. inc/dec where RetVarType::Return doesn't match the condition)
+					auto it = _createdExpressions.find(previous);
+					if (it != _createdExpressions.end())
+					{
+						const ParseExpression* createdExpr = it->second;
+						if (createdExpr->condition() && !createdExpr->condition()->isBlock())
+							const_cast<ParseCondition*>(createdExpr->condition())->setBlock(true);
+					}
+				}
+			}
+			else if (previous && previous->type() == ParseType::Expression)
+			{
+				const ParseExpression* expr = dynamic_cast<const ParseExpression*>(previous);
+				if (expr->condition() && !expr->condition()->isBlock())
+				{
+					const ParseCondition* cond = dynamic_cast<const ParseCondition*>(expr->condition());
+					const_cast<ParseCondition*>(cond)->setBlock(true);
+				}
 			}
 			else if (previous && previous->type() == ParseType::Array)
 			{
@@ -5222,7 +5307,7 @@ bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous,
 				// Pop the condition that this block closed
 				if (!_conditionStack.empty())
 				{
-	_conditionStack.pop_back();
+					_conditionStack.pop_back();
 					// Reset the while counter only when no while blocks remain on the stack
 					{
 						bool anyWhile = false;

@@ -117,6 +117,11 @@ namespace XScript {
 
 		mutable std::vector<void*> _syntheticConstants;
 
+		// Maps a ParseFunction* to the ParseExpression* that was created for it
+		// in _doGlobalFunction (when RetVarType::Return doesn't match the condition).
+		// Used by the StartBlock handler to find the correct expression when '{' follows.
+		std::map<const BaseParse*, const ParseExpression*> _createdExpressions;
+
 		// Condition depth stack — one entry per open block.
 		// Pushed when a condition with a block opens (if, while, etc.)
 		// Popped when the matching '}' or end block is reached.
