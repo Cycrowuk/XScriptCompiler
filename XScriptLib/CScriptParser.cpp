@@ -4283,6 +4283,25 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 					var = new ParseVariable(functionData->line(), argVar->name(), &func->returnValue);
 					var->setFromParse(functionData);
 				}
+				else if (arg && arg->type() == ParseType::Expression)
+				{
+					// Expression argument like inc($i + 10) — find the first variable
+					// in the expression and use it as the assignment target.
+					// The argument processing loop will set the assignment on the expression;
+					// we just need to find the variable name for the retvar here.
+					const ParseExpression* argExpr = dynamic_cast<const ParseExpression*>(arg);
+					for (auto item : argExpr->list())
+					{
+						if (item->type() == ParseType::Variable)
+						{
+							const ParseVariable* argVar = dynamic_cast<const ParseVariable*>(item);
+							var = new ParseVariable(functionData->line(), argVar->name(), &func->returnValue);
+							var->setFromParse(functionData);
+							functionData->setReturnVariable(var);
+							break;
+						}
+					}
+				}
 			}
 			if (!var)
 			{
@@ -4408,13 +4427,50 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 			// add the generated variable assignment
 			if (!expr->assignment())
 			{
-				ParseVariable* var = new ParseVariable(functionData->line(), _makeTempVarName(), &func->returnValue);
-				(*_pVariables)[var->name()] = func->returnValue;
+				ParseVariable* var = nullptr;
+
+				// For functions where this argument doubles as the return value
+				// (returnArgument > 0), use the first variable in the expression
+				// as the assignment target instead of generating a temp var.
+				// e.g. inc($i + 10) → $i = $i + 10, not $VarGen.1 = $i + 10
+				if (func->returnArgument > 0 && (i == func->returnArgument - 1))
+				{
+					for (auto item : expr->list())
+					{
+						if (item->type() == ParseType::Variable)
+						{
+							const ParseVariable* exprVar = dynamic_cast<const ParseVariable*>(item);
+							var = new ParseVariable(functionData->line(), exprVar->name(), &func->returnValue);
+							var->setFromParse(functionData);
+							// Do NOT register in _pVariables here — register after the
+							// expression runs so the uninitialised variable warning fires.
+							break;
+						}
+					}
+				}
+
+				if (!var)
+				{
+					var = new ParseVariable(functionData->line(), _makeTempVarName(), &func->returnValue);
+					(*_pVariables)[var->name()] = func->returnValue;
+				}
 				const_cast<ParseExpression*>(expr)->setAssignment(var);
 			}
 
 			if (!_runExpressionList(expr, false, nullptr))
 				return false;
+
+			// Register the return variable AFTER the expression runs so any
+			// uninitialised warnings for variables inside the expression fire correctly.
+			if (func->returnArgument > 0 && (i == func->returnArgument - 1) &&
+				expr->assignment() && expr->assignment()->type() == ParseType::Variable)
+			{
+				const ParseVariable* assignVar = dynamic_cast<const ParseVariable*>(expr->assignment());
+				const std::wstring& name = assignVar->name();
+				// Only register named variables (not temp vars like $VarGen.N)
+				if (name.size() < 8 || name.substr(0, 8) != L"$VarGen.")
+					(*_pVariables)[name] = func->returnValue;
+			}
 
 			if (expr->dataType() != DataTypes::Unknown)
 			{
@@ -4501,7 +4557,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 
 		if (func->returnArgument > 0)
 		{
-			if (func->returnArgument <= functionData->arguments()->count())
+			if (func->returnArgument <= (int)functionData->arguments()->count())
 			{
 				const BaseParse* arg = functionData->arguments()->get(func->returnArgument - 1);
 				if (arg->type() == ParseType::Variable)
@@ -4515,6 +4571,18 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 					// once we have parsed the function, we can move it to the retvar
 					if (!functionData->returnVariable())
 						functionData->setReturnVariable(const_cast<ParseVariable*>(varArg));
+				}
+				else if (arg->type() == ParseType::Expression && functionData->returnVariable())
+				{
+					const ParseVariable* retVar = dynamic_cast<const ParseVariable*>(functionData->returnVariable());
+					if (retVar)
+					{
+						(*_pVariables)[retVar->name()] = func->returnValue;
+						if (!_prePassMode)
+							_currentScript->addVariable(retVar->name());
+						// Assignment on the expression is already set by the argument
+						// processing loop above — no setAssignment needed here.
+					}
 				}
 			}
 		}
@@ -4545,8 +4613,14 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		{
 			if (functionData->condition())
 				_currentScript->addFunctionCondition(functionData->condition());
-			else if (func->returnArgument > 0 && func->returnArgument <= functionData->arguments()->count())
-				_currentScript->addRetVar(functionData->arguments()->get(func->returnArgument - 1));
+			else if (func->returnArgument > 0 && func->returnArgument <= (int)functionData->arguments()->count())
+			{
+				const BaseParse* arg = functionData->arguments()->get(func->returnArgument - 1);
+				if (arg->type() == ParseType::Expression && functionData->returnVariable())
+					_currentScript->addRetVar(functionData->returnVariable());
+				else
+					_currentScript->addRetVar(arg);
+			}
 			else if (functionData->returnVariable())
 			{
 				const ParseVariable* vari = dynamic_cast<const ParseVariable*>(functionData->returnVariable());
@@ -5208,9 +5282,25 @@ void CScriptParser::_checkWarnings(const std::vector<const BaseParse*>& list)
 			_checkWarnings(dynamic_cast<const ParseBrackets*>(*itr)->constList());
 		else if ((*itr)->type() == ParseType::Expression)
 			_checkWarnings(dynamic_cast<const ParseExpression*>(*itr)->list());
-		else
+		else if ((*itr)->type() == ParseType::Function)
 		{
-
+			const ParseFunction* func = dynamic_cast<const ParseFunction*>(*itr);
+			if (func->arguments())
+			{
+				for (unsigned int i = 0; i < func->arguments()->count(); i++)
+					_checkWarnings({ func->arguments()->get(i) });
+			}
+		}
+		else if ((*itr)->type() == ParseType::Variable)
+		{
+			const ParseVariable* vari = dynamic_cast<const ParseVariable*>(*itr);
+			auto dts = vari->currentDataTypes();
+			if (dts.empty()) dts = (*_pVariables)[vari->name()];
+			if (dts.empty())
+			{
+				Warnings& warn = _addWarning(ParseWarnings::NullVariable, vari);
+				warn.data.push_back(vari->data());
+			}
 		}
 	}
 }
