@@ -85,6 +85,9 @@ void CScript::addVariable(const std::wstring& variable)
 
 void CScript::addNewExpression(const ParseCondition* cond)
 {
+    if (_pendingEnd)
+        _addEndBlock(_forceEnd);
+
     _functions.push_back({ _pScriptData->expressionCommand(), nullptr });
     _lastAddedIndex = static_cast<int>(_functions.size() - 1);
     _lastAddedIsPost = false;
@@ -95,6 +98,9 @@ void CScript::addNewExpression(const ParseCondition* cond)
 
 void CScript::addNewExpression(const ParseVariable* vari)
 {
+    if (_pendingEnd)
+        _addEndBlock(_forceEnd);
+
     _functions.push_back({ _pScriptData->expressionCommand(), nullptr });
     _lastAddedIndex = static_cast<int>(_functions.size() - 1);
     _lastAddedIsPost = false;
@@ -106,6 +112,9 @@ void CScript::addNewExpression(const ParseVariable* vari)
 
 void CScript::addFunction(unsigned int id, const ParseFunction* func, bool postRun, bool suppressFlush)
 {
+    if (_pendingEnd)
+        _addEndBlock(_forceEnd);
+
     if (postRun)
     {
         // Store pending � don't add to _functions yet so _functions.back()
@@ -217,6 +226,63 @@ void CScript::addFunctionCondition(const ParseCondition* c)
     lastFunc()->retvarID = static_cast<int>(lastFunc()->argumentCount());
     lastFunc()->addArgument(c, ParDef::Unknown);
 }
+
+bool CScript::_addEndBlock(bool forceBlock)
+{
+    _pendingEnd = false;
+	_forceEnd = false;
+
+    if (!lastFunc())
+        return false;
+    int count = 0;
+    for (auto itr = _functions.rbegin(); itr != _functions.rend(); itr++)
+    {
+        if (itr->endBlock == -1)
+        {
+            if (itr->id == _pScriptData->elseCommand())
+            {
+                const ParseCondition* cond = dynamic_cast<const ParseCondition*>(
+                    itr->firstArg());
+                if (cond->condition() != Conditions::None && (cond->isBlock() || forceBlock))
+                {
+                    flushPostRun(); // flush before end so post-run appears inside the block
+                    if (forceBlock && !cond->isBlock())
+                        const_cast<ParseCondition*>(cond)->setBlock(true);
+                    const_cast<ParseCondition*>(cond)->setBlockCount(count);
+                    itr->endBlock = static_cast<int>(_functions.size());
+                    _functions.push_back({ _pScriptData->endCommand(), nullptr });
+                    _lastAddedIndex = static_cast<int>(_functions.size() - 1);
+                    _lastAddedIsPost = false;
+                    return true;
+                }
+            }
+            else if (itr->retvarID >= 0)
+            {
+                const BaseParse* parse = itr->retvarArgument();
+                if (parse && parse->type() == ParseType::Condition)
+                {
+                    const ParseCondition* cond = dynamic_cast<const ParseCondition*>(
+                        parse);
+                    if (cond->condition() != Conditions::None && (cond->isBlock() || forceBlock))
+                    {
+                        flushPostRun(); // flush before end so post-run appears inside the block
+                        if (forceBlock && !cond->isBlock())
+                            const_cast<ParseCondition*>(cond)->setBlock(true);
+                        const_cast<ParseCondition*>(cond)->setBlockCount(count);
+                        itr->endBlock = static_cast<int>(_functions.size());
+                        _functions.push_back({ _pScriptData->endCommand(), nullptr });
+                        _lastAddedIndex = static_cast<int>(_functions.size() - 1);
+                        _lastAddedIsPost = false;
+                        return true;
+                    }
+                }
+            }
+        }
+        ++count;
+    }
+    return false;
+}
+
 void CScript::_addVariables(const BaseParse* arg)
 {
     if (arg->type() == ParseType::Variable)
@@ -269,13 +335,8 @@ bool CScript::addEndBlock(bool forceBlock)
                 if (cond->condition() != Conditions::None && (cond->isBlock() || forceBlock))
                 {
                     flushPostRun(); // flush before end so post-run appears inside the block
-                    if (forceBlock && !cond->isBlock())
-                        const_cast<ParseCondition*>(cond)->setBlock(true);
-                    const_cast<ParseCondition*>(cond)->setBlockCount(count);
-                    itr->endBlock = static_cast<int>(_functions.size());
-                    _functions.push_back({ _pScriptData->endCommand(), nullptr });
-                    _lastAddedIndex = static_cast<int>(_functions.size() - 1);
-                    _lastAddedIsPost = false;
+                    _forceEnd = forceBlock;
+                    _pendingEnd = true;
                     return true;
                 }
             }
@@ -289,13 +350,8 @@ bool CScript::addEndBlock(bool forceBlock)
                     if (cond->condition() != Conditions::None && (cond->isBlock() || forceBlock))
                     {
                         flushPostRun(); // flush before end so post-run appears inside the block
-                        if (forceBlock && !cond->isBlock())
-                            const_cast<ParseCondition*>(cond)->setBlock(true);
-                        const_cast<ParseCondition*>(cond)->setBlockCount(count);
-                        itr->endBlock = static_cast<int>(_functions.size());
-                        _functions.push_back({ _pScriptData->endCommand(), nullptr });
-                        _lastAddedIndex = static_cast<int>(_functions.size() - 1);
-                        _lastAddedIsPost = false;
+                        _forceEnd = forceBlock;
+                        _pendingEnd = true;
                         return true;
                     }
                 }
@@ -308,6 +364,9 @@ bool CScript::addEndBlock(bool forceBlock)
 
 bool CScript::addLabel(const ParseKeyword* parse)
 {
+    if (_pendingEnd)
+        _addEndBlock(_forceEnd);
+
     auto findItr = _labels.find(parse->keyword());
     if (findItr != _labels.end())
         return false;
@@ -434,9 +493,10 @@ void CScript::insertFunction(unsigned int id, const ParseFunction* func)
                     if (c != Conditions::ElseIf && c != Conditions::ElseIfNot &&
                         c != Conditions::Else)
                         break; // found the opening if — done
-                    // else: continue searching
+                    // else: continue searching (don't decrement depth at 0)
                 }
-                depth--;
+                else
+                    depth--;
             }
         }
     }
@@ -512,6 +572,10 @@ bool CScript::isLabelValid(const std::wstring& label) const
 
 bool CScript::finalise()
 {
+    // Flush any pending end block that wasn't consumed by else/else-if
+    if (_pendingEnd)
+        _addEndBlock(_forceEnd);
+
     bool doneAny = false;
     do
     {

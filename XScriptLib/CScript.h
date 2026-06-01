@@ -96,6 +96,8 @@ namespace XScript
 		int _lastAddedIndex = -1;
 		bool _lastAddedIsPost = false;
 		int _lastInsertPos = -1;
+		bool _pendingEnd = false; // proposed end block — flushed lazily, skipped before else/else-if
+		bool _forceEnd = false; // force end block, even if not strictly necessary (e.g. after return)
 
 	public:
 		CScript(const CScriptData *data);
@@ -133,6 +135,7 @@ namespace XScript
 		void writeArguments(std::wofstream& out, const ScriptFunction& func, const BaseParse* parse, bool isRetvar) const;
 
 	private:
+		bool _addEndBlock(bool forceBlock);
 		void _addVariables(const BaseParse* arg);
 		void _simplifyExpression(const BaseParse* parse, std::vector<const BaseParse*>& newArgs);
 		void _parseExpressionList(const std::vector<const BaseParse*>& list, std::vector<const BaseParse*>::const_iterator ignoreItem, std::vector<const BaseParse*>&output);
