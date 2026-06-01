@@ -140,6 +140,7 @@ void CScript::flushPostRun()
         _functions.push_back(func);
     if (_lastAddedIsPost)
         _lastAddedIndex = static_cast<int>(_functions.size() - 1);
+    _lastAddedIsPost = false;
     _pendingPostRun.clear();
 }
 

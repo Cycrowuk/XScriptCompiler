@@ -5528,6 +5528,7 @@ bool CScriptParser::_runDataList(const std::vector<const BaseParse*>& list, bool
 
 		previous = *itr;
 	}
+
 	return true;
 }
 
