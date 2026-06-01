@@ -383,11 +383,6 @@ bool CScript::isIfOpen() const
 
 const ScriptFunction* CScript::previousFunction()
 {
-    // Skip past any pending post-run entries to find the last real function.
-    // Post-run entries (inc/dec) should not be seen as the "previous function"
-    // for purposes like setting isBlock on a condition when '{' is encountered.
-    if (_lastAddedIsPost && !_functions.empty())
-        return &_functions.back();
     return lastFunc();
 }
 
@@ -405,6 +400,108 @@ void CScript::duplicateFunction(size_t index)
 {
     if (index < _functions.size())
         _functions.push_back(_functions[index]);
+}
+
+void CScript::insertFunction(unsigned int id, const ParseFunction* func)
+{
+    // Find the position of the opening 'if' that starts this if/else-if chain.
+    // Walk backwards past any end blocks and conditions to find the first if
+    // at depth 0 — insert the new function just before it.
+    int insertPos = static_cast<int>(_functions.size()); // fallback: append
+    int depth = 0;
+
+    for (int i = static_cast<int>(_functions.size()) - 1; i >= 0; i--)
+    {
+        if (_functions[i].id == _pScriptData->endCommand())
+        {
+            depth++;
+        }
+        else if (_functions[i].retvarID >= 0)
+        {
+            const BaseParse* arg = _functions[i].retvarArgument();
+            if (arg && arg->type() == ParseType::Condition)
+            {
+                const ParseCondition* cond = dynamic_cast<const ParseCondition*>(arg);
+                if (cond->condition() == Conditions::None)
+                    continue;
+
+                if (depth == 0)
+                {
+                    insertPos = i;
+                    // Keep walking — if this is else/else-if, the opening if
+                    // is further back. Insert must go before the whole chain.
+                    Conditions c = cond->condition();
+                    if (c != Conditions::ElseIf && c != Conditions::ElseIfNot &&
+                        c != Conditions::Else)
+                        break; // found the opening if — done
+                    // else: continue searching
+                }
+                depth--;
+            }
+        }
+    }
+
+    ScriptFunction sf(id, func);
+    _functions.insert(_functions.begin() + insertPos, sf);
+    _lastAddedIndex = insertPos;
+    _lastInsertPos = insertPos; // remember for insertNewExpression
+    _lastAddedIsPost = false;
+}
+
+void CScript::insertNewExpression(const ParseVariable* vari)
+{
+    // Same insert-position logic as insertFunction — find the opening if block
+    int insertPos = static_cast<int>(_functions.size());
+    int depth = 0;
+
+    for (int i = static_cast<int>(_functions.size()) - 1; i >= 0; i--)
+    {
+        if (_functions[i].id == _pScriptData->endCommand())
+        {
+            depth++;
+        }
+        else if (_functions[i].retvarID >= 0)
+        {
+            const BaseParse* arg = _functions[i].retvarArgument();
+            if (arg && arg->type() == ParseType::Condition)
+            {
+                const ParseCondition* cond = dynamic_cast<const ParseCondition*>(arg);
+                if (cond->condition() == Conditions::None)
+                    continue;
+                if (depth == 0)
+                {
+                    insertPos = i;
+                    // Keep walking — if this is else/else-if, the opening if
+                    // is further back. Insert must go before the whole chain.
+                    Conditions c = cond->condition();
+                    if (c != Conditions::ElseIf && c != Conditions::ElseIfNot &&
+                        c != Conditions::Else)
+                        break;
+                    // else: continue searching
+                }
+                else
+                    depth--;
+            }
+        }
+    }
+
+    // The expressionCommand must come BEFORE the function call that was just
+    // inserted by insertFunction. Use _lastInsertPos which points to where
+    // insertFunction placed the function — insert the expressionCommand there,
+    // pushing the function one position forward.
+    ScriptFunction sf(_pScriptData->expressionCommand(), nullptr);
+    int exprInsertPos = (_lastInsertPos >= 0 && _lastInsertPos < static_cast<int>(_functions.size()))
+        ? _lastInsertPos : insertPos;
+    _functions.insert(_functions.begin() + exprInsertPos, sf);
+    _lastAddedIndex = exprInsertPos;
+    _lastInsertPos = -1; // reset
+    _lastAddedIsPost = false;
+
+    // Configure the inserted entry
+    ScriptFunction& inserted = _functions[exprInsertPos];
+    inserted.retvarID = static_cast<int>(inserted.argumentCount());
+    addVariable(vari->name());
+    inserted.addArgument(vari, ParDef::Var);
 }
 
 bool CScript::isLabelValid(const std::wstring& label) const

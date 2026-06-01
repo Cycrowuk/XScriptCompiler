@@ -95,6 +95,7 @@ namespace XScript
 		std::vector<ScriptFunction> _pendingPostRun;
 		int _lastAddedIndex = -1;
 		bool _lastAddedIsPost = false;
+		int _lastInsertPos = -1;
 
 	public:
 		CScript(const CScriptData *data);
@@ -122,6 +123,8 @@ namespace XScript
 		const ScriptFunction* previousFunction();
 		size_t functionCount() const;
 		void duplicateFunction(size_t index);
+		void insertFunction(unsigned int id, const ParseFunction* func); // insert before last if block
+		void insertNewExpression(const ParseVariable* vari); // insert before last if block
 		const std::vector<ScriptFunction>& functions() const;
 		bool isLabelValid(const std::wstring& label) const;
 

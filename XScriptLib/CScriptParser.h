@@ -185,15 +185,22 @@ namespace XScript {
 
 		void _clearData();
 
-		bool _runProperty(ParseProperty* property, bool isInline, bool doAssignment);
-		bool _runArrayFunction(ParseArray* function, bool isInline, bool doAssignment);
-		bool _runFunction(ParseFunction* function, bool isInline);
+		// Inline state for _doGlobalFunction and related calls.
+		// Normal:          not inline — top-level statement
+		// Inline:          inline within an expression (e.g. nested function call)
+		// InlineCondition: inline within condition brackets of an else-if — temp vars
+		//                  must be inserted before the opening if block, not appended
+		enum class InlineState { Normal, Condition, Inline, InlineCondition };
+
+		bool _runProperty(ParseProperty* property, InlineState inlineState, bool doAssignment);
+		bool _runArrayFunction(ParseArray* function, InlineState inlineState, bool doAssignment);
+		bool _runFunction(ParseFunction* function, InlineState inlineState);
 		bool _doInternalFunction(InternalFunctions func, const ParseArguments* arguments);
-		bool _doGlobalFunction(const Function* func, ParseFunction* functionData, bool isInline);
+		bool _doGlobalFunction(const Function* func, ParseFunction* functionData, InlineState inlineState);
 		bool _runDataList(const std::vector<const BaseParse*>& list, bool topLevel);
 		void _checkWarnings(const std::vector<const BaseParse*>& list);
-		bool _runExpressionList(const ParseExpression* expression, bool topLevel, const ParseExpression* previous);
-		bool _runParse(const BaseParse* parse, const BaseParse* previous, const ParseCondition* condition, bool topLevel, bool isInline);
+		bool _runExpressionList(const ParseExpression* expression, bool topLevel, const ParseExpression* previous, bool isInCondition);
+		bool _runParse(const BaseParse* parse, const BaseParse* previous, const ParseCondition* condition, bool topLevel, InlineState inlineState);
 		bool _parseDataList(std::vector<const BaseParse*>& list);
 		void _addExpressionItem(const BaseParse* parse);
 		bool _addLabel(const ParseKeyword* keyword);
@@ -205,6 +212,8 @@ namespace XScript {
 		bool _setVersion(const ParseArguments* arguments);
 		bool _setCommand(const ParseArguments* arguments);
 
+		bool _isInline(InlineState state) const;
+		bool _isCondition(InlineState state) const;
 		DataTypes _getDataTypeFromParse(const BaseParse* parse) const;
 		std::wstring _getPardefFlagString(ParDefFlags flags) const;
 		bool _isDataTypeForObject(DataTypes dt) const;

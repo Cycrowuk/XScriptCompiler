@@ -1169,24 +1169,26 @@ bool CScriptParser::_parseAllConditions(std::vector<const BaseParse*>& list)
 	}
 
 	// finally, check if else comes without an if
-	for (auto itr = list.begin(); itr != list.end(); itr++)
+	if (!_prePassMode)
 	{
-		if ((*itr)->type() == ParseType::Condition)
+		for (auto itr = list.begin(); itr != list.end(); itr++)
 		{
-			const ParseCondition* cond = dynamic_cast<const ParseCondition*>(*itr);
-			if (cond->condition() == Conditions::ElseIf || cond->condition() == Conditions::ElseIfNot || cond->condition() == Conditions::Else)
+			if ((*itr)->type() == ParseType::Condition)
 			{
-				if (!_currentScript->isIfOpen())
+				const ParseCondition* cond = dynamic_cast<const ParseCondition*>(*itr);
+				if (cond->condition() == Conditions::ElseIf || cond->condition() == Conditions::ElseIfNot || cond->condition() == Conditions::Else)
 				{
-					ParseFail* fail = new ParseFail(cond, ParseErrors::MissingIf);
-					_errors.push_back(fail);
-					error = true;
-					break;
+					if (!_currentScript->isIfOpen())
+					{
+						ParseFail* fail = new ParseFail(cond, ParseErrors::MissingIf);
+						_errors.push_back(fail);
+						error = true;
+						break;
+					}
 				}
 			}
 		}
 	}
-
 	return !error;
 }
 
@@ -3860,7 +3862,7 @@ bool CScriptParser::finalise()
 	return _currentScript->finalise();
 }
 
-bool CScriptParser::_runProperty(ParseProperty* prop, bool isInline, bool doAssignment)
+bool CScriptParser::_runProperty(ParseProperty* prop, InlineState inlineState, bool doAssignment)
 {
 	bool error = false;
 
@@ -3882,7 +3884,7 @@ bool CScriptParser::_runProperty(ParseProperty* prop, bool isInline, bool doAssi
 			func->setObject(prop->object());
 			args->addParse(prop->setter());
 
-			if (!_doGlobalFunction(funcData, func, isInline))
+			if (!_doGlobalFunction(funcData, func, inlineState))
 				error = true;
 			prop->setSetterFunction(func);
 		}
@@ -3934,7 +3936,7 @@ bool CScriptParser::_runProperty(ParseProperty* prop, bool isInline, bool doAssi
 					(*_pVariables)[retVar->name()] = dt;
 				}
 
-				if (!_doGlobalFunction(funcData, func, isInline))
+				if (!_doGlobalFunction(funcData, func, inlineState))
 					error = true;
 				prop->setGetterFunction(func);
 			}
@@ -3964,7 +3966,7 @@ bool CScriptParser::_runProperty(ParseProperty* prop, bool isInline, bool doAssi
 			func->setArguments(args);
 			func->setObject(prop->object());
 
-			if (!_doGlobalFunction(funcData, func, isInline))
+			if (!_doGlobalFunction(funcData, func, inlineState))
 				error = true;
 			prop->setGetterFunction(func);
 		}
@@ -3977,7 +3979,7 @@ bool CScriptParser::_runProperty(ParseProperty* prop, bool isInline, bool doAssi
 
 	return !error;
 }
-bool CScriptParser::_runArrayFunction(ParseArray* arr, bool isInline, bool doAssignment)
+bool CScriptParser::_runArrayFunction(ParseArray* arr, InlineState inlineState, bool doAssignment)
 {
 	ParseFunction* func = new ParseFunction(arr->line(), L"ARRAY");
 	func->setLinePosition(arr->linePos());
@@ -4029,14 +4031,14 @@ bool CScriptParser::_runArrayFunction(ParseArray* arr, bool isInline, bool doAss
 		if (varFunc->returnVariable())
 			func->setReturnVariable(varFunc->returnVariable());
 		else
-			isInline = true;
+			inlineState = InlineState::Inline;
 	}
 
 	auto funcData = _data->getSpecialGlobalFunction(specialFunc);
-	bool ret = _doGlobalFunction(funcData, func, isInline);
+	bool ret = _doGlobalFunction(funcData, func, inlineState);
 
 	if (arr->preRun()) {
-		if (!_runParse(arr->preRun(), nullptr, nullptr, true, false)) return false;
+		if (!_runParse(arr->preRun(), nullptr, nullptr, true, InlineState::Normal)) return false;
 	}
 
 	if (ret)
@@ -4067,17 +4069,17 @@ bool CScriptParser::_runArrayFunction(ParseArray* arr, bool isInline, bool doAss
 	arr->setFunction(func);
 
 	if (ret && arr->assign() && arr->assignment() && !doAssignment)
-		ret = _runArrayFunction(arr, isInline, true);
+		ret = _runArrayFunction(arr, inlineState, true);
 	if (ret && arr->assignment() && arr->assignment()->type() == ParseType::Array)
 	{
 		const ParseArray* toArray = dynamic_cast<const ParseArray*>(arr->assignment());
 		if (toArray->assignment())
-			ret = _runArrayFunction(const_cast<ParseArray*>(toArray), isInline, false);
+			ret = _runArrayFunction(const_cast<ParseArray*>(toArray), inlineState, false);
 	}
 
 	return ret;
 }
-bool CScriptParser::_runFunction(ParseFunction* function, bool isInline)
+bool CScriptParser::_runFunction(ParseFunction* function, InlineState inlineState)
 {
 	if (function->object())
 	{
@@ -4090,7 +4092,7 @@ bool CScriptParser::_runFunction(ParseFunction* function, bool isInline)
 				{
 					const Function* func = _data->findObjectTypeFunction(*dt.begin(), function->function());
 					if (func)
-						return _doGlobalFunction(func, function, isInline);
+						return _doGlobalFunction(func, function, inlineState);
 				}
 			}
 			else
@@ -4105,7 +4107,7 @@ bool CScriptParser::_runFunction(ParseFunction* function, bool isInline)
 				}
 
 				if (func && funcCount == 1)
-					return _doGlobalFunction(func, function, isInline);
+					return _doGlobalFunction(func, function, inlineState);
 
 				else if (funcCount > 1)
 				{
@@ -4120,7 +4122,7 @@ bool CScriptParser::_runFunction(ParseFunction* function, bool isInline)
 
 		const Function* func = _data->findObjectFunction(function->function());
 		if (func)
-			return _doGlobalFunction(func, function, isInline);
+			return _doGlobalFunction(func, function, inlineState);
 
 		ParseFail* fail = new ParseFail(function, ParseErrors::UnknownObjectFunction);
 		fail->addData(function->function());
@@ -4137,7 +4139,7 @@ bool CScriptParser::_runFunction(ParseFunction* function, bool isInline)
 		// now check any global functions
 		const Function* func = _data->findGlobalFunction(function->function());
 		if (func)
-			return _doGlobalFunction(func, function, isInline);
+			return _doGlobalFunction(func, function, inlineState);
 
 		ParseFail* fail = new ParseFail(function, ParseErrors::UnknownFunction);
 		fail->addData(function->function());
@@ -4164,7 +4166,7 @@ bool CScriptParser::_doInternalFunction(InternalFunctions func, const ParseArgum
 	return false;
 }
 
-bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* functionData, bool isInline)
+bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* functionData, InlineState inlineState)
 {
 	// first check if continue or break are inside a while loop
 	if (func->id == _data->breakCommand() || func->id == _data->continueCommand())
@@ -4239,7 +4241,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	else if ((func->returnValueType == RetVarType::Return || func->returnValueType == RetVarType::If) && !functionData->returnVariable() && func->returnArgument <= 0 && !functionData->condition())
 	{
 		// generate a return value
-		if (isInline)
+		if (_isInline(inlineState))
 		{
 			ParseVariable* var = new ParseVariable(functionData->line(), _makeTempVarName(), &func->returnValue);
 			(*_pVariables)[var->name()] = func->returnValue;
@@ -4392,7 +4394,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		{
 			// check the return value of the function
 			const ParseFunction* function = dynamic_cast<const ParseFunction*>(arg);
-			if (!_runFunction(const_cast<ParseFunction*>(function), true))
+			if (!_runFunction(const_cast<ParseFunction*>(function), InlineState::Inline))
 				return false;
 
 			if (function->returnVariable() && static_cast<int>(d->flags & ParDefFlags::Variable))
@@ -4411,13 +4413,13 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		else if (arg->type() == ParseType::Array)
 		{
 			const ParseArray* arr = dynamic_cast<const ParseArray*>(arg);
-			if (!_runArrayFunction(const_cast<ParseArray*>(arr), true, false))
+			if (!_runArrayFunction(const_cast<ParseArray*>(arr), InlineState::Inline, false))
 				return false;
 		}
 		else if (arg->type() == ParseType::Property)
 		{
 			const ParseProperty* arr = dynamic_cast<const ParseProperty*>(arg);
-			if (!_runProperty(const_cast<ParseProperty*>(arr), true, false))
+			if (!_runProperty(const_cast<ParseProperty*>(arr), InlineState::Inline, false))
 				return false;
 		}
 		else if (arg->type() == ParseType::Expression)
@@ -4457,7 +4459,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 				const_cast<ParseExpression*>(expr)->setAssignment(var);
 			}
 
-			if (!_runExpressionList(expr, false, nullptr))
+			if (!_runExpressionList(expr, false, nullptr, _isCondition(inlineState)))
 				return false;
 
 			// Register the return variable AFTER the expression runs so any
@@ -4592,7 +4594,19 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	if (_prePassMode)
 		return true;
 
-	_currentScript->addFunction(func->id, functionData, functionData->isPostRun(), isInline);
+	// When running as an inline function inside an else-if condition expression,
+	// insert BEFORE the opening if block rather than appending after the end block.
+	bool isInsideElseIf = false;
+	if (_isCondition(inlineState) && !_conditionStack.empty() && !functionData->condition())
+	{
+		ConditionType top = _conditionStack.back().type;
+		isInsideElseIf = (top == ConditionType::ElseIf);
+	}
+
+	if (isInsideElseIf)
+		_currentScript->insertFunction(func->id, functionData);
+	else
+		_currentScript->addFunction(func->id, functionData, functionData->isPostRun(), _isInline(inlineState));
 
 	// if the function has a refobj of null, add a null item — but only
 	// when no object has already been provided by the caller.
@@ -4685,7 +4699,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 
 	if (runExpr)
 	{
-		if (!_runExpressionList(runExpr, true, nullptr))
+		if (!_runExpressionList(runExpr, true, nullptr, _isCondition(inlineState)))
 			return false;
 	}
 
@@ -4805,7 +4819,7 @@ void CScriptParser::_emitWhileReEval()
 			bool wasPostRun = fn->isPostRun();
 			if (wasPostRun)
 				fn->setPostRun(false);
-			_runParse(node, nullptr, nullptr, false, false);
+			_runParse(node, nullptr, nullptr, false, InlineState::Normal);
 			if (wasPostRun)
 				fn->setPostRun(true);
 		}
@@ -4837,7 +4851,7 @@ void CScriptParser::_emitWhileReEvalList(const std::vector<const BaseParse*>& li
 			if (fn->returnVariable() &&
 				fn->returnVariable()->name().substr(0, 13) == L"$VarGenWhile.")
 			{
-				_runParse(item, nullptr, nullptr, false, true);
+				_runParse(item, nullptr, nullptr, false, InlineState::Inline);
 			}
 		}
 		else if (item->type() == ParseType::Property ||
@@ -4846,7 +4860,7 @@ void CScriptParser::_emitWhileReEvalList(const std::vector<const BaseParse*>& li
 			// ParseProperty and ParseArray generate temp vars on internal ParseFunction
 			// objects — we can't check returnVariable() directly.
 			// Re-run them unconditionally if they appear in the while expression.
-			_runParse(item, nullptr, nullptr, false, true);
+			_runParse(item, nullptr, nullptr, false, InlineState::Inline);
 		}
 	}
 }
@@ -4920,7 +4934,7 @@ bool CScriptParser::_addLabel(const ParseKeyword* keyword)
 	return false;
 }
 
-bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool topLevel, const ParseExpression* previousExpr)
+bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool topLevel, const ParseExpression* previousExpr, bool isInCondition)
 {
 	auto& list = expression->list();
 
@@ -4928,15 +4942,22 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	bool addEndBlock = false;
 	if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
 		addEndBlock = true;
+	if (previousExpr && !previousExpr->condition() && !previousExpr->list().empty() && previousExpr->list().front()->type() == ParseType::Function) {
+		const ParseFunction* fn = dynamic_cast<const ParseFunction*>(previousExpr->list().front());
+		if (fn->condition() && !fn->condition()->isBlock())
+			addEndBlock = true;
+	}
 
 	// Push the condition stack entry immediately so that any inline functions
 	// processed in the first loop below know what condition context they're in.
+	size_t functionCount = _currentScript->functionCount();
+	bool isCurrentCondition = false;
 	if (!_prePassMode && expression->condition())
 	{
 		const ParseCondition* cond = dynamic_cast<const ParseCondition*>(expression->condition());
 		Conditions condType = cond->condition();
 		bool isWhile = (condType == Conditions::While || condType == Conditions::WhileNot);
-
+		isCurrentCondition = condType != Conditions::None;
 		if (isWhile)
 			_conditionStack.push_back(ConditionEntry(ConditionType::While, expression));
 		else if (condType == Conditions::If || condType == Conditions::IfNot ||
@@ -4946,6 +4967,25 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 			_conditionStack.push_back(ConditionEntry(ConditionType::ElseIf));
 		else if (condType == Conditions::Else)
 			_conditionStack.push_back(ConditionEntry(ConditionType::Else));
+	}
+	else if (!_prePassMode && !expression->condition() && !list.empty())
+	{
+		// else if: the condition may be on the first function in the list rather
+		// than directly on the expression (set by parseFunctions line 2514).
+		// Push the condition stack so inline functions know they're inside else-if.
+		if (list.front()->type() == ParseType::Function)
+		{
+			const ParseFunction* fn = dynamic_cast<const ParseFunction*>(list.front());
+			if (fn->condition())
+			{
+				const ParseCondition* cond = dynamic_cast<const ParseCondition*>(fn->condition());
+				isCurrentCondition = cond->condition() != Conditions::None;
+				if (cond->condition() == Conditions::ElseIf || cond->condition() == Conditions::ElseIfNot)
+					_conditionStack.push_back(ConditionEntry(ConditionType::ElseIf));
+				else if (cond->condition() == Conditions::Else)
+					_conditionStack.push_back(ConditionEntry(ConditionType::Else));
+			}
+		}
 	}
 
 	// first do all the functions
@@ -4999,7 +5039,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 
 		if (parse->type() == ParseType::Expression)
 		{
-			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), false, previousExpr))
+			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), false, previousExpr, isInCondition))
 				return false;
 		}
 		else if (parse->type() == ParseType::Brackets)
@@ -5009,7 +5049,12 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		}
 		else
 		{
-			if (!_runParse(*itr, previous, expression->condition(), false, expression->size() > 1 || !topLevel))
+			InlineState state = expression->size() > 1 || !topLevel ? InlineState::Inline : InlineState::Normal;
+			// check for condition inline
+			if (isInCondition || isCurrentCondition || (expression->condition() && expression->condition()->condition() != Conditions::None))
+				state = state == InlineState::Inline ? InlineState::InlineCondition : InlineState::Condition;
+
+			if (!_runParse(*itr, previous, expression->condition(), false, state))
 				return false;
 		}
 		previous = *itr;
@@ -5032,10 +5077,21 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		break;
 	}
 
-	if (!anyExpression && !expression->assignment() && !expression->condition()) {
-		if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
+	if (!anyExpression && !expression->assignment() && !expression->condition())
+	{
+		const ParseCondition* prevCond = nullptr;
+
+		if(previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
+			prevCond = dynamic_cast<const ParseCondition*>(previousExpr->condition());
+		else if (previousExpr && !previousExpr->condition() && !previousExpr->list().empty() && previousExpr->list().front()->type() == ParseType::Function)
 		{
-			const ParseCondition* prevCond = dynamic_cast<const ParseCondition*>(previousExpr->condition());
+			const ParseFunction* fn = dynamic_cast<const ParseFunction*>(previousExpr->list().front());
+			if (fn->condition() && !fn->condition()->isBlock())
+				prevCond = fn->condition();
+		}
+
+		if (prevCond)
+		{
 			Conditions prevType = prevCond->condition();
 			bool prevIsWhile = (prevType == Conditions::While || prevType == Conditions::WhileNot);
 
@@ -5056,7 +5112,16 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 
 				if (prevIsWhile)
 					_currentScript->addEndBlock(true);
+				else if (prevType == Conditions::ElseIf || prevType == Conditions::Else || prevType == Conditions::ElseIfNot)
+					_currentScript->addEndBlock(true);
+				else if (addEndBlock)
+				{
+					size_t diff = _currentScript->functionCount() - functionCount;
+					if (diff > 1)
+						_currentScript->addEndBlock(true);
+				}
 			}
+
 		}
 		return true;
 	}
@@ -5164,7 +5229,12 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		return true;
 
 	if (expression->assignment())
-		_currentScript->addNewExpression(expression->assignment());
+	{
+		if (isInCondition)
+			_currentScript->insertNewExpression(expression->assignment());
+		else
+			_currentScript->addNewExpression(expression->assignment());
+	}
 	else if (expression->condition())
 	{
 		const ParseCondition* cond = dynamic_cast<const ParseCondition*>(expression->condition());
@@ -5305,24 +5375,24 @@ void CScriptParser::_checkWarnings(const std::vector<const BaseParse*>& list)
 	}
 }
 
-bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous, const ParseCondition* condition, bool topLevel, bool isInline)
+bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous, const ParseCondition* condition, bool topLevel, InlineState inlineState)
 {
 	if (parse->type() == ParseType::Function)
 	{
 		ParseFunction* function = const_cast<ParseFunction*>(dynamic_cast<const ParseFunction*>(parse));
-		if (!_runFunction(function, isInline))
+		if (!_runFunction(function, inlineState))
 			return false;
 	}
 	else if (parse->type() == ParseType::Property)
 	{
 		ParseProperty* prop = const_cast<ParseProperty*>(dynamic_cast<const ParseProperty*>(parse));
-		if (!_runProperty(prop, isInline, false))
+		if (!_runProperty(prop, inlineState, false))
 			return false;
 	}
 	else if (parse->type() == ParseType::Array)
 	{
 		ParseArray* arr = const_cast<ParseArray*>(dynamic_cast<const ParseArray*>(parse));
-		if (!_runArrayFunction(arr, isInline, false))
+		if (!_runArrayFunction(arr, inlineState, false))
 			return false;
 	}
 	else if (parse->type() == ParseType::Symbol)
@@ -5414,7 +5484,7 @@ bool CScriptParser::_runParse(const BaseParse* parse, const BaseParse* previous,
 	}
 	else if (parse->type() == ParseType::Expression)
 	{
-		if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), topLevel, nullptr))
+		if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), topLevel, nullptr, _isCondition(inlineState)))
 			return false;
 	}
 	else if (parse->type() == ParseType::Brackets)
@@ -5434,7 +5504,7 @@ bool CScriptParser::_runDataList(const std::vector<const BaseParse*>& list, bool
 		const BaseParse* parse = *itr;
 		if (parse->type() == ParseType::Expression)
 		{
-			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), topLevel, dynamic_cast<const ParseExpression*>(previous)))
+			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), topLevel, dynamic_cast<const ParseExpression*>(previous), false))
 				return false;
 		}
 		else if (parse->type() == ParseType::Brackets)
@@ -5447,12 +5517,12 @@ bool CScriptParser::_runDataList(const std::vector<const BaseParse*>& list, bool
 			// Direct function nodes in the list — from array increment desugaring
 			ParseFunction* func = const_cast<ParseFunction*>(
 				dynamic_cast<const ParseFunction*>(parse));
-			if (!_runFunction(func, false))
+			if (!_runFunction(func, InlineState::Normal))
 				return false;
 		}
 		else
 		{
-			if (!_runParse(*itr, previous, NULL, topLevel, !topLevel))
+			if (!_runParse(*itr, previous, NULL, topLevel, !topLevel ? InlineState::Inline : InlineState::Normal))
 				return false;
 		}
 
@@ -5608,6 +5678,15 @@ bool CScriptParser::_setCommand(const ParseArguments* arguments)
 	else
 		_errorArgumentDatatype(arguments, 0, DataTypes::ObjectCommand);
 	return false;
+}
+
+bool CScriptParser::_isInline(InlineState state) const
+{
+	return state == InlineState::Inline || state == InlineState::InlineCondition;
+}
+bool CScriptParser::_isCondition(InlineState state) const
+{
+	return state == InlineState::Condition || state == InlineState::InlineCondition;
 }
 
 DataTypes CScriptParser::_getDataTypeFromParse(const BaseParse* parse) const
