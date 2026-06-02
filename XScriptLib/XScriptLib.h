@@ -7,6 +7,8 @@
 
 bool compileScriptFile(const std::string& filename, const std::string& out);
 bool compileScriptFile(const std::wstring& filename, const std::wstring& out);
+bool compileScriptFile(const std::string& filename, const std::string& out, const std::vector<std::string>& defines);
+bool compileScriptFile(const std::wstring& filename, const std::wstring& out, const std::vector<std::wstring>& defines);
 
 bool decompileScriptFile(const std::string& filename, const std::string& output);
 bool decompileScriptFile(const std::wstring& filename, const std::wstring& output);

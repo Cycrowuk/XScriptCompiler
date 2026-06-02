@@ -334,65 +334,42 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 	return 1;
 }
 
-bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
+bool compileScriptFile(const std::wstring& filename, const std::wstring& out, const std::vector<std::wstring>& defines)
 {
 	if (!g_scriptData)
 		throw std::exception("Unable to Compile script, No game data loaded");
 
+	// load the script parser
 	XScript::CScriptParser parser(g_scriptData);
+
+	// inject any command-line defines before parsing begins
+	for (const auto& def : defines)
+		parser.addDefine(def);
+
+	// read the script file using the parser
 	parser.addCurrentFile(filename);
-
-	// ── Pass 1: pre-pass ────────────────────────────────────────────────────
-	// Read the whole file with _prePassMode on.  Only variable type assignments
-	// inside label subs are recorded (into per-sub maps).  No CScript output
-	// is produced.  Errors are silently discarded — they will be reported
-	// properly in pass 2.
+	std::wifstream infile(filename);
+	std::wstring line;
+	int iLine = 0;
+	while (std::getline(infile, line))
 	{
-		std::wifstream infile(filename);
-		std::wstring line;
-		int iLine = 0;
-		while (std::getline(infile, line))
-		{
-			++iLine;
-			parser.prePassLine(iLine, line);
-			// Ignore return value — errors are discarded in resetForRealPass
-		}
-		infile.close();
+		++iLine;
+		if (!parser.parseLine(iLine, line))
+			break;
+
 	}
-
-	// Reset between passes — preserves _subVariables, clears everything else
-	parser.resetForRealPass();
-
-	// ── Pass 2: real compile ────────────────────────────────────────────────
-	// When a gosub is encountered, the parser merges that sub's pre-collected
-	// variable types into _variables before continuing, so later lines see the
-	// correct types without false "unknown variable" warnings.
-	std::wstring lastLine;
-	{
-		std::wifstream infile(filename);
-		std::wstring line;
-		int iLine = 0;
-		while (std::getline(infile, line))
-		{
-			++iLine;
-			lastLine = line;
-			if (!parser.parseLine(iLine, line))
-				break;
-		}
-		infile.close();
-	}
-
 	parser.removeCurrentFile();
+	infile.close();
 
 	if (!parser.errorData().empty())
 	{
-		displayError(parser, lastLine);
+		displayError(parser, line);
 		return false;
 	}
 
 	if (!parser.finalise())
 	{
-		displayError(parser, lastLine);
+		displayError(parser, line);
 		return false;
 	}
 
@@ -428,9 +405,22 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
 	return false;
 }
 
+bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
+{
+	return compileScriptFile(filename, out, {});
+}
+
+bool compileScriptFile(const std::string& filename, const std::string& out, const std::vector<std::string>& defines)
+{
+	std::vector<std::wstring> wdefines;
+	for (const auto& d : defines)
+		wdefines.push_back(XScript::Utils::s2ws(d));
+	return compileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(out), wdefines);
+}
+
 bool compileScriptFile(const std::string& filename, const std::string& out)
 {
-	return compileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(out));
+	return compileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(out), {});
 }
 
 

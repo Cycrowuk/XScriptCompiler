@@ -58,6 +58,8 @@ int main(int argc, char *argv[])
         std::cout << "Syntax:" << std::endl;
         std::cout << "\t" << exe << " --load_data <datafile> --compile <script.XScript> --out <my.script.xml>" << std::endl;
         std::cout << "\t\t - Compiles an XScript file into a game script" << std::endl;
+        std::cout << "\t" << exe << " --load_data <datafile> --compile <script.XScript> --out <my.script.xml> --define:MYSYMBOL" << std::endl;
+        std::cout << "\t\t - Compiles with a pre-defined symbol (multiple --define:NAME arguments supported)" << std::endl;
         std::cout << "\t" << exe << " --load_data <datafile> --decompile <my.script.xml> --out <out.XScript>" << std::endl;
         std::cout << "\t\t - Decompiles a game script file into an XScript file" << std::endl;
         std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat>" << std::endl;
@@ -87,6 +89,7 @@ int main(int argc, char *argv[])
         std::string data = "default_data.dat";
         CommandType type = CommandType::None;
         CommandType setType = CommandType::None;
+        std::vector<std::string> defines;
 
         for (auto itr = commands.begin(); itr != commands.end(); itr++)
         {
@@ -94,6 +97,11 @@ int main(int argc, char *argv[])
                 data = itr->second;
             else if (itr->first == "out")
                 output = itr->second;
+            else if (itr->first.substr(0, 7) == "define:")
+            {
+                // --define:NAME  — pre-define a symbol for #ifdef use
+                defines.push_back(itr->first.substr(7));
+            }
             else if (itr->first == "compile")
             {
                 outputNeeded = true;
@@ -160,7 +168,7 @@ int main(int argc, char *argv[])
         {
         case CommandType::Compile:
             std::cout << "Compiling script: " << file << "...  ";
-            if (!compileScriptFile(file, output))
+            if (!compileScriptFile(file, output, defines))
             {
 #ifdef _DEBUG
                 if (BaseParse::_DEBUG_COUNT != 0)

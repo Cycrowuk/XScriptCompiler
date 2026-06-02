@@ -139,6 +139,7 @@ void CScriptParser::_clearData()
 	_conditionStack.clear();
 	_whileGeneratedVariables = 0;
 	_createdExpressions.clear();
+	_ifDefStack.clear();
 }
 
 bool CScriptParser::hasWarnings() const
@@ -162,6 +163,17 @@ void CScriptParser::addCurrentFile(const std::wstring& file)
 void CScriptParser::removeCurrentFile()
 {
 	_currentFile.pop_back();
+}
+
+void CScriptParser::addDefine(const std::wstring& name)
+{
+	// Create an empty (presence-only) define — same as writing #define NAME in the script.
+	// The ParseKeyword is stored in _createdData so it gets cleaned up correctly.
+	ParseKeyword* key = new ParseKeyword(name, name);
+	ParseDefine* define = new ParseDefine(key);
+	_createdData.push_back(key);
+	_createdData.push_back(define);
+	_defines[define->define()] = define;
 }
 
 BaseParse* CScriptParser::parseCondition(const std::wstring& line) const
@@ -1410,15 +1422,26 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 			auto keyword = dynamic_cast<const ParseKeyword*>(list[1]);
 			if (keyword->keyword() == L"define")
 			{
-				if (list.size() < 3)
+				if (list.size() < 2)
 				{
 					_addError(ParseErrors::MissingDefine, list[1]);
 					return false;
 				}
-				if (list[2]->type() != ParseType::Keyword)
+				if (list.size() >= 3 && list[2]->type() != ParseType::Keyword)
 				{
 					_addError(ParseErrors::InvalidDefine, list[2]);
 					return false;
+				}
+
+				// #define TEST  (no value) — valid, defines the symbol as empty for #ifdef use
+				if (list.size() < 3)
+				{
+					ParseDefine* define = new ParseDefine(dynamic_cast<const ParseKeyword*>(list[1]));
+					delete symb;
+					delete keyword;
+					list.clear();
+					_defines[define->define()] = define;
+					return true;
 				}
 
 				ParseDefine* define = new ParseDefine(dynamic_cast<const ParseKeyword*>(list[2]));
@@ -1432,7 +1455,7 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 				list.erase(list.begin());
 
 				// contains variables
-				if (list.front()->type() == ParseType::Symbol && dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::OpenBracket)
+				if (!list.empty() && list.front()->type() == ParseType::Symbol && dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::OpenBracket)
 				{
 					auto bracket = dynamic_cast<const ParseSymbol*>(list.front());
 					list.erase(list.begin());
@@ -1540,6 +1563,133 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 				auto itr = _defines.find(keyword->keyword());
 				if (itr != _defines.end())
 					_defines.erase(itr);
+			}
+			else if (keyword->keyword() == L"ifdef" || keyword->keyword() == L"ifndef")
+			{
+				if (list.size() < 3 || list[2]->type() != ParseType::Keyword)
+				{
+					_addError(ParseErrors::MissingDefine, list[1]);
+					return false;
+				}
+
+				const ParseKeyword* nameKey = dynamic_cast<const ParseKeyword*>(list[2]);
+				bool isDefined = (_defines.find(nameKey->keyword()) != _defines.end());
+
+				// Optional comparison: #ifdef NAME == value  or  #ifdef NAME != value
+				bool condResult = isDefined;
+				if (list.size() >= 5 && list[3]->type() == ParseType::Symbol)
+				{
+					const ParseSymbol* op = dynamic_cast<const ParseSymbol*>(list[3]);
+					std::wstring compareVal;
+					for (size_t ci = 4; ci < list.size(); ci++)
+						compareVal += list[ci]->data();
+
+					std::wstring defineVal;
+					auto defItr = _defines.find(nameKey->keyword());
+					if (defItr != _defines.end() && !defItr->second->list().empty())
+						defineVal = defItr->second->list().front()->data();
+
+					std::wstring opStr = op->stringData();
+					if (opStr == L"==" || opStr == L"=")
+						condResult = (defineVal == compareVal);
+					else if (opStr == L"!=")
+						condResult = (defineVal != compareVal);
+					else if (opStr == L">")
+						condResult = (std::stod(defineVal) > std::stod(compareVal));
+					else if (opStr == L"<")
+						condResult = (std::stod(defineVal) < std::stod(compareVal));
+					else if (opStr == L">=")
+						condResult = (std::stod(defineVal) >= std::stod(compareVal));
+					else if (opStr == L"<=")
+						condResult = (std::stod(defineVal) <= std::stod(compareVal));
+				}
+
+				if (keyword->keyword() == L"ifndef")
+					condResult = !condResult;
+
+				_ifDefStack.push_back({ condResult, condResult });
+				list.clear();
+			}
+			else if (keyword->keyword() == L"elseif" || keyword->keyword() == L"elseifdef" || keyword->keyword() == L"elseifndef")
+			{
+				if (_ifDefStack.empty())
+				{
+					_addError(ParseErrors::MissingIf, list[1]);
+					return false;
+				}
+				if (list.size() < 3 || list[2]->type() != ParseType::Keyword)
+				{
+					_addError(ParseErrors::MissingDefine, list[1]);
+					return false;
+				}
+
+				IfDefEntry& top = _ifDefStack.back();
+				if (top.anyActive)
+				{
+					// A previous branch was already active — skip this one
+					top.active = false;
+				}
+				else
+				{
+					const ParseKeyword* nameKey = dynamic_cast<const ParseKeyword*>(list[2]);
+					bool isDefined = (_defines.find(nameKey->keyword()) != _defines.end());
+					bool condResult = isDefined;
+
+					if (list.size() >= 5 && list[3]->type() == ParseType::Symbol)
+					{
+						const ParseSymbol* op = dynamic_cast<const ParseSymbol*>(list[3]);
+						std::wstring compareVal;
+						for (size_t ci = 4; ci < list.size(); ci++)
+							compareVal += list[ci]->data();
+
+						std::wstring defineVal;
+						auto defItr = _defines.find(nameKey->keyword());
+						if (defItr != _defines.end() && !defItr->second->list().empty())
+							defineVal = defItr->second->list().front()->data();
+
+						std::wstring opStr = op->stringData();
+						if (opStr == L"==" || opStr == L"=")
+							condResult = (defineVal == compareVal);
+						else if (opStr == L"!=")
+							condResult = (defineVal != compareVal);
+						else if (opStr == L">")
+							condResult = (std::stod(defineVal) > std::stod(compareVal));
+						else if (opStr == L"<")
+							condResult = (std::stod(defineVal) < std::stod(compareVal));
+						else if (opStr == L">=")
+							condResult = (std::stod(defineVal) >= std::stod(compareVal));
+						else if (opStr == L"<=")
+							condResult = (std::stod(defineVal) <= std::stod(compareVal));
+					}
+
+					if (keyword->keyword() == L"elseifndef")
+						condResult = !condResult;
+
+					top.active = condResult;
+					if (condResult) top.anyActive = true;
+				}
+				list.clear();
+			}
+			else if (keyword->keyword() == L"else")
+			{
+				if (_ifDefStack.empty())
+				{
+					_addError(ParseErrors::MissingIf, list[1]);
+					return false;
+				}
+				IfDefEntry& top = _ifDefStack.back();
+				top.active = !top.anyActive;
+				list.clear();
+			}
+			else if (keyword->keyword() == L"endif")
+			{
+				if (_ifDefStack.empty())
+				{
+					_addError(ParseErrors::MissingIf, list[1]);
+					return false;
+				}
+				_ifDefStack.pop_back();
+				list.clear();
 			}
 			// invalid preprocessor
 			else
@@ -3250,6 +3400,10 @@ std::wstring CScriptParser::_parseDefine(const std::wstring& line)
 	std::wstring sLine = newLine;
 	for (auto itr = _defines.begin(); itr != _defines.end(); itr++)
 	{
+		// Skip defines with no replacement value — they exist only for #ifdef checks
+		if (itr->second->list().empty())
+			continue;
+
 		std::wstring replaceLine = itr->second->line().substr(itr->second->list().front()->startingPos(), itr->second->list().back()->endingPos() - itr->second->list().front()->startingPos());
 		std::wstring processLine = rest;
 		rest.clear();
@@ -3384,8 +3538,28 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 	if (_isInComment)
 		status = ParseStatus::Comment;
 
-	// check for any defines
-	std::wstring sLine = _parseDefine(line);
+	// If we're inside a skipped #ifdef block, only process lines that start
+	// with '#' so we can correctly track nested #ifdef / #endif depth.
+	bool inSkippedBlock = !_ifDefStack.empty() && !_ifDefStack.back().active;
+	if (inSkippedBlock)
+	{
+		// Check if this line is a preprocessor directive
+		std::wstring trimmed = line;
+		size_t firstNonSpace = trimmed.find_first_not_of(L" \t");
+		bool isPreprocessor = (firstNonSpace != std::wstring::npos && trimmed[firstNonSpace] == L'#');
+		if (!isPreprocessor)
+			return true; // skip the line entirely
+		// Fall through to process the preprocessor directive (for nesting)
+	}
+
+	// check for any defines — skip expansion for preprocessor lines (#ifdef, #define etc.)
+	// so that the symbol name being tested/defined doesn't get incorrectly substituted.
+	bool isPreprocessorLine = false;
+	{
+		size_t first = line.find_first_not_of(L" \t");
+		isPreprocessorLine = (first != std::wstring::npos && line[first] == L'#');
+	}
+	std::wstring sLine = isPreprocessorLine ? line : _parseDefine(line);
 
 	// pre-reserve the max space needed so we dont to keep allocing more memory
 	str.reserve(sLine.length());

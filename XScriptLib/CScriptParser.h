@@ -122,6 +122,14 @@ namespace XScript {
 		// Used by the StartBlock handler to find the correct expression when '{' follows.
 		std::map<const BaseParse*, const ParseExpression*> _createdExpressions;
 
+		// #ifdef / #ifndef / #else / #elseif / #endif conditional stack.
+		struct IfDefEntry
+		{
+			bool active;    // is the current branch being compiled?
+			bool anyActive; // has any branch in this chain already been active?
+		};
+		std::vector<IfDefEntry> _ifDefStack;
+
 		// Condition depth stack — one entry per open block.
 		// Pushed when a condition with a block opens (if, while, etc.)
 		// Popped when the matching '}' or end block is reached.
@@ -153,6 +161,7 @@ namespace XScript {
 
 		void addCurrentFile(const std::wstring& file);
 		void removeCurrentFile();
+		void addDefine(const std::wstring& name); // add a pre-defined symbol (e.g. from command line)
 		BaseParse* parseCondition(const std::wstring& line) const;
 		BaseParse* parseConstant(const std::wstring& line) const;
 		bool parseLine(size_t linePos, const std::wstring &line);
