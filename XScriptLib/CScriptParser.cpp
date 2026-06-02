@@ -3146,6 +3146,15 @@ BaseParse* CScriptParser::checkStatus(ParseStatus oldStatus, ParseStatus newStat
 	return NULL;
 }
 
+std::wstring Trim(const std::wstring& s)
+{
+	size_t start = s.find_first_not_of(L" \t\r\n");
+	if (start == std::wstring::npos)
+		return L"";
+
+	size_t end = s.find_last_not_of(L" \t\r\n");
+	return s.substr(start, end - start + 1);
+}
 
 std::wstring CScriptParser::_parseDefine(const std::wstring& line)
 {
@@ -3248,6 +3257,8 @@ std::wstring CScriptParser::_parseDefine(const std::wstring& line)
 		size_t pos = processLine.find(itr->first, startPos);
 		while (pos != std::wstring::npos)
 		{
+			rest += processLine.substr(startPos, pos - startPos);
+
 			// find any variables in brackets
 			startPos = pos + itr->first.length();
 			size_t checkPos = startPos;
@@ -3270,8 +3281,8 @@ std::wstring CScriptParser::_parseDefine(const std::wstring& line)
 					}
 					else if (!inString && processLine[checkPos] == ',')
 					{
-						variables.push_back(processLine.substr(startPos, checkPos - startPos));
-						startPos = checkPos;
+						variables.push_back(Trim(processLine.substr(startPos, checkPos - startPos)));
+						startPos = checkPos + 1;
 					}
 					checkPos++;
 				}
@@ -3283,7 +3294,7 @@ std::wstring CScriptParser::_parseDefine(const std::wstring& line)
 					break;
 				}
 
-				variables.push_back(processLine.substr(startPos, checkPos - startPos));
+				variables.push_back(Trim(processLine.substr(startPos, checkPos - startPos)));
 				startPos = checkPos + 1;
 
 				if (!variables.empty())
