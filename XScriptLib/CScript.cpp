@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "CScript.h"
+#include "XScriptLib.h"
 
 #include "BaseParse.h"
 #include "ParseFunction.h"
@@ -1175,7 +1176,13 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
         out << L"  </sval>" << std::endl;
     }
 
-    std::wstring comment = L"Compiled by XScript Compiler v0.6 - https://www.xpluginmanager.co.uk/xscript/";
+    std::wstringstream versionStream;
+    versionStream << L"Compiled by XScript Compiler v" << XSCRIPT_VERSION;
+#ifdef XSCRIPT_BETA
+    versionStream << L" BETA";
+#endif
+    versionStream << L" - https://www.xpluginmanager.co.uk/xscript/";
+    std::wstring comment = versionStream.str();
 
     // add goto positions
     if (gotos.size())

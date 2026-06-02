@@ -2,7 +2,7 @@
 
 #include "pch.h"
 
-#define XSCRIPT_VERSION		0.5f
+#define XSCRIPT_VERSION		0.6f
 #define XSCRIPT_BETA
 
 bool compileScriptFile(const std::string& filename, const std::string& out);
