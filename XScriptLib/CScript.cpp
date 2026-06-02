@@ -231,7 +231,7 @@ void CScript::addFunctionCondition(const ParseCondition* c)
 bool CScript::_addEndBlock(bool forceBlock)
 {
     _pendingEnd = false;
-	_forceEnd = false;
+    _forceEnd = false;
 
     if (!lastFunc())
         return false;
@@ -1175,10 +1175,18 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
         out << L"  </sval>" << std::endl;
     }
 
+    std::wstring comment = L"Compiled by XScript Compiler v0.6 - https://www.xpluginmanager.co.uk/xscript/";
+
     // add goto positions
     if (gotos.size())
     {
-        out << L"  <sval type=\"array\" size=\"" << gotos.size() << L"\">" << std::endl;
+        out << L"  <sval type=\"array\" size=\"" << (gotos.size() + 1) << L"\">" << std::endl;
+        out << L"    <sval type=\"array\" size=\"3\">" << std::endl;
+        out << L"      <sval type=\"int\" val=\"0\"/>" << std::endl;
+        out << L"      <sval type=\"int\" val=\"1\"/>" << std::endl;
+        out << L"      <sval type=\"string\" val=\"" << comment << "\"/>" << std::endl;
+        out << L"    </sval>" << std::endl;
+
         for (auto itr = gotos.begin(); itr != gotos.end(); itr++)
         {
             out << L"    <sval type=\"array\" size=\"2\">" << std::endl;
@@ -1190,7 +1198,15 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
         out << L"  </sval>" << std::endl;
     }
     else
-        out << L"  <sval type=\"int\" val=\"0\"/>" << std::endl;
+    {
+        out << L"  <sval type=\"array\" size=\"1\">" << std::endl;
+        out << L"    <sval type=\"array\" size=\"3\">" << std::endl;
+        out << L"      <sval type=\"int\" val=\"0\"/>" << std::endl;
+        out << L"      <sval type=\"int\" val=\"1\"/>" << std::endl;
+        out << L"      <sval type=\"string\" val=\"" << comment << "\"/>" << std::endl;
+        out << L"    </sval>" << std::endl;
+        out << L"  </sval>" << std::endl;
+    }
 
     // script command
     out << L"  <sval type=\"int\" val=\"" << _command << L"\"/>" << std::endl;
