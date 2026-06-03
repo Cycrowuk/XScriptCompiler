@@ -3,10 +3,53 @@
 //  Tests all language features and 0.6 compiler improvements
 // ============================================================
 
+// ── Script settings via preprocessor ─────────────────────────
+#DESCRIPTION "XScript Feature Test Script"
+#VERSION 1
+#COMMAND 0
+
+// ── Basic #define ─────────────────────────────────────────────
+#define MAX_COUNT 100
+#define ADD(a, b) a + b
+#define CLAMP(v, lo, hi) (v < lo) ? lo : (v > hi) ? hi : v
+
+// ── Presence-only define for #ifdef ───────────────────────────
+#define FEATURE_ENABLED
+
+// ── #ifdef / #ifndef / #elseif / #else / #endif ───────────────
+#ifdef FEATURE_ENABLED
+$debugMode = TRUE;
+#else
+$debugMode = FALSE;
+#endif
+
+#ifndef MISSING_SYMBOL
+$flag = TRUE;
+#endif
+
+#ifdef FEATURE_ENABLED
+    #define PLATFORM_VALUE 1
+#elseif MISSING_SYMBOL
+    #define PLATFORM_VALUE 2
+#else
+    #define PLATFORM_VALUE 3
+#endif
+
+// ── #ifdef with comparison ────────────────────────────────────
+#ifdef MAX_COUNT == 100
+$atMax = TRUE;
+#endif
+
+// ── Nested #ifdef ─────────────────────────────────────────────
+#ifdef FEATURE_ENABLED
+    #ifdef MAX_COUNT == 100
+    $nestedPass = TRUE;
+    #endif
+#endif
+
 // ── Basic variables and assignment ───────────────────────────
 $count = 0;
 $name = "test ship";
-$flag = TRUE;
 $empty = NULL;
 
 // ── Constants ────────────────────────────────────────────────
@@ -16,7 +59,7 @@ $owner  = ThisOwner;
 
 // ── Namespace constants ───────────────────────────────────────
 $raceFlag = Xenon;
-$page     = TextPage::Menus;
+$page     = TextPage::MiscVoice;
 
 // ── Simple if/else if/else ────────────────────────────────────
 if ($count > 10)
@@ -31,7 +74,6 @@ else
 {
     $count = 1;
 }
-
 
 // ── Nested functions as arguments (0.6) ──────────────────────
 $result = random($count + 10);
@@ -169,6 +211,10 @@ while ($i < 100)
 $i = 0;
 while ($i < 5) $i += 1;
 
+// ── Single-line while with post-run in body ──────────────────
+$i = 0;
+while ($i < 5) wait($i++);
+
 // ── Nested while loops ───────────────────────────────────────
 $i = 0;
 while ($i < 3)
@@ -217,13 +263,8 @@ $j = 5;
 $array[$i++] = --$j;
 $array[$i]   = $j++;
 
-// ── Defines ──────────────────────────────────────────────────
-
-#define MAX_COUNT 100
-#define ADD(a, b) a + b
-#define CLAMP(v, lo, hi) (v < lo) ? lo : (v > hi) ? hi : v
-
-//$limit = MAX_COUNT;
+// ── #define usage ─────────────────────────────────────────────
+$limit = MAX_COUNT;
 $sum   = ADD($count, 10);
 
 // ── Not modifier ─────────────────────────────────────────────
@@ -231,6 +272,11 @@ if not ($count > MAX_COUNT)
 {
     $count += 1;
 }
+
+// ── Conditional compilation with #define ─────────────────────
+#ifdef FEATURE_ENABLED
+$count += PLATFORM_VALUE;
+#endif
 
 // ── Return values ─────────────────────────────────────────────
 return $count;
