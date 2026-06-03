@@ -1,6 +1,8 @@
 # XScript Compiler
-### Version 0.5 BETA
+### Version 0.6 BETA
 #### X3 Farnham's Legacy Script Compiler
+
+Website: https://www.xpluginmanager.co.uk/xscript/
 
 ---
 
@@ -20,6 +22,7 @@ XScript Compiler translates human-readable XScript source files (`.xs`) into the
 
 ```
 XScriptCompiler.exe --load_data <datafile> --compile <input.xs> --out <output.xml>
+XScriptCompiler.exe --load_data <datafile> --compile <input.xs> --out <output.xml> --define:MYSYMBOL
 XScriptCompiler.exe --builddata <x3fl.xml> --out <output.dat>
 XScriptCompiler.exe --load_data <datafile> --decompile <input.xml> --out <output.xs>
 ```
@@ -37,6 +40,7 @@ XScriptCompiler.exe --load_data default_data.dat --compile myscript.xs --out mys
 | `--load_data <file>` | Path to the compiled game data file (`default_data.dat` or `x3fl.dat`) |
 | `--compile <file>` | Path to the XScript source file (`.xs`) to compile |
 | `--out <file>` | Path for the compiled XML script output |
+| `--define:NAME` | Pre-define a symbol for use with `#ifdef`. Multiple `--define:` arguments are supported. |
 
 ---
 
@@ -217,8 +221,15 @@ Named constants use the `::` namespace separator:
 
 ```xscript
 $flag = RaceFlag::NPC;
-$page = TextPage::Menus;
+$page = TextPage::MiscVoice;
 $type = ShipType::M3;
+```
+
+Race constants are top-level (no namespace):
+
+```xscript
+$race = Xenon;
+$race = Argon;
 ```
 
 **Built-in constants:**
@@ -352,6 +363,13 @@ if ($array[$ship->cargoCount])
 }
 ```
 
+Post-increment in array subscripts works correctly — the current value is used as the index and the increment fires after the operation:
+
+```xscript
+$array[$i++] = 10;   // uses $i as index, then increments $i
+$array[$i++] = 20;   // uses the incremented $i
+```
+
 **Utility functions:**
 
 ```xscript
@@ -381,6 +399,31 @@ while ($count < 10)
 
 Unlike standard X3, `do if` and `skip if` do not exist as explicit keywords — the compiler automatically selects the appropriate X3 instruction based on the size of the block.
 
+### While Loop — Increment in Condition (v0.6)
+
+`inc` and `dec` functions, and `++`/`--` operators, can appear directly in a while condition. The compiler automatically re-evaluates the condition expression before each `continue` and at the end of the loop body so the loop behaves correctly:
+
+```xscript
+// Post-increment: uses current $i, then increments
+while ($i++ < 10)
+{
+    // $i has been incremented before reaching here
+}
+
+// Pre-increment: increments $i first, then tests
+while (++$i < 10)
+{
+    // $i is already incremented
+}
+
+// Function in condition: re-evaluated each iteration
+while (arraySize($myArray) < 10)
+{
+    $myArray[$i] = $i;
+    $i += 1;
+}
+```
+
 ### Blocks
 
 Braces `{` `}` group multiple statements under a conditional. A single-statement condition does not require braces:
@@ -394,6 +437,19 @@ if ($x > 0)
 
 if ($x > 0)
     $a = 1;
+```
+
+### Break and Continue
+
+`break` exits the nearest enclosing `while` loop immediately. `continue` jumps to the next iteration:
+
+```xscript
+while ($i < 100)
+{
+    if ($i == 50) break;
+    if ($i == 25) continue;
+    $i += 1;
+}
 ```
 
 ### Return Values
@@ -446,16 +502,110 @@ initialise:
 endsub;
 ```
 
-### Defines (Macros)
+---
+
+## Preprocessor
+
+The preprocessor runs before compilation and processes directives that begin with `#`. Preprocessor lines are never passed to the compiler — they control which code is compiled and set script metadata.
+
+### Script Metadata
+
+Set the script description, version, and command ID directly in the source file:
+
+```xscript
+#DESCRIPTION "My plugin script"
+#VERSION 42
+#COMMAND 1234
+```
+
+These are equivalent to calling `setDescription`, `setVersion`, and `setCommand` in the body of the script, but placing them at the top makes the intent clear. `#COMMAND` also accepts a named object command constant.
+
+### Defines
 
 ```xscript
 #define MAX_COUNT 100
 #define ADD(a, b) a + b
+#define CLAMP(v, lo, hi) (v < lo) ? lo : (v > hi) ? hi : v
 
 $limit = MAX_COUNT;
 $sum   = ADD($x, $y);
 ```
 
+A define with no replacement value registers the symbol for `#ifdef` use:
+
+```xscript
+#define DEBUG
+```
+
+Remove a previously defined symbol:
+
+```xscript
+#undef DEBUG
+```
+
+### Conditional Compilation
+
+```xscript
+#define PLATFORM_PC
+
+#ifdef PLATFORM_PC
+$platform = 1;
+#elseif PLATFORM_LINUX
+$platform = 2;
+#else
+$platform = 0;
+#endif
+
+#ifndef DEBUG
+// Only compiled in release builds
+$logLevel = 0;
+#endif
+```
+
+**Comparison conditions** — test the value of a define, not just its presence:
+
+```xscript
+#define VERSION 2
+
+#ifdef VERSION == 2
+// compiled only when VERSION is defined and equals 2
+#endif
+
+#ifdef VERSION >= 1
+// compiled when VERSION is 1 or higher
+#endif
+```
+
+Supported comparison operators: `==`, `!=`, `>`, `<`, `>=`, `<=`
+
+**Nesting** is fully supported:
+
+```xscript
+#ifdef FEATURE_A
+    #ifdef FEATURE_B
+    // only when both are defined
+    #endif
+#endif
+```
+
+**Command-line defines** — pass `--define:NAME` when compiling to inject a symbol without modifying the source file:
+
+```
+XScriptCompiler.exe --load_data data.dat --compile script.xs --out script.xml --define:DEBUG --define:PLATFORM_PC
+```
+
+### Include Files
+
+```xscript
+#include "utils.xs"
+#include "common/helpers.xs"
+```
+
+The included file is processed inline at the point of the `#include` directive, as if its contents were written directly into the source. Paths are resolved relative to the including file's directory. Nested includes are supported. Circular includes are detected and reported as an error.
+
+All preprocessor state (`#define`, `#ifdef` depth) is shared between the including file and the included file — defines set in an included file are visible in the including file after the `#include` line, and `#ifdef`/`#endif` blocks may span include boundaries.
+
+---
 
 ## Type Checking
 
@@ -502,21 +652,23 @@ The data file is compiled from `x3fl.xml` using the data compiler tool. The bina
 
 ## VS Code Extension
 
-A Visual Studio Code extension is included (`xscript-x3fl.vsix`) providing editor support for `.xs` files.
+A Visual Studio Code extension (`xscript-x3fl-extension.zip`) provides editor support for `.xs` files.
 
 **Features:**
-- Syntax highlighting for all XScript keywords, operators, constants, and variables
+- Syntax highlighting for all XScript keywords, operators, constants, variables, and preprocessor directives
 - IntelliSense — autocomplete for functions, object methods, properties, and constants, with parameter hints and documentation from the definition file
 - Hover documentation — hover over any function or constant to see its description, parameters, and return type
 - Error and warning squiggles — compiler errors appear as red/yellow underlines directly in the editor, listed in the Problems panel (`Ctrl+Shift+M`)
-- Compile from the editor — `Ctrl+Shift+B` compiles the active file using your configured compiler settings
+- Compile from the editor — click the play button in the editor title bar, or use the right-click context menu
+- Compile on save — optionally compile automatically whenever a `.xs` file is saved
 
 **Installation:**
 
-1. Open VS Code
-2. Press `Ctrl+Shift+X` to open the Extensions panel
-3. Click the `…` menu and choose **Install from VSIX…**
-4. Select the `xscript-x3fl.vsix` file
+1. Extract `xscript-x3fl-extension.zip`
+2. Open VS Code
+3. Press `Ctrl+Shift+X` to open the Extensions panel
+4. Click the `…` menu and choose **Install from VSIX…**
+5. Select the `.vsix` file, or run `vsce package` inside the extracted folder first
 
 **Configuration:**
 
@@ -528,6 +680,7 @@ Open Settings (`Ctrl+,`) and search for `xscript` to configure:
 | `xscript.compiler.dataFile` | Path to `default_data.dat` (auto-detected if in workspace root) |
 | `xscript.compiler.outputDir` | Where compiled `.xml` files are written (defaults to same folder as the `.xs` file) |
 | `xscript.compiler.compileOnSave` | Set to `true` to compile automatically on every save |
+| `xscript.compiler.defines` | Array of symbols to pre-define, e.g. `["DEBUG", "PLATFORM_PC"]` |
 
 Place `default_data.dat` (or `x3fl.dat`) in your workspace root folder and the extension will load function definitions and constants automatically on startup.
 
@@ -535,7 +688,22 @@ Place `default_data.dat` (or `x3fl.dat`) in your workspace root folder and the e
 
 ## Version History
 
-**0.5 BETA** — Current release
+**0.6 BETA** — Current release
+- While loop condition re-evaluation — `++`/`--` and function calls in `while(...)` conditions re-evaluate correctly on each iteration
+- `break` and `continue` inside while loops
+- Nested function calls as arguments — `random($i + 10)`, `if(inc($count))`, etc.
+- `inc`/`dec` with expression arguments — `inc($i + 10)` compiles to `$i = $i + 10`
+- Post-increment in array subscripts — `$array[$i++]` uses then increments
+- Mixed increment/decrement in single expressions — `$array[$i++] = --$j`
+- `else if` with function calls in condition — temp vars correctly hoisted before the whole if/else chain
+- Preprocessor system — `#define`, `#undef`, `#ifdef`, `#ifndef`, `#elseif`, `#elseifdef`, `#elseifndef`, `#else`, `#endif` with value comparisons and nesting
+- Script metadata directives — `#DESCRIPTION`, `#VERSION`, `#COMMAND`
+- `#include` — inline file inclusion with circular include detection
+- Command-line defines — `--define:NAME` flag (multiple supported)
+- Uninitialised variable warnings now fire for variables inside function expression arguments
+- Compiler comment in compiled scripts identifies the XScript compiler version and website
+
+**0.5 BETA** — Previous release
 - Full XScript language support including arrays, compound assignment, namespace constants, and custom prefix constants
 - Two-pass compilation for correct type tracking across gosub/label boundaries
 - Object type propagation through assignments and function return values
