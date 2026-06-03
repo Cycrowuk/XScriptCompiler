@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "CScriptParser.h"
+#include <fstream>
 
 #include "CScript.h"
 #include "CScriptData.h"
@@ -174,6 +175,37 @@ void CScriptParser::addDefine(const std::wstring& name)
 	_createdData.push_back(key);
 	_createdData.push_back(define);
 	_defines[define->define()] = define;
+}
+
+bool CScriptParser::includeFile(const std::wstring& filename)
+{
+	std::wifstream infile(filename);
+	if (!infile.is_open())
+	{
+		// Emit an error — we don't have a parse node here so use a minimal stub
+		ParseKeyword stub(filename, filename);
+		_addError(ParseErrors::MissingPreprocessor, &stub);
+		return false;
+	}
+
+	addCurrentFile(filename);
+
+	std::wstring line;
+	size_t lineNum = 0;
+	bool ok = true;
+	while (std::getline(infile, line))
+	{
+		++lineNum;
+		if (!parseLine(lineNum, line))
+		{
+			ok = false;
+			break;
+		}
+	}
+
+	infile.close();
+	removeCurrentFile();
+	return ok;
 }
 
 BaseParse* CScriptParser::parseCondition(const std::wstring& line) const
@@ -1691,9 +1723,41 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 				_ifDefStack.pop_back();
 				list.clear();
 			}
+			else if (keyword->keyword() == L"include")
+			{
+				if (list.size() < 3)
+				{
+					_addError(ParseErrors::MissingPreprocessor, list[1]);
+					return false;
+				}
+
+				// Argument must be a string: #include "myfile.xs"
+				if (list[2]->type() != ParseType::String)
+				{
+					_addError(ParseErrors::InvalidPreprocessor, list[2]);
+					return false;
+				}
+
+				std::wstring includeName = dynamic_cast<const ParseString*>(list[2])->stringData();
+
+				// Resolve path relative to the current file's directory
+				std::wstring includePath = includeName;
+				if (!_currentFile.empty())
+				{
+					std::wstring currentDir = _currentFile.back();
+					size_t lastSlash = currentDir.find_last_of(L"\\/");
+					if (lastSlash != std::wstring::npos)
+						includePath = currentDir.substr(0, lastSlash + 1) + includeName;
+				}
+
+				list.clear();
+
+				if (!includeFile(includePath))
+					return false;
+			}
 			else if (keyword->keyword() == L"DESCRIPTION" ||
-				keyword->keyword() == L"VERSION" ||
-				keyword->keyword() == L"COMMAND")
+			         keyword->keyword() == L"VERSION" ||
+			         keyword->keyword() == L"COMMAND")
 			{
 				if (list.size() < 3)
 				{
@@ -5321,7 +5385,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	{
 		const ParseCondition* prevCond = nullptr;
 
-		if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
+		if(previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
 			prevCond = dynamic_cast<const ParseCondition*>(previousExpr->condition());
 		else if (previousExpr && !previousExpr->condition() && !previousExpr->list().empty() && previousExpr->list().front()->type() == ParseType::Function)
 		{

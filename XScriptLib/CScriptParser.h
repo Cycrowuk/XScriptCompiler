@@ -162,6 +162,7 @@ namespace XScript {
 		void addCurrentFile(const std::wstring& file);
 		void removeCurrentFile();
 		void addDefine(const std::wstring& name); // add a pre-defined symbol (e.g. from command line)
+		bool includeFile(const std::wstring& filename); // process an #include file inline
 		BaseParse* parseCondition(const std::wstring& line) const;
 		BaseParse* parseConstant(const std::wstring& line) const;
 		bool parseLine(size_t linePos, const std::wstring &line);
