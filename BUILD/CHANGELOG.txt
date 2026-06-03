@@ -17,3 +17,13 @@ v0.5	Updated all remaining function data
 	Various compiling fixes
 	Improved variable warnings when using gosubs
 	Added support for Visual Studio Code
+
+v0.6
+	Improved inline while conditions including nested functions
+	Fixed inc/dec commands when used in nested conditions
+	Fixed post increment/decrement when mixed with nested calls
+	Fixed else if nested conditionals
+	Added Preprocessors conditionals, #ifdef, #elseif
+	Added Preprocessor metadata, #DESCRIPTION, #VERSION, #COMMAND
+	Added #include, to include other script files
+	Improved uninitialized variable checks
