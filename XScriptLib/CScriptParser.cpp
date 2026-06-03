@@ -1691,6 +1691,61 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 				_ifDefStack.pop_back();
 				list.clear();
 			}
+			else if (keyword->keyword() == L"DESCRIPTION" ||
+				keyword->keyword() == L"VERSION" ||
+				keyword->keyword() == L"COMMAND")
+			{
+				if (list.size() < 3)
+				{
+					_addError(ParseErrors::MissingSpecialArgument, list[1]);
+					return false;
+				}
+
+				const BaseParse* arg = list[2];
+
+				if (keyword->keyword() == L"DESCRIPTION")
+				{
+					if (arg->type() != ParseType::String)
+					{
+						_addError(ParseErrors::InvalidArgumentDataType, arg);
+						return false;
+					}
+					_currentScript->setDescription(dynamic_cast<const ParseString*>(arg)->stringData());
+				}
+				else if (keyword->keyword() == L"VERSION")
+				{
+					if (arg->type() != ParseType::Integer)
+					{
+						_addError(ParseErrors::InvalidArgumentDataType, arg);
+						return false;
+					}
+					_currentScript->setVersion(dynamic_cast<const ParseInteger*>(arg)->value());
+				}
+				else if (keyword->keyword() == L"COMMAND")
+				{
+					if (arg->type() == ParseType::Constant)
+					{
+						const ParseConstant* c = dynamic_cast<const ParseConstant*>(arg);
+						if (c->dataType() != DataTypes::ObjectCommand)
+						{
+							_addError(ParseErrors::InvalidArgumentDataType, arg);
+							return false;
+						}
+						_currentScript->setCommand(c->id());
+					}
+					else if (arg->type() == ParseType::Integer)
+					{
+						_currentScript->setCommand(dynamic_cast<const ParseInteger*>(arg)->value());
+					}
+					else
+					{
+						_addError(ParseErrors::InvalidArgumentDataType, arg);
+						return false;
+					}
+				}
+
+				list.clear();
+			}
 			// invalid preprocessor
 			else
 			{
@@ -5266,7 +5321,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	{
 		const ParseCondition* prevCond = nullptr;
 
-		if(previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
+		if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
 			prevCond = dynamic_cast<const ParseCondition*>(previousExpr->condition());
 		else if (previousExpr && !previousExpr->condition() && !previousExpr->list().empty() && previousExpr->list().front()->type() == ParseType::Function)
 		{
