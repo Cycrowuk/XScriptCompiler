@@ -100,7 +100,11 @@ int main(int argc, char *argv[])
             else if (itr->first.substr(0, 7) == "define:")
             {
                 // --define:NAME  — pre-define a symbol for #ifdef use
-                defines.push_back(itr->first.substr(7));
+                std::string defineName = itr->first.substr(7);
+                if (!defineName.empty())
+                    defines.push_back(defineName);
+                else
+                    std::cout << "Warning: --define: requires a symbol name, e.g. --define:MYSYMBOL" << std::endl;
             }
             else if (itr->first == "compile")
             {

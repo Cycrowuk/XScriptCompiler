@@ -179,6 +179,17 @@ void CScriptParser::addDefine(const std::wstring& name)
 
 bool CScriptParser::includeFile(const std::wstring& filename)
 {
+	// Detect circular includes — if this file is already in the stack, bail
+	for (const auto& f : _currentFile)
+	{
+		if (f == filename)
+		{
+			ParseKeyword stub(filename, filename);
+			_addError(ParseErrors::InvalidPreprocessor, &stub);
+			return false;
+		}
+	}
+
 	std::wifstream infile(filename);
 	if (!infile.is_open())
 	{
@@ -4029,6 +4040,9 @@ void CScriptParser::resetForRealPass()
 	for (void* p : _syntheticConstants)
 		delete static_cast<ConstantData*>(p);
 	_syntheticConstants.clear();
+	_ifDefStack.clear();
+	_conditionStack.clear();
+	_createdExpressions.clear();
 }
 
 bool CScriptParser::_checkExpressionValidity(const BaseParse* parse)
@@ -4129,6 +4143,14 @@ bool CScriptParser::finalise()
 	if (!_currentDataList.empty())
 	{
 		_addError(ParseErrors::MissingSemiColonEnd, _currentDataList.back());
+		return false;
+	}
+
+	// Check for unclosed #ifdef / #ifndef blocks
+	if (!_ifDefStack.empty())
+	{
+		ParseKeyword stub(L"end of file", L"#endif");
+		_addError(ParseErrors::MissingIf, &stub);
 		return false;
 	}
 
