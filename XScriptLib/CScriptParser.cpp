@@ -3038,8 +3038,40 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 			{
 				if (expression->assignment())
 				{
-					//TODO: added 2nd expression
-					int i = 0;
+					// Second assignment in chain: $x = $y = value
+					// The last item in the current expression list is the new assignment variable ($y).
+					// Finalise the current expression ($x = $y), start a new one ($y = value).
+					if (!previous || previous->type() != ParseType::Variable)
+					{
+						error = true;
+						_addError(ParseErrors::InvalidVariable, previous ? previous : parse);
+					}
+					else
+					{
+						// Remove $y from the current expression list — it becomes the
+						// assignment target of the new inner expression, but also
+						// remains as the value in the outer expression ($x = $y).
+						ParseVariable* chainVar = const_cast<ParseVariable*>(
+							dynamic_cast<const ParseVariable*>(previous));
+
+						// Create a copy of $y for chainExpr's assignment — the original
+						// stays in expression->list() as the value for $x = $y.
+						// Owned exclusively by chainExpr via setAssignment — do NOT add to _createdData.
+						ParseVariable* chainVarCopy = new ParseVariable(*chainVar);
+
+						// Insert the new inner expression ($y = value) BEFORE the current
+						// outer expression ($x = $y) so it executes first.
+						ParseExpression* chainExpr = new ParseExpression(parse->line());
+						auto curPos = std::find(parseList.begin(), parseList.end(),
+							static_cast<const BaseParse*>(expression));
+						parseList.insert(curPos, chainExpr);
+
+						delete sym;
+						chainExpr->setAssignment(chainVarCopy);
+						previous = parse;
+						expression = chainExpr;
+						continue;
+					}
 				}
 				else
 				{
