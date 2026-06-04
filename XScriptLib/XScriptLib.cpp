@@ -1,4 +1,4 @@
-// XScriptLib.cpp : Defines the functions for the static library.
+﻿// XScriptLib.cpp : Defines the functions for the static library.
 //
 
 #include "pch.h"
@@ -155,7 +155,7 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 		str << std::setw(12) << strm.str() << " ";
 
 		std::cout << "Compile Error [#" << static_cast<unsigned int>((*itr)->error()) << "]: " << str.str();
-	
+
 		switch ((*itr)->error())
 		{
 		case ParseErrors::InternalFunctionError:
@@ -346,7 +346,28 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 	for (const auto& def : defines)
 		parser.addDefine(def);
 
-	// read the script file using the parser
+	// ── Pass 1 (pre-pass) — collect gosub variable types ──────────────────
+	parser.addCurrentFile(filename);
+	{
+		std::wifstream infile(filename);
+		std::wstring line;
+		int iLine = 0;
+		while (std::getline(infile, line))
+		{
+			++iLine;
+			if (!parser.prePassLine(iLine, line))
+				break;
+		}
+	}
+	parser.removeCurrentFile();
+
+	parser.resetForRealPass();
+
+	// Re-inject defines after reset so they're available for pass 2
+	for (const auto& def : defines)
+		parser.addDefine(def);
+
+	// ── Pass 2 (real pass) — full compile ─────────────────────────────────
 	parser.addCurrentFile(filename);
 	std::wifstream infile(filename);
 	std::wstring line;
@@ -356,7 +377,6 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 		++iLine;
 		if (!parser.parseLine(iLine, line))
 			break;
-
 	}
 	parser.removeCurrentFile();
 	infile.close();
@@ -383,7 +403,7 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 		if (f.exists() && f.isFileExtension("pck"))
 		{
 			size_t size;
-			unsigned char* readData = (unsigned char *)f.readAll(&size);
+			unsigned char* readData = (unsigned char*)f.readAll(&size);
 			if (readData)
 			{
 				size_t newSize;
