@@ -1438,6 +1438,35 @@ bool CScriptParser::_parseCompoundAssignment(std::vector<const BaseParse*>& list
 		}
 	}
 
+	// check for negative values
+	if (error) return error;
+
+	oldList = list;
+	list.clear();
+	const BaseParse* previous = NULL;
+	for (auto itr = oldList.begin(); itr != oldList.end(); itr++)
+	{
+		const BaseParse* parse = *itr;
+		if (parse->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(parse)->operType() == Operators::Subtract)
+		{
+			auto nextItr = itr + 1;
+			if (nextItr != oldList.end() && (*nextItr)->type() == ParseType::Integer && previous && previous->type() == ParseType::Operator)
+			{
+				itr = nextItr;
+				ParseInteger* intNode = const_cast<ParseInteger*>(dynamic_cast<const ParseInteger*>(*nextItr));
+				intNode->negate();
+				list.push_back(intNode);
+				delete parse; // consume the minus operator
+				previous = intNode;
+				continue;
+			}
+		}
+
+		list.push_back(parse);
+		previous = parse;
+	}
+
+
 	return !error;
 }
 
@@ -1767,8 +1796,8 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 					return false;
 			}
 			else if (keyword->keyword() == L"DESCRIPTION" ||
-			         keyword->keyword() == L"VERSION" ||
-			         keyword->keyword() == L"COMMAND")
+				keyword->keyword() == L"VERSION" ||
+				keyword->keyword() == L"COMMAND")
 			{
 				if (list.size() < 3)
 				{
@@ -2918,6 +2947,20 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 			}
 		};
 
+	auto compact = [](ParseExpression* expression)
+		{
+			if (expression->list().size() == 2)
+			{
+				if (expression->list()[0]->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(expression->list()[0])->operType() == Operators::Subtract && expression->list()[1]->type() == ParseType::Integer)
+				{
+					ParseInteger* integer = const_cast<ParseInteger*>(dynamic_cast<const ParseInteger*>(expression->list()[1]));
+					integer->negate();
+					expression->clearList();
+					expression->addParse(integer);
+				}
+			}
+		};
+
 	auto internalExpression = [](ParseExpression* expr, std::vector<const BaseParse*>& newList)
 		{
 			expr->clearList();
@@ -3257,11 +3300,22 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 						error = !_parseExpressions(expr->list(), newList);
 
 						expr->clearList();
+
 						if (newList.size() == 1)
 						{
 							auto newExpr = newList.front();
-							const_cast<BaseParse*>(newExpr)->setFromParse(expr);
-							args->addParse(const_cast<BaseParse*>(newExpr));
+							if (newExpr->type() == ParseType::Expression && dynamic_cast<const ParseExpression*>(newExpr)->size() == 1)
+							{
+								ParseExpression* iExpr = const_cast<ParseExpression*>(dynamic_cast<const ParseExpression*>(newExpr));
+								args->addParse(const_cast<BaseParse*>(iExpr->list().front()));
+								iExpr->clearList();
+								delete iExpr;
+							}
+							else
+							{
+								const_cast<BaseParse*>(newExpr)->setFromParse(expr);
+								args->addParse(const_cast<BaseParse*>(newExpr));
+							}
 							delete expr;
 						}
 						else
@@ -3291,6 +3345,8 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 		}
 	}
 
+	if (expression)
+		compact(expression);
 	if (expression)
 		finalise(expression);
 
@@ -4709,6 +4765,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	}
 
 	// validation argument datatypes
+	std::map<int, const ParseInteger*> foldedNegatives; // index → folded negative integer
 	for (int i = 0; i < func->arguments.size(); ++i)
 	{
 		const FunctionArgument& a = func->arguments[i];
@@ -4751,6 +4808,28 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		else if (arg->type() == ParseType::Expression)
 		{
 			const ParseExpression* expr = dynamic_cast<const ParseExpression*>(arg);
+
+			// If the expression is a simple unary negation of an integer literal
+			// (e.g. -1 → [Operator(-), Integer(1)]), fold it into a single negative
+			// ParseInteger and use it directly — no temp var needed.
+			if (!expr->assignment() && expr->list().size() == 2)
+			{
+				const BaseParse* first = expr->list()[0];
+				const BaseParse* second = expr->list()[1];
+				if (first->type() == ParseType::Operator && second->type() == ParseType::Integer)
+				{
+					const ParseOperator* op = dynamic_cast<const ParseOperator*>(first);
+					if (op->operType() == Operators::Subtract)
+					{
+						int negVal = -dynamic_cast<const ParseInteger*>(second)->value();
+						ParseInteger* negInt = new ParseInteger(expr->line(), negVal);
+						negInt->setFromParse(expr);
+						_createdData.push_back(negInt);
+						foldedNegatives[i] = negInt;
+						continue;
+					}
+				}
+			}
 
 			// add the generated variable assignment
 			if (!expr->assignment())
@@ -5010,7 +5089,14 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 				pardef = func->arguments[addArg].pardef;
 
 			if (functionData->arguments()->count() >= addArg)
-				_currentScript->addFunctionArgument(functionData->arguments()->get(addArg), pardef);
+			{
+				// Use folded negative integer if this argument was simplified
+				auto foldedItr = foldedNegatives.find(addArg);
+				const BaseParse* argToAdd = (foldedItr != foldedNegatives.end())
+					? static_cast<const BaseParse*>(foldedItr->second)
+					: functionData->arguments()->get(addArg);
+				_currentScript->addFunctionArgument(argToAdd, pardef);
+			}
 		}
 	}
 
@@ -5020,7 +5106,13 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	{
 		_currentScript->setFunctionUndefinedCount(static_cast<unsigned int>(functionData->arguments()->count() - func->arguments.size()));
 		for (size_t i = func->arguments.size(); i < functionData->arguments()->count(); i++)
-			_currentScript->addFunctionArgument(functionData->arguments()->get(i), ParDef::Unknown);
+		{
+			auto foldedItr = foldedNegatives.find(static_cast<int>(i));
+			const BaseParse* argToAdd = (foldedItr != foldedNegatives.end())
+				? static_cast<const BaseParse*>(foldedItr->second)
+				: functionData->arguments()->get(i);
+			_currentScript->addFunctionArgument(argToAdd, ParDef::Unknown);
+		}
 	}
 
 	if (runExpr)
@@ -5407,7 +5499,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	{
 		const ParseCondition* prevCond = nullptr;
 
-		if(previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
+		if (previousExpr && previousExpr->condition() && !previousExpr->condition()->isBlock())
 			prevCond = dynamic_cast<const ParseCondition*>(previousExpr->condition());
 		else if (previousExpr && !previousExpr->condition() && !previousExpr->list().empty() && previousExpr->list().front()->type() == ParseType::Function)
 		{

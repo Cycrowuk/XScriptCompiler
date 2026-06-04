@@ -13,6 +13,11 @@ ParseInteger::~ParseInteger()
 	DBOUT(L"<< Deleting ParseInteger: " << _line << " : " << _value);
 }
 
+void ParseInteger::negate()
+{
+	_value = -_value;
+}	
+
 int ParseInteger::value() const
 {
 	return _value;

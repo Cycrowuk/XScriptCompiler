@@ -27,3 +27,6 @@ v0.6
 	Added Preprocessor metadata, #DESCRIPTION, #VERSION, #COMMAND
 	Added #include, to include other script files
 	Improved uninitialized variable checks
+	
+v0.7
+	Fixed minus operator '-' correctly working as negative integer

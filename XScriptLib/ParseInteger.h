@@ -13,6 +13,8 @@ namespace XScript
 		ParseInteger(const std::wstring& line, int i);
 		~ParseInteger();
 
+		void negate();
+
 		DataTypes dataType() const override;
 		std::wstring stringData() const override;
 

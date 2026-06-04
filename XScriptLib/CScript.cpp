@@ -1057,7 +1057,8 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
             std::vector<const BaseParse*> args;
             _parseExpressionList(itr->arguments(), (itr->retvarID >= 0) ? (itr->arguments().begin() + itr->retvarID) : itr->arguments().end(), args);
 
-            // check for negate
+            // check for negate — only the very first non-bracket operator can be unary negation.
+            // If a variable, integer, or constant appears before the operator it is binary subtraction.
             for (auto nItr = args.begin(); nItr != args.end(); nItr++)
             {
                 if ((*nItr)->type() == ParseType::Operator)
@@ -1068,9 +1069,13 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
                         const_cast<ParseOperator*>(oper)->switchType(Operators::Negate);
                         break;
                     }
-                    else if (oper->operType() != Operators::OpenBracket && oper->operType() != Operators::CloseBracket)
-                        break;
+                    else if (oper->operType() == Operators::OpenBracket)
+                        continue; // opening bracket — keep scanning (unary minus can follow '(')
+                    else
+                        break; // any other operator means we're not at the start — stop
                 }
+                else
+                    break; // non-operator (variable, integer, constant) — stop, minus is binary
             }
 
             // compute the postfix expression
