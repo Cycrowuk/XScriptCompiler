@@ -105,6 +105,8 @@ namespace XScript {
 		bool		 _isInComment;
 		bool		 _prePassMode;
 		bool		 _subEndedOnLine;
+		bool		 _inLineContinuation;  // true when current line ends with \ (define continuation)
+		std::wstring _continuationText;    // accumulated text across continuation lines
 		int			 _prePassDepth;  // brace depth during pre-pass, endsub/return only terminates sub at depth 0
 		std::vector<std::wstring> _currentFile;
 		std::vector<std::vector<const BaseParse*>> _deferredLists;

@@ -47,6 +47,7 @@ CScriptParser::CScriptParser(const CScriptData* data) :
 	_isInComment(false),
 	_prePassMode(false),
 	_subEndedOnLine(false),
+	_inLineContinuation(false),
 	_prePassDepth(0),
 	_pVariables(&_variables)
 {
@@ -135,6 +136,8 @@ void CScriptParser::_clearData()
 	_subVariables.clear();
 	_currentSubLabel.clear();
 	_subEndedOnLine = false;
+	_inLineContinuation = false;
+	_continuationText.clear();
 	_prePassDepth = 0;
 	_pVariables = &_variables;
 	_conditionStack.clear();
@@ -2951,7 +2954,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 		{
 			if (expression->list().size() == 2)
 			{
-				if (expression->list()[0]->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(expression->list()[0])->operType() == Operators::Subtract && expression->list()[1]->type() == ParseType::Integer)
+				if(expression->list()[0]->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(expression->list()[0])->operType() == Operators::Subtract && expression->list()[1]->type() == ParseType::Integer)
 				{
 					ParseInteger* integer = const_cast<ParseInteger*>(dynamic_cast<const ParseInteger*>(expression->list()[1]));
 					integer->negate();
@@ -3348,7 +3351,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 								const_cast<BaseParse*>(newExpr)->setFromParse(expr);
 								args->addParse(const_cast<BaseParse*>(newExpr));
 							}
-							delete expr;
+							delete expr;							
 						}
 						else
 						{
@@ -3777,6 +3780,58 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 		size_t first = line.find_first_not_of(L" \t");
 		isPreprocessorLine = (first != std::wstring::npos && line[first] == L'#');
 	}
+
+	// Handle multi-line #define continuation using trailing backslash.
+	// When a #define line ends with \, accumulate it and wait for the next line.
+	if (_inLineContinuation)
+	{
+		// Append this line to the accumulated continuation text
+		std::wstring trimmed = line;
+		// Check if this line also ends with backslash
+		size_t last = trimmed.find_last_not_of(L" \t");
+		if (last != std::wstring::npos && trimmed[last] == L'\\')
+		{
+			// Another continuation line — strip the backslash and accumulate
+			_continuationText += trimmed.substr(0, last);
+			return true;
+		}
+		else
+		{
+			// Final line — complete the accumulated define and process it
+			_continuationText += trimmed;
+			std::wstring fullLine = _continuationText;
+			_continuationText.clear();
+			_inLineContinuation = false;
+			return parseLine(linePos, fullLine);
+		}
+	}
+
+	if (isPreprocessorLine)
+	{
+		// Check if this #define line ends with backslash — start continuation
+		std::wstring trimmed = line;
+		size_t last = trimmed.find_last_not_of(L" \t");
+		size_t first = trimmed.find_first_not_of(L" \t");
+		// Only handle continuation for #define lines
+		if (last != std::wstring::npos && trimmed[last] == L'\\')
+		{
+			std::wstring keyword;
+			size_t keyStart = first + 1; // skip '#'
+			size_t keyEnd = trimmed.find_first_of(L" \t", keyStart);
+			if (keyEnd != std::wstring::npos)
+				keyword = trimmed.substr(keyStart, keyEnd - keyStart);
+			else
+				keyword = trimmed.substr(keyStart);
+
+			if (keyword == L"define")
+			{
+				_continuationText = trimmed.substr(0, last); // strip backslash
+				_inLineContinuation = true;
+				return true;
+			}
+		}
+	}
+
 	std::wstring sLine = isPreprocessorLine ? line : _parseDefine(line);
 
 	// pre-reserve the max space needed so we dont to keep allocing more memory
@@ -4106,6 +4161,8 @@ void CScriptParser::resetForRealPass()
 	// Everything else is reset so the real compile starts clean.
 	_currentSubLabel.clear();
 	_subEndedOnLine = false;
+	_inLineContinuation = false;
+	_continuationText.clear();
 	_prePassDepth = 0;
 	_prePassMode = false;
 	_isInComment = false;
