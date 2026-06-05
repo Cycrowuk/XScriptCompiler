@@ -323,8 +323,12 @@ void CScript::_addVariables(const BaseParse* arg)
 
 bool CScript::addEndBlock(bool forceBlock)
 {
+    if (_pendingEnd)
+        _addEndBlock(_forceEnd);
+
     if (!lastFunc())
         return false;
+
     int count = 0;
     for (auto itr = _functions.rbegin(); itr != _functions.rend(); itr++)
     {

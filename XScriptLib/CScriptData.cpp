@@ -150,6 +150,56 @@ const Function* CScriptData::findGlobalFunction(const std::wstring& function) co
 	return NULL;
 }
 
+const Function* CScriptData::findBestGlobalFunction(const std::wstring& function, int argCount) const
+{
+	// If there are aliases (overloads) for this name, pick the best match by argument count
+	auto aliasItr = _functionAliases.find(function);
+	if (aliasItr != _functionAliases.end())
+	{
+		const Function* best = nullptr;
+		int bestDiff = INT_MAX;
+
+		// Check all alias overloads
+		for (unsigned int id : aliasItr->second)
+		{
+			if (id < _functionData.size())
+			{
+				const Function* f = &_functionData[id];
+				int fArgCount = 0;
+				for (const auto& a : f->arguments)
+					if (a.pardef != ParDef::RetVar)
+						fArgCount++;
+				int diff = std::abs(fArgCount - argCount);
+				if (diff < bestDiff)
+				{
+					bestDiff = diff;
+					best = f;
+				}
+			}
+		}
+
+		// Also consider the primary function registered under this exact name
+		auto primaryItr = _globalFunctions.find(function);
+		if (primaryItr != _globalFunctions.end())
+		{
+			const Function* f = &_functionData[primaryItr->second];
+			int fArgCount = 0;
+			for (const auto& a : f->arguments)
+				if (a.pardef != ParDef::RetVar)
+					fArgCount++;
+			int diff = std::abs(fArgCount - argCount);
+			if (diff < bestDiff)
+				best = f;
+		}
+
+		if (best)
+			return best;
+	}
+
+	// No aliases — fall back to exact name lookup
+	return findGlobalFunction(function);
+}
+
 const Function* CScriptData::getSpecialGlobalFunction(SpecialFunction func) const
 {
 	auto itr = _specialFunctions.find(func);
@@ -455,6 +505,7 @@ void CScriptData::resetData()
 	_constData.clear();
 	_functionData.clear();
 	_globalFunctions.clear();
+	_functionAliases.clear();
 	_objectFunctions.clear();
 	_objectTypeFunctions.clear();
 	_wareTypes.clear();
@@ -539,7 +590,7 @@ bool CScriptData::saveData(const std::wstring& filename)
 		return false;
 
 	// write the header
-	unsigned int dataCount = 16;
+	unsigned int dataCount = 17;
 	if (!_writeHeader(outfile, "XSCRIPTDATA", DATAVERSION, dataCount))
 		return false;
 
@@ -841,6 +892,31 @@ bool CScriptData::saveData(const std::wstring& filename)
 			return false;
 	}
 
+	// Write function aliases (overloads) — simple format: funcId (ulong) + nameSize (ushort) + name
+	{
+		unsigned int totalAliasEntries = 0;
+		for (const auto& a : _functionAliases)
+			totalAliasEntries += static_cast<unsigned int>(a.second.size());
+
+		if (!_writeHeader(outfile, "GALIAS", 1, totalAliasEntries))
+			return false;
+
+		for (const auto& a : _functionAliases)
+		{
+			for (unsigned int id : a.second)
+			{
+				unsigned long funcId = static_cast<unsigned long>(id);
+				unsigned short nameSize = static_cast<unsigned short>(a.first.size());
+				outfile.write(reinterpret_cast<char*>(&funcId), sizeof(funcId));
+				outfile.write(reinterpret_cast<char*>(&nameSize), sizeof(nameSize));
+				if (outfile.bad())
+					return false;
+				for (wchar_t c : a.first)
+					outfile.write(reinterpret_cast<char*>(&c), sizeof(wchar_t));
+			}
+		}
+	}
+
 	if (!_writeHeader(outfile, "OFUNC", 1, static_cast<unsigned int>(_objectFunctions.size())))
 		return false;
 
@@ -1012,6 +1088,7 @@ bool CScriptData::loadData(const std::wstring& filename)
 			_functionData.resize(_functionData.size() + header.count);
 		else if (header.header == "OFUNC")
 			_functionData.resize(_functionData.size() + header.count);
+		// GALIAS does not resize _functionData — IDs reference already-loaded GFUNC entries
 
 		for (unsigned int j = 0; j < header.count; j++)
 		{
@@ -1280,6 +1357,28 @@ bool CScriptData::loadData(const std::wstring& filename)
 			{
 				if (!_readFunction(infile, _globalFunctions))
 					return false;
+			}
+			else if (header.header == "GALIAS")
+			{
+				// Read one alias entry: funcId (ulong) + nameSize (ushort) + name (wchars)
+				unsigned long funcId;
+				infile.read(reinterpret_cast<char*>(&funcId), sizeof(funcId));
+				if (infile.bad())
+					return false;
+				unsigned short nameSize;
+				infile.read(reinterpret_cast<char*>(&nameSize), sizeof(nameSize));
+				if (infile.bad())
+					return false;
+				std::wstring aliasName;
+				aliasName.resize(nameSize);
+				for (unsigned short ci = 0; ci < nameSize; ci++)
+				{
+					wchar_t c;
+					infile.read(reinterpret_cast<char*>(&c), sizeof(wchar_t));
+					aliasName[ci] = c;
+				}
+				if (!aliasName.empty())
+					_functionAliases[aliasName].push_back(static_cast<unsigned int>(funcId));
 			}
 			else if (header.header == "OFUNC")
 			{

@@ -424,7 +424,7 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 	{
 		for (rapidxml::xml_node<wchar_t>* childNode = node->first_node(L"Function"); childNode; childNode = childNode->next_sibling(L"Function"))
 		{
-			std::wstring id, desc, code, object, specialType;
+			std::wstring id, desc, code, object, specialType, alias;
 			bool allowKeyword = false;
 			for (rapidxml::xml_attribute<wchar_t>* attr = childNode->first_attribute(); attr; attr = attr->next_attribute())
 			{
@@ -441,6 +441,8 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 					specialType = attr->value();
 				else if (name == L"allowkeyword")
 					allowKeyword = _parseBoolean(attr->value());
+				else if (name == L"alias")
+					alias = attr->value();
 			}
 
 			if (id.empty())
@@ -645,6 +647,10 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 						throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, Functions, duplicate global function name '", code, L"'")).c_str());
 					_pData->_globalFunctions[code] = iID;
 				}
+
+				// If this function has an alias, register it as an overload under that alias name
+				if (!alias.empty())
+					_pData->_functionAliases[alias].push_back(iID);
 			}
 		}
 	}

@@ -1866,7 +1866,7 @@
 				<Argument pardef="NUMBER" description="Priority level to set"/>
 			</Arguments>
 		</Function>
-		<Function id="110" name="randomFrom" description="Get a random number between 2 values">
+		<Function id="110" name="randomFrom" alias="random" description="Get a random number between 2 values">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>

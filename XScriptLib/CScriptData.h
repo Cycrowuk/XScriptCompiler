@@ -253,6 +253,7 @@ namespace XScript
 	private:
 		std::map<const std::wstring, InternalFunctions> _internalFunctions;
 		std::map<const std::wstring, unsigned int> _globalFunctions;
+		std::map<const std::wstring, std::vector<unsigned int>> _functionAliases; // alias name → list of overload function IDs
 		std::map<DataTypes, std::map<const std::wstring, unsigned int>> _objectTypeFunctions;
 		std::map<const std::wstring, unsigned int> _objectFunctions;
 		std::map<const std::wstring, Properties> _objectProperties;
@@ -299,6 +300,7 @@ namespace XScript
 
 		InternalFunctions findInternalFunction(const std::wstring& function) const;
 		const Function* findGlobalFunction(const std::wstring& function) const;
+		const Function* findBestGlobalFunction(const std::wstring& function, int argCount) const;
 		const Function* getSpecialGlobalFunction(SpecialFunction func) const;
 		const Function* findObjectFunction(const std::wstring& function) const;
 		const Properties* findObjectProperty(const std::wstring& prop) const;

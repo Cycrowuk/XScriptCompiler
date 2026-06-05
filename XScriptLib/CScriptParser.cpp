@@ -4607,8 +4607,9 @@ bool CScriptParser::_runFunction(ParseFunction* function, InlineState inlineStat
 		if (ifunc != InternalFunctions::Unknown)
 			return _doInternalFunction(ifunc, function->arguments());
 
-		// now check any global functions
-		const Function* func = _data->findGlobalFunction(function->function());
+		// now check any global functions — use findBestGlobalFunction to resolve overloads
+		int argCount = function->arguments() ? static_cast<int>(function->arguments()->count()) : 0;
+		const Function* func = _data->findBestGlobalFunction(function->function(), argCount);
 		if (func)
 			return _doGlobalFunction(func, function, inlineState);
 
