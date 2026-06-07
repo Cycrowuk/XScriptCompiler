@@ -6,6 +6,9 @@
 
 #define DATAVERSION 1
 
+// Forward declarations
+namespace XScript { class ParseArguments; }
+
 namespace XScript
 {
 	enum class SpecialFunction
@@ -254,6 +257,7 @@ namespace XScript
 		std::map<const std::wstring, InternalFunctions> _internalFunctions;
 		std::map<const std::wstring, unsigned int> _globalFunctions;
 		std::map<const std::wstring, std::vector<unsigned int>> _functionAliases; // alias name → list of overload function IDs
+		std::map<const std::wstring, std::map<const std::wstring, unsigned int>> _namespaceFunctions; // namespace → (alias → functionId)
 		std::map<DataTypes, std::map<const std::wstring, unsigned int>> _objectTypeFunctions;
 		std::map<const std::wstring, unsigned int> _objectFunctions;
 		std::map<const std::wstring, Properties> _objectProperties;
@@ -300,7 +304,8 @@ namespace XScript
 
 		InternalFunctions findInternalFunction(const std::wstring& function) const;
 		const Function* findGlobalFunction(const std::wstring& function) const;
-		const Function* findBestGlobalFunction(const std::wstring& function, int argCount) const;
+		const Function* findBestGlobalFunction(const std::wstring& function, int argCount, const ParseArguments* args = nullptr) const;
+		const Function* findNamespaceFunction(const std::wstring& ns, const std::wstring& alias) const;
 		const Function* getSpecialGlobalFunction(SpecialFunction func) const;
 		const Function* findObjectFunction(const std::wstring& function) const;
 		const Properties* findObjectProperty(const std::wstring& prop) const;

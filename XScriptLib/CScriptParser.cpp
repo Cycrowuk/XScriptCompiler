@@ -2406,7 +2406,7 @@ bool CScriptParser::parseConstants(const std::vector<const BaseParse*>& list, st
 		}
 		else if ((*itr)->type() == ParseType::Namespace)
 		{
-			// if next is brackets, then assume its a function
+			// if next is brackets, pass through — parseFunctions will handle the function call
 			if ((itr + 1) != list.end() && (*(itr + 1))->type() == ParseType::Brackets)
 			{
 				newList.push_back(*itr);
@@ -2427,13 +2427,11 @@ bool CScriptParser::parseConstants(const std::vector<const BaseParse*>& list, st
 				previous = constant;
 				continue;
 			}
-			else
-			{
-				_addError(ParseErrors::UnknownConstant, ns);
-				delete ns;
-				error = true;
-				continue;
-			}
+
+			_addError(ParseErrors::UnknownConstant, ns);
+			delete ns;
+			error = true;
+			continue;
 		}
 		else if ((*itr)->type() == ParseType::Brackets)
 		{
@@ -2796,6 +2794,49 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 						continue;
 					}
 				}
+			}
+			parseList.insert(parseList.begin(), parse);
+		}
+		else if (parse->type() == ParseType::Namespace)
+		{
+			const ParseNamespace* ns = dynamic_cast<const ParseNamespace*>(parse);
+			if (previous && previous->type() == ParseType::Brackets)
+			{
+				ParseBrackets* brackets = const_cast<ParseBrackets*>(dynamic_cast<const ParseBrackets*>(previous));
+
+				// Look up the namespace function to get the real global name
+				const Function* fn = _data->findNamespaceFunction(ns->namespaceString(), ns->keyword());
+				std::wstring funcName = fn ? fn->name : ns->keyword();
+
+				ParseFunction* func = new ParseFunction(ns->line(), funcName);
+				func->setPosition(ns->startingPos(), brackets->endingPos());
+				func->setLinePosition(ns->linePos());
+				func->setFile(_currentFile.back());
+				func->setData(CombineStrings(ns->data(), brackets->data()));
+
+				ParseArguments* args = new ParseArguments(brackets->line());
+				args->setFromParse(brackets);
+				func->setArguments(args);
+				parseList.erase(parseList.begin());
+				parseList.insert(parseList.begin(), func);
+				function = func;
+
+				delete ns;
+
+				auto fail = args->addArguments(brackets);
+				brackets->clear();
+				delete brackets;
+
+				if (fail)
+				{
+					delete args;
+					func->setArguments(NULL);
+					_errors.push_back(fail);
+					error = true;
+				}
+
+				previous = parse;
+				continue;
 			}
 			parseList.insert(parseList.begin(), parse);
 		}
@@ -4609,7 +4650,7 @@ bool CScriptParser::_runFunction(ParseFunction* function, InlineState inlineStat
 
 		// now check any global functions — use findBestGlobalFunction to resolve overloads
 		int argCount = function->arguments() ? static_cast<int>(function->arguments()->count()) : 0;
-		const Function* func = _data->findBestGlobalFunction(function->function(), argCount);
+		const Function* func = _data->findBestGlobalFunction(function->function(), argCount, function->arguments());
 		if (func)
 			return _doGlobalFunction(func, function, inlineState);
 

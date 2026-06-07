@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "CScriptData.h"
+#include "ParseArguments.h"
 
 #include "ScriptDataReader.h"
 #include "../XLib/XLib.h"
@@ -150,54 +151,80 @@ const Function* CScriptData::findGlobalFunction(const std::wstring& function) co
 	return NULL;
 }
 
-const Function* CScriptData::findBestGlobalFunction(const std::wstring& function, int argCount) const
+const Function* CScriptData::findBestGlobalFunction(const std::wstring& function, int argCount, const ParseArguments* args) const
 {
-	// If there are aliases (overloads) for this name, pick the best match by argument count
+	// Helper: score how well a function's argument pardefs match the provided parse arguments.
+	// Higher score = better match. Used when arg counts are equal.
+	// Rule: CALLNAME pardef (id=7) prefers ParseString; non-CALLNAME prefers non-string.
+	static constexpr int PARDEF_CALLNAME = 7;
+	auto scoreFunction = [&](const Function* f) -> int
+	{
+		if (!args) return 0;
+		int score = 0;
+		int checkCount = min(static_cast<int>(args->count()), static_cast<int>(f->arguments.size()));
+		for (int ai = 0; ai < checkCount; ai++)
+		{
+			const BaseParse* arg = args->get(ai);
+			bool isCallName = (static_cast<int>(f->arguments[ai].pardef) == PARDEF_CALLNAME);
+			bool isString   = (arg->type() == ParseType::String);
+			if (isCallName && isString)    score += 2;  // CALLNAME strongly prefers string literal
+			else if (isCallName && !isString) score -= 2; // penalise CALLNAME for non-string arg
+			else if (!isCallName && isString) score -= 1; // slight penalty for string into normal pardef
+		}
+		return score;
+	};
+
+	auto countArgs = [](const Function* f) -> int {
+		int n = 0;
+		for (const auto& a : f->arguments)
+			if (a.pardef != ParDef::RetVar) n++;
+		return n;
+	};
+
+	// If there are aliases (overloads) for this name, pick the best match
 	auto aliasItr = _functionAliases.find(function);
 	if (aliasItr != _functionAliases.end())
 	{
 		const Function* best = nullptr;
 		int bestDiff = INT_MAX;
+		int bestScore = INT_MIN;
 
-		// Check all alias overloads
-		for (unsigned int id : aliasItr->second)
-		{
-			if (id < _functionData.size())
+		auto consider = [&](const Function* f) {
+			int diff = std::abs(countArgs(f) - argCount);
+			int score = scoreFunction(f);
+			if (diff < bestDiff || (diff == bestDiff && score > bestScore))
 			{
-				const Function* f = &_functionData[id];
-				int fArgCount = 0;
-				for (const auto& a : f->arguments)
-					if (a.pardef != ParDef::RetVar)
-						fArgCount++;
-				int diff = std::abs(fArgCount - argCount);
-				if (diff < bestDiff)
-				{
-					bestDiff = diff;
-					best = f;
-				}
+				bestDiff = diff;
+				bestScore = score;
+				best = f;
 			}
-		}
+		};
 
-		// Also consider the primary function registered under this exact name
+		for (unsigned int id : aliasItr->second)
+			if (id < _functionData.size())
+				consider(&_functionData[id]);
+
 		auto primaryItr = _globalFunctions.find(function);
 		if (primaryItr != _globalFunctions.end())
-		{
-			const Function* f = &_functionData[primaryItr->second];
-			int fArgCount = 0;
-			for (const auto& a : f->arguments)
-				if (a.pardef != ParDef::RetVar)
-					fArgCount++;
-			int diff = std::abs(fArgCount - argCount);
-			if (diff < bestDiff)
-				best = f;
-		}
+			consider(&_functionData[primaryItr->second]);
 
 		if (best)
 			return best;
 	}
 
-	// No aliases — fall back to exact name lookup
 	return findGlobalFunction(function);
+}
+
+const Function* CScriptData::findNamespaceFunction(const std::wstring& ns, const std::wstring& alias) const
+{
+	auto nsItr = _namespaceFunctions.find(ns);
+	if (nsItr != _namespaceFunctions.end())
+	{
+		auto fnItr = nsItr->second.find(alias);
+		if (fnItr != nsItr->second.end())
+			return &_functionData[fnItr->second];
+	}
+	return nullptr;
 }
 
 const Function* CScriptData::getSpecialGlobalFunction(SpecialFunction func) const
@@ -506,6 +533,7 @@ void CScriptData::resetData()
 	_functionData.clear();
 	_globalFunctions.clear();
 	_functionAliases.clear();
+	_namespaceFunctions.clear();
 	_objectFunctions.clear();
 	_objectTypeFunctions.clear();
 	_wareTypes.clear();
@@ -590,7 +618,7 @@ bool CScriptData::saveData(const std::wstring& filename)
 		return false;
 
 	// write the header
-	unsigned int dataCount = 17;
+	unsigned int dataCount = 18;
 	if (!_writeHeader(outfile, "XSCRIPTDATA", DATAVERSION, dataCount))
 		return false;
 
@@ -913,6 +941,33 @@ bool CScriptData::saveData(const std::wstring& filename)
 					return false;
 				for (wchar_t c : a.first)
 					outfile.write(reinterpret_cast<char*>(&c), sizeof(wchar_t));
+			}
+		}
+	}
+
+	// Write namespace function entries — funcId + nsNameSize + nsName + aliasSize + alias
+	{
+		unsigned int totalNsEntries = 0;
+		for (const auto& ns : _namespaceFunctions)
+			totalNsEntries += static_cast<unsigned int>(ns.second.size());
+
+		if (!_writeHeader(outfile, "NSFUNC", 1, totalNsEntries))
+			return false;
+
+		for (const auto& ns : _namespaceFunctions)
+		{
+			for (const auto& fn : ns.second)
+			{
+				unsigned long funcId = static_cast<unsigned long>(fn.second);
+				unsigned short nsSize  = static_cast<unsigned short>(ns.first.size());
+				unsigned short aliSize = static_cast<unsigned short>(fn.first.size());
+				outfile.write(reinterpret_cast<char*>(&funcId), sizeof(funcId));
+				outfile.write(reinterpret_cast<char*>(&nsSize),  sizeof(nsSize));
+				if (outfile.bad()) return false;
+				for (wchar_t c : ns.first)  outfile.write(reinterpret_cast<char*>(&c), sizeof(wchar_t));
+				outfile.write(reinterpret_cast<char*>(&aliSize), sizeof(aliSize));
+				if (outfile.bad()) return false;
+				for (wchar_t c : fn.first)  outfile.write(reinterpret_cast<char*>(&c), sizeof(wchar_t));
 			}
 		}
 	}
@@ -1379,6 +1434,25 @@ bool CScriptData::loadData(const std::wstring& filename)
 				}
 				if (!aliasName.empty())
 					_functionAliases[aliasName].push_back(static_cast<unsigned int>(funcId));
+			}
+			else if (header.header == "NSFUNC")
+			{
+				// Read one namespace entry: funcId (ulong) + nsSize (ushort) + ns + aliSize (ushort) + alias
+				unsigned long funcId;
+				infile.read(reinterpret_cast<char*>(&funcId), sizeof(funcId));
+				if (infile.bad()) return false;
+				unsigned short nsSize;
+				infile.read(reinterpret_cast<char*>(&nsSize), sizeof(nsSize));
+				if (infile.bad()) return false;
+				std::wstring nsName(nsSize, L'\0');
+				for (unsigned short ci = 0; ci < nsSize; ci++) { wchar_t c; infile.read(reinterpret_cast<char*>(&c), sizeof(wchar_t)); nsName[ci] = c; }
+				unsigned short aliSize;
+				infile.read(reinterpret_cast<char*>(&aliSize), sizeof(aliSize));
+				if (infile.bad()) return false;
+				std::wstring aliasName(aliSize, L'\0');
+				for (unsigned short ci = 0; ci < aliSize; ci++) { wchar_t c; infile.read(reinterpret_cast<char*>(&c), sizeof(wchar_t)); aliasName[ci] = c; }
+				if (!nsName.empty() && !aliasName.empty())
+					_namespaceFunctions[nsName][aliasName] = static_cast<unsigned int>(funcId);
 			}
 			else if (header.header == "OFUNC")
 			{

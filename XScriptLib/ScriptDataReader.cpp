@@ -424,7 +424,7 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 	{
 		for (rapidxml::xml_node<wchar_t>* childNode = node->first_node(L"Function"); childNode; childNode = childNode->next_sibling(L"Function"))
 		{
-			std::wstring id, desc, code, object, specialType, alias;
+			std::wstring id, desc, code, object, specialType, alias, nsName, nsAlias;
 			bool allowKeyword = false;
 			for (rapidxml::xml_attribute<wchar_t>* attr = childNode->first_attribute(); attr; attr = attr->next_attribute())
 			{
@@ -443,6 +443,10 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 					allowKeyword = _parseBoolean(attr->value());
 				else if (name == L"alias")
 					alias = attr->value();
+				else if (name == L"namespace")
+					nsName = attr->value();
+				else if (name == L"namespaceAlias")
+					nsAlias = attr->value();
 			}
 
 			if (id.empty())
@@ -651,6 +655,14 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 				// If this function has an alias, register it as an overload under that alias name
 				if (!alias.empty())
 					_pData->_functionAliases[alias].push_back(iID);
+
+				// If this function belongs to a namespace, register it there
+				// Use namespaceAlias if provided, otherwise fall back to the function's own name
+				if (!nsName.empty())
+				{
+					std::wstring nsKey = nsAlias.empty() ? code : nsAlias;
+					_pData->_namespaceFunctions[nsName][nsKey] = iID;
+				}
 			}
 		}
 	}
