@@ -1853,6 +1853,56 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 
 				list.clear();
 			}
+			else if (keyword->keyword() == L"datatype")
+			{
+				// #datatype $varname DATATYPE_X
+				// #datatype $varname DATATYPE_X|DATATYPE_Y
+				// Sets the type hint for $varname so object method resolution works correctly.
+				if (list.size() < 4)
+				{
+					_addError(ParseErrors::MissingSpecialArgument, list[1]);
+					return false;
+				}
+				if (list[2]->type() != ParseType::Variable)
+				{
+					_addError(ParseErrors::InvalidVariable, list[2]);
+					return false;
+				}
+
+				const ParseVariable* var = dynamic_cast<const ParseVariable*>(list[2]);
+				std::unordered_set<DataTypes> types;
+
+				// Collect all datatype tokens — separated by '|' symbols
+				for (size_t ti = 3; ti < list.size(); ti++)
+				{
+					const BaseParse* token = list[ti];
+					// Skip '|' operator tokens (separators)
+					if (token->type() == ParseType::Operator)
+						continue;
+					if (token->type() == ParseType::Symbol)
+						continue;
+
+					// Resolve the datatype name
+					std::wstring dtName = token->data();
+					const DataTypeData* dtData = _data->findDatatype(dtName);
+					if (dtData)
+					{
+						types.insert(dtData->id);
+					}
+					else
+					{
+						ParseFail* fail = new ParseFail(token, ParseErrors::InvalidArgumentDataType);
+						fail->addData(dtName);
+						_errors.push_back(fail);
+						return false;
+					}
+				}
+
+				if (!types.empty())
+					(*_pVariables)[var->name()] = types;
+
+				list.clear();
+			}
 			// invalid preprocessor
 			else
 			{
@@ -2995,7 +3045,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 		{
 			if (expression->list().size() == 2)
 			{
-				if(expression->list()[0]->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(expression->list()[0])->operType() == Operators::Subtract && expression->list()[1]->type() == ParseType::Integer)
+				if (expression->list()[0]->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(expression->list()[0])->operType() == Operators::Subtract && expression->list()[1]->type() == ParseType::Integer)
 				{
 					ParseInteger* integer = const_cast<ParseInteger*>(dynamic_cast<const ParseInteger*>(expression->list()[1]));
 					integer->negate();
@@ -3392,7 +3442,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 								const_cast<BaseParse*>(newExpr)->setFromParse(expr);
 								args->addParse(const_cast<BaseParse*>(newExpr));
 							}
-							delete expr;							
+							delete expr;
 						}
 						else
 						{

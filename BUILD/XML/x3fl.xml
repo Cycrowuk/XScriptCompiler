@@ -1655,7 +1655,7 @@
 				<Argument pardef="NUMBER" description="The time in ms"/>
 			</Arguments>
 		</Function>
-		<Function id="106" name="random" description="gets a random number number between 0 and {ARG}">
+		<Function id="106" name="random" namespace="utils" description="gets a random number number between 0 and {ARG}">
 			<Example>$rnd = random(10);</Example>
 			<Arguments>
 				<ReturnValue type="if">
@@ -1866,7 +1866,7 @@
 				<Argument pardef="NUMBER" description="Priority level to set"/>
 			</Arguments>
 		</Function>
-		<Function id="110" name="randomFrom" alias="random" description="Get a random number between 2 values">
+		<Function id="110" name="randomFrom" alias="random" namespace="utils" description="Get a random number between 2 values">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
@@ -7380,13 +7380,13 @@
 			</Arguments>
 			<Example>if $ship->isCivilian() { ... }</Example>
 		</Function>
-		<Function id="1354" name="wingDisband" description="Disbands the specified wing, removing all ships from it and destroying the wing.">
+		<Function id="1354" name="disbandWing" description="Disbands the specified wing, removing all ships from it and destroying the wing." namespace="wings" namespaceAlias="disband">
 			<Arguments>
 				<Argument pardef="61" description="Wing handle to disband"/>
 			</Arguments>
-			<Example>wingDisband($wing)</Example>
+			<Example>disbandWing($wing)</Example>
 		</Function>
-		<Function id="1355" name="wingFindByName" description="Finds a wing by its name and owner race. Returns the wing handle if found.">
+		<Function id="1355" name="findWingByName" alias="findWing" description="Finds a wing by its name and owner race. Returns the wing handle if found.">
 			<Arguments>
 				<ReturnValue type="if">
 					<ReturnValue>65559</ReturnValue>
@@ -7394,7 +7394,7 @@
 				<Argument pardef="11" description="Wing name to search for"/>
 				<Argument pardef="RACE" description="Owner race filter"/>
 			</Arguments>
-			<Example>$wing = wingFindByName("My Wing", RACE.Argon)</Example>
+			<Example>$wing = findWing("My Wing", RACE.Argon)</Example>
 		</Function>
 		<Function id="1356" name="wingGetShipArray" description="Gets an array of all ships currently in the specified wing.">
 			<Arguments>
@@ -7435,7 +7435,7 @@
 			</Arguments>
 			<Example>$wings = getAllWings()</Example>
 		</Function>
-		<Function id="1361" name="wingFindByID" description="Finds a wing by its numeric ID. Returns the wing handle if found.">
+		<Function id="1361" name="findWingFindByID" alias="findWing" description="Finds a wing by its numeric ID. Returns the wing handle if found.">
 			<Arguments>
 				<ReturnValue type="if">
 					<ReturnValue>65559</ReturnValue>
@@ -8951,7 +8951,7 @@
 			</Arguments>
 			<Example>$ship->audioSpeakArray($audioLines, 0)</Example>
 		</Function>
-		<Function id="1511" name="registerHotkeyByName" description="Registers a hotkey using a display name string (not a text ID). Returns the assigned hotkey ID.">
+		<Function id="1511" name="registerHotkeyByName" alias="registerHotkey" description="Registers a hotkey using a display name string (not a text ID). Returns the assigned hotkey ID.">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
@@ -9802,7 +9802,7 @@
 			</Arguments>
 			<Example>if scriptExists("my.script") { ... }</Example>
 		</Function>
-		<Function id="1601" name="registerHotkeyByTextID" description="Registers a hotkey using text page and ID numbers for display, linked to a script. Returns the hotkey ID.">
+		<Function id="1601" name="registerHotkeyByTextID" alias="registerHotkey" description="Registers a hotkey using text page and ID numbers for display, linked to a script. Returns the hotkey ID.">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
@@ -9822,7 +9822,7 @@
 			</Arguments>
 			<Example>$index = findHotkeyIndex("my.hotkey.script")</Example>
 		</Function>
-		<Function id="1603" name="registerHotkeyByTextIDAndName" description="Registers a hotkey using text page/ID for display and a string name for the script. Returns the hotkey ID.">
+		<Function id="1603" name="registerHotkeyByTextIDAndName" alias="registerHotkey" description="Registers a hotkey using text page/ID for display and a string name for the script. Returns the hotkey ID.">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
@@ -10780,7 +10780,7 @@
 			</Arguments>
 			<Example>$remaining = $hq->hqGetReverseEngRemaining()</Example>
 		</Function>
-		<Function id="1695" name="hqCanBeReverseEnged" description="Returns true if the specified ship can currently be reverse engineered at the HQ.">
+		<Function id="1695" name="hqCanBeReverseEnged" alias="canBeReverseEnged" description="Returns true if the specified ship can currently be reverse engineered at the HQ.">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_STATION</RefObjectType>
@@ -10793,7 +10793,7 @@
 			</Arguments>
 			<Example>if $hq->hqCanBeReverseEnged($ship, false) { ... }</Example>
 		</Function>
-		<Function id="1696" name="hqCanBeReverseEngedByType" description="Returns true if the specified ship type can be reverse engineered at the HQ (blueprint eligibility check).">
+		<Function id="1696" name="hqCanBeReverseEngedByType" alias="canBeReverseEnged" description="Returns true if the specified ship type can be reverse engineered at the HQ (blueprint eligibility check).">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_STATION</RefObjectType>
