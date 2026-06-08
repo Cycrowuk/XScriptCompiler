@@ -1863,13 +1863,29 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 					_addError(ParseErrors::MissingSpecialArgument, list[1]);
 					return false;
 				}
-				if (list[2]->type() != ParseType::Variable)
+
+				// At preprocessor time, variables may still be ParseKeyword (with $ prefix)
+				// rather than ParseVariable — accept both
+				std::wstring varName;
+				if (list[2]->type() == ParseType::Variable)
+				{
+					varName = dynamic_cast<const ParseVariable*>(list[2])->name();
+				}
+				else if (list[2]->type() == ParseType::Keyword)
+				{
+					const ParseKeyword* kw = dynamic_cast<const ParseKeyword*>(list[2]);
+					if (kw->keyword().empty() || kw->keyword()[0] != L'$')
+					{
+						_addError(ParseErrors::InvalidVariable, list[2]);
+						return false;
+					}
+					varName = kw->keyword();
+				}
+				else
 				{
 					_addError(ParseErrors::InvalidVariable, list[2]);
 					return false;
 				}
-
-				const ParseVariable* var = dynamic_cast<const ParseVariable*>(list[2]);
 				std::unordered_set<DataTypes> types;
 
 				// Collect all datatype tokens — separated by '|' symbols
@@ -1899,7 +1915,7 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 				}
 
 				if (!types.empty())
-					(*_pVariables)[var->name()] = types;
+					(*_pVariables)[varName] = types;
 
 				list.clear();
 			}
