@@ -14,7 +14,8 @@ ScriptRead::ScriptRead(CScriptData *data) : _pData(data),
 	_version(0),
 	_engine(0),
 	_command(0),
-	_inserted(0)
+	_inserted(0),
+	_useNamespace(false)
 {
 
 }
@@ -305,7 +306,19 @@ bool ScriptRead::write(const std::wstring& outfile)
 				if (!itr->refobj.empty())
 					out << itr->refobj << "->";
 
-				out << itr->data->name;
+				// Write function name — optionally as Namespace::alias
+				if (_useNamespace && itr->data)
+				{
+					auto nsPair = _pData->findNamespaceForFunction(itr->data->id);
+					if (!nsPair.first.empty())
+						out << nsPair.first << L"::" << nsPair.second;
+					else
+						out << itr->data->name;
+				}
+				else
+				{
+					out << itr->data->name;
+				}
 				if (isSpecial)
 					out << L" ";
 				else

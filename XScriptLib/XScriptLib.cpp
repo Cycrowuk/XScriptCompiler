@@ -1,4 +1,4 @@
-﻿// XScriptLib.cpp : Defines the functions for the static library.
+// XScriptLib.cpp : Defines the functions for the static library.
 //
 
 #include "pch.h"
@@ -155,7 +155,7 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 		str << std::setw(12) << strm.str() << " ";
 
 		std::cout << "Compile Error [#" << static_cast<unsigned int>((*itr)->error()) << "]: " << str.str();
-
+	
 		switch ((*itr)->error())
 		{
 		case ParseErrors::InternalFunctionError:
@@ -403,7 +403,7 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 		if (f.exists() && f.isFileExtension("pck"))
 		{
 			size_t size;
-			unsigned char* readData = (unsigned char*)f.readAll(&size);
+			unsigned char* readData = (unsigned char *)f.readAll(&size);
 			if (readData)
 			{
 				size_t newSize;
@@ -444,22 +444,33 @@ bool compileScriptFile(const std::string& filename, const std::string& out)
 }
 
 
-bool decompileScriptFile(const std::wstring& filename, const std::wstring& output)
+bool decompileScriptFile(const std::wstring& filename, const std::wstring& output, bool useNamespace)
 {
 	if (!g_scriptData)
 		throw std::exception("Unable to Compile script, No game data loaded");
 
-	// load the script data
 	XScript::ScriptRead reader(g_scriptData);
+	reader.setUseNamespace(useNamespace);
 
 	bool success = reader.read(filename);
 	if (success)
 		success = reader.write(output);
 	return success;
 }
+
+bool decompileScriptFile(const std::wstring& filename, const std::wstring& output)
+{
+	return decompileScriptFile(filename, output, false);
+}
+
+bool decompileScriptFile(const std::string& filename, const std::string& output, bool useNamespace)
+{
+	return decompileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(output), useNamespace);
+}
+
 bool decompileScriptFile(const std::string& filename, const std::string& output)
 {
-	return decompileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(output));
+	return decompileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(output), false);
 }
 bool loadData(const std::wstring& dataFile)
 {

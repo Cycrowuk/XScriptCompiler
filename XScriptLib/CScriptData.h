@@ -306,6 +306,8 @@ namespace XScript
 		const Function* findGlobalFunction(const std::wstring& function) const;
 		const Function* findBestGlobalFunction(const std::wstring& function, int argCount, const ParseArguments* args = nullptr) const;
 		const Function* findNamespaceFunction(const std::wstring& ns, const std::wstring& alias) const;
+		/** Returns {namespace, alias} for a function ID if it belongs to a namespace, or {"",""} */
+		std::pair<std::wstring, std::wstring> findNamespaceForFunction(unsigned int funcId) const;
 		const Function* getSpecialGlobalFunction(SpecialFunction func) const;
 		const Function* findObjectFunction(const std::wstring& function) const;
 		const Properties* findObjectProperty(const std::wstring& prop) const;

@@ -40,10 +40,13 @@ namespace XScript
 
 		unsigned int _inserted;
 		CScriptData* _pData;
+		bool _useNamespace; // when true, emit Namespace::alias instead of bare function name
 
 	public:
 		ScriptRead(CScriptData *data);
 		~ScriptRead();
+
+		void setUseNamespace(bool use) { _useNamespace = use; }
 
 		bool read(const std::wstring& filename);
 		bool write(const std::wstring& output);

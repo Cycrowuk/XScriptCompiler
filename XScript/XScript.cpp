@@ -62,6 +62,8 @@ int main(int argc, char *argv[])
         std::cout << "\t\t - Compiles with a pre-defined symbol (multiple --define:NAME arguments supported)" << std::endl;
         std::cout << "\t" << exe << " --load_data <datafile> --decompile <my.script.xml> --out <out.XScript>" << std::endl;
         std::cout << "\t\t - Decompiles a game script file into an XScript file" << std::endl;
+        std::cout << "\t" << exe << " --load_data <datafile> --decompile <my.script.xml> --out <out.XScript> --usenamespace" << std::endl;
+        std::cout << "\t\t - Decompiles using namespace syntax (e.g. Utils::random instead of random)" << std::endl;
         std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat>" << std::endl;
         std::cout << "\t\t - Builds a game data file from an xml reference" << std::endl;
         std::cout << "\t" << exe << " --load_data <datafile> --exportudl" << std::endl;
@@ -90,6 +92,7 @@ int main(int argc, char *argv[])
         CommandType type = CommandType::None;
         CommandType setType = CommandType::None;
         std::vector<std::string> defines;
+        bool useNamespace = false;
 
         for (auto itr = commands.begin(); itr != commands.end(); itr++)
         {
@@ -111,6 +114,10 @@ int main(int argc, char *argv[])
                 outputNeeded = true;
                 setType = CommandType::Compile;
                 file = itr->second;
+            }
+            else if (itr->first == "usenamespace")
+            {
+                useNamespace = true;
             }
             else if (itr->first == "decompile")
             {
@@ -194,7 +201,7 @@ int main(int argc, char *argv[])
             break;
         case CommandType::Decompile:
             std::cout << "Decompiling script: " << file << "...  ";
-            if (!decompileScriptFile(file, output))
+            if (!decompileScriptFile(file, output, useNamespace))
             {
                 std::cout << "FAILED" << std::endl;
                 return 1;

@@ -12,6 +12,8 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 
 bool decompileScriptFile(const std::string& filename, const std::string& output);
 bool decompileScriptFile(const std::wstring& filename, const std::wstring& output);
+bool decompileScriptFile(const std::string& filename, const std::string& output, bool useNamespace);
+bool decompileScriptFile(const std::wstring& filename, const std::wstring& output, bool useNamespace);
 
 bool loadData(const std::wstring& dataFile);
 bool loadData(const std::string& dataFile);

@@ -227,6 +227,19 @@ const Function* CScriptData::findNamespaceFunction(const std::wstring& ns, const
 	return nullptr;
 }
 
+std::pair<std::wstring, std::wstring> CScriptData::findNamespaceForFunction(unsigned int funcId) const
+{
+	for (const auto& ns : _namespaceFunctions)
+	{
+		for (const auto& fn : ns.second)
+		{
+			if (fn.second == funcId)
+				return { ns.first, fn.first };
+		}
+	}
+	return { L"", L"" };
+}
+
 const Function* CScriptData::getSpecialGlobalFunction(SpecialFunction func) const
 {
 	auto itr = _specialFunctions.find(func);
