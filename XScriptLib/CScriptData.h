@@ -4,7 +4,7 @@
 #define SUBTYPE(typecode) ((typecode) & 0xFFFF)							/**< Get the subtype of a type code. */
 #define TYPECODE(maintype,subtype) (((maintype)<<16) | (subtype))		/**< Combine \a maintype and \a subtype in one integer. */
 
-#define DATAVERSION 1
+#define DATAVERSION 2
 
 // Forward declarations
 namespace XScript { class ParseArguments; }
@@ -18,6 +18,31 @@ namespace XScript
 		SetArray,
 		SetArrayDouble,
 		SetArrayFromArray,
+	};
+
+	/** A single line in a macro's expansion routine */
+	struct MacroRoutineLine
+	{
+		enum class Type { Expression, StartBlock, EndBlock, BlockCommands };
+		Type         type;
+		std::wstring text; // for Expression — template with %ARG0%, %ARG1%, $0, $1 etc.
+
+		// Optional function calls whose return values substitute $0, $1 etc.
+		struct FuncArg
+		{
+			unsigned int funcId;   // function to call
+			int          argPos;   // which passed macro argument to pass (-1 = none)
+		};
+		std::vector<FuncArg> funcArgs;
+	};
+
+	/** A function macro defined in x3fl.xml — expands to XScript source at compile time */
+	struct MacroData
+	{
+		std::wstring                  name;
+		std::vector<std::wstring>     argNames; // positional argument names
+		bool                          hasBlock; // true if routine contains <BlockCommands/>
+		std::vector<MacroRoutineLine> routine;
 	};
 
 	struct GameData
@@ -258,6 +283,7 @@ namespace XScript
 		std::map<const std::wstring, unsigned int> _globalFunctions;
 		std::map<const std::wstring, std::vector<unsigned int>> _functionAliases; // alias name → list of overload function IDs
 		std::map<const std::wstring, std::map<const std::wstring, unsigned int>> _namespaceFunctions; // namespace → (alias → functionId)
+		std::map<const std::wstring, MacroData> _macros; // function macros
 		std::map<DataTypes, std::map<const std::wstring, unsigned int>> _objectTypeFunctions;
 		std::map<const std::wstring, unsigned int> _objectFunctions;
 		std::map<const std::wstring, Properties> _objectProperties;
@@ -308,6 +334,8 @@ namespace XScript
 		const Function* findNamespaceFunction(const std::wstring& ns, const std::wstring& alias) const;
 		/** Returns {namespace, alias} for a function ID if it belongs to a namespace, or {"",""} */
 		std::pair<std::wstring, std::wstring> findNamespaceForFunction(unsigned int funcId) const;
+		/** Returns the macro with the given name, or nullptr */
+		const MacroData* findMacro(const std::wstring& name) const;
 		const Function* getSpecialGlobalFunction(SpecialFunction func) const;
 		const Function* findObjectFunction(const std::wstring& function) const;
 		const Properties* findObjectProperty(const std::wstring& prop) const;

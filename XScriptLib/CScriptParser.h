@@ -1,7 +1,7 @@
 #pragma once
 
 /*
-* 
+*
 *	Format for datatypes
 *		$variable
 *		[Constant]
@@ -13,6 +13,9 @@
 */
 
 #include "BaseParse.h"
+
+// Forward declarations for types used by pointer only in this header
+namespace XScript { struct MacroData; }
 
 namespace XScript {
 	class CScript;
@@ -87,8 +90,8 @@ namespace XScript {
 	class CScriptParser
 	{
 	private:
-		CScript*				_currentScript;
-		const CScriptData*		_data;
+		CScript* _currentScript;
+		const CScriptData* _data;
 
 		std::map<const std::wstring, std::unordered_set<DataTypes>> _variables;
 		std::map<const std::wstring, std::unordered_set<DataTypes>>* _pVariables; // points to _variables or current sub map
@@ -107,6 +110,17 @@ namespace XScript {
 		bool		 _subEndedOnLine;
 		bool		 _inLineContinuation;  // true when current line ends with \ (define continuation)
 		std::wstring _continuationText;    // accumulated text across continuation lines
+
+		// Macro expansion state
+		struct MacroCallState
+		{
+			const MacroData* macro;
+			std::vector<std::wstring> args;    // substituted argument strings
+			std::vector<std::wstring> body;    // captured body lines (for BlockCommands)
+			int                       depth;   // brace depth counter for body capture
+			bool                      inBody;  // currently capturing body lines
+		};
+		std::vector<MacroCallState> _macroStack; // supports nested macros
 		int			 _prePassDepth;  // brace depth during pre-pass, endsub/return only terminates sub at depth 0
 		std::vector<std::wstring> _currentFile;
 		std::vector<std::vector<const BaseParse*>> _deferredLists;
@@ -145,7 +159,8 @@ namespace XScript {
 			size_t whilePostRunCount; // number of post-run functions to duplicate
 			std::vector<const BaseParse*> whilePostRunNodes; // ParseFunction* nodes for inc/dec
 			ConditionEntry(ConditionType t, const ParseExpression* expr = nullptr)
-				: type(t), whileExpression(expr), whilePostRunStart(0), whilePostRunCount(0) {}
+				: type(t), whileExpression(expr), whilePostRunStart(0), whilePostRunCount(0) {
+			}
 		};
 		std::vector<ConditionEntry> _conditionStack;
 
@@ -153,11 +168,11 @@ namespace XScript {
 		static BaseParse* CopyParse(const BaseParse* parse);
 
 	public:
-		CScriptParser(const CScriptData *data);
+		CScriptParser(const CScriptData* data);
 		~CScriptParser();
 
 		CScript* currentScript() const;
-		const std::vector<const ParseFail *>& errorData() const;
+		const std::vector<const ParseFail*>& errorData() const;
 		bool hasWarnings() const;
 		const std::vector<Warnings>& warnings() const;
 
@@ -165,16 +180,17 @@ namespace XScript {
 		void removeCurrentFile();
 		void addDefine(const std::wstring& name); // add a pre-defined symbol (e.g. from command line)
 		bool includeFile(const std::wstring& filename); // process an #include file inline
+		bool _expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<std::wstring>& body);
 		BaseParse* parseCondition(const std::wstring& line) const;
 		BaseParse* parseConstant(const std::wstring& line) const;
-		bool parseLine(size_t linePos, const std::wstring &line);
-		bool prePassLine(size_t linePos, const std::wstring &line);
+		bool parseLine(size_t linePos, const std::wstring& line);
+		bool prePassLine(size_t linePos, const std::wstring& line);
 		void resetForRealPass();
 		bool finalise();
 
 	private:
 		std::wstring _parseDefine(const std::wstring& line);
-		bool _checkListOrder(const BaseParse *parse, ParseErrors errorType);
+		bool _checkListOrder(const BaseParse* parse, ParseErrors errorType);
 		bool _checkListOrder(const std::vector<const BaseParse*>& list, ParseErrors errorType);
 		bool findProperties(const std::vector<const BaseParse*>& list, std::vector<const BaseParse*>& newList);
 		bool parseProperties(const std::vector<const BaseParse*>& list, std::vector<const BaseParse*>& newList);
@@ -193,7 +209,7 @@ namespace XScript {
 		bool _checkExpressionValidity(const std::vector<const BaseParse*>& list, bool topLevel);
 		bool _checkExpressionValidity(const BaseParse* parse);
 
-		std::vector<const BaseParse*>::iterator addBracket(std::vector<const BaseParse*>::iterator startItr, const std::vector<const BaseParse*> &list, ParseBrackets* currentBracket);
+		std::vector<const BaseParse*>::iterator addBracket(std::vector<const BaseParse*>::iterator startItr, const std::vector<const BaseParse*>& list, ParseBrackets* currentBracket);
 
 		void _clearData();
 
@@ -238,10 +254,9 @@ namespace XScript {
 		ParseVariable* _generateTempVariable(const BaseParse* source);
 		std::wstring _makeTempVarName(); // returns $VarGenWhile.N inside a while, else $VarGen.N
 
-		Warnings &_addWarning(ParseWarnings type, const BaseParse *parse);
+		Warnings& _addWarning(ParseWarnings type, const BaseParse* parse);
 		ParseFail* _addError(ParseErrors error, const BaseParse* parse);
-		void _errorArgumentDatatype(const ParseArguments *arguments, unsigned int i, DataTypes wanted);
+		void _errorArgumentDatatype(const ParseArguments* arguments, unsigned int i, DataTypes wanted);
 		std::wstring _formatString(DataTypes dt, const std::wstring& str);
 	};
-
 }

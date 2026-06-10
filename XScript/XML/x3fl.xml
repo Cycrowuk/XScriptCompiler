@@ -25888,11 +25888,14 @@
 				<Expression value="%ARG1%_counter = 0"/>
 				<Expression value="while(%ARG1%_counter < $0)">
 					<FunctionArgument id="131">
-						<PassedArgument pos="0"/>
+						<PassedArgument pos="1"/>
 					</FunctionArgument>					
 				</Expression>
-				<Expression value="{"/>
-				<Expression value="}"/>
+				<Block>
+					<Expression value="%ARG0% = %ARG1%[%ARG1%_counter]"/>
+					<Expression value="inc(%ARG1%_counter)"/>
+					<BlockCommands/>
+				</Block>
 			</Routine>
 		</Macro>
 		<FunctionMacro name="arrayPopBack" function="136" description="Removes the last entry from the array">

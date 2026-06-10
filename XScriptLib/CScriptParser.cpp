@@ -138,6 +138,7 @@ void CScriptParser::_clearData()
 	_subEndedOnLine = false;
 	_inLineContinuation = false;
 	_continuationText.clear();
+	_macroStack.clear();
 	_prePassDepth = 0;
 	_pVariables = &_variables;
 	_conditionStack.clear();
@@ -220,6 +221,121 @@ bool CScriptParser::includeFile(const std::wstring& filename)
 	infile.close();
 	removeCurrentFile();
 	return ok;
+}
+
+bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<std::wstring>& body)
+{
+	// Helper: substitute %ARG0%, %ARG1% etc. with the actual argument strings
+	auto substitute = [&](const std::wstring& tmpl) -> std::wstring
+		{
+			std::wstring result = tmpl;
+			for (size_t i = 0; i < args.size(); i++)
+			{
+				std::wstring placeholder = L"%ARG" + std::to_wstring(i) + L"%";
+				size_t pos = 0;
+				while ((pos = result.find(placeholder, pos)) != std::wstring::npos)
+				{
+					result.replace(pos, placeholder.size(), args[i]);
+					pos += args[i].size();
+				}
+			}
+			return result;
+		};
+
+	// Replay each routine line
+	bool anyError = false;
+	for (const MacroRoutineLine& rline : macro->routine)
+	{
+		bool ok = true;
+		switch (rline.type)
+		{
+		case MacroRoutineLine::Type::Expression:
+		{
+			std::wstring expanded = substitute(rline.text);
+
+			// Substitute $0, $1 etc. using FunctionArgument entries
+			// Each $N is replaced with a generated temp variable that holds the
+			// result of calling the specified function with the specified argument
+			if (!rline.funcArgs.empty())
+			{
+				for (size_t fi = 0; fi < rline.funcArgs.size(); fi++)
+				{
+					const MacroRoutineLine::FuncArg& fa = rline.funcArgs[fi];
+					const Function* fn = _data->getFunction(fa.funcId);
+					if (!fn) continue;
+
+					// Build the function call string: funcName(arg)
+					std::wstring callArg;
+					if (fa.argPos >= 0 && fa.argPos < static_cast<int>(args.size()))
+						callArg = args[fa.argPos];
+
+					// Generate a unique temp variable name
+					std::wstring tempVar = L"$_macro_" + fn->name + L"_" + std::to_wstring(fi);
+
+					// Emit: $tempVar = funcName(arg);
+					std::wstring assignLine = tempVar + L" = " + fn->name + L"(" + callArg + L");";
+					if (!parseLine(0, assignLine))
+						return false;
+
+					// Replace $N in expanded with the temp variable
+					std::wstring placeholder = L"$" + std::to_wstring(fi);
+					size_t pos = 0;
+					while ((pos = expanded.find(placeholder, pos)) != std::wstring::npos)
+					{
+						expanded.replace(pos, placeholder.size(), tempVar);
+						pos += tempVar.size();
+					}
+				}
+			}
+
+			// Determine if semicolon is needed
+			bool needsSemicolon = !expanded.empty()
+				&& expanded.back() != L';'
+				&& expanded.back() != L'{'
+				&& expanded.back() != L'}';
+			if (needsSemicolon)
+			{
+				std::wstring trimmed = expanded;
+				size_t first = trimmed.find_first_not_of(L" \t");
+				if (first != std::wstring::npos)
+				{
+					std::wstring word;
+					size_t pos = first;
+					while (pos < trimmed.size() && iswalpha(trimmed[pos]))
+						word += trimmed[pos++];
+					if (word == L"while" || word == L"whilenot" ||
+						word == L"if" || word == L"ifnot" ||
+						word == L"else")
+						needsSemicolon = false;
+				}
+			}
+			if (needsSemicolon)
+				expanded += L";";
+			ok = parseLine(0, expanded);
+			break;
+		}
+		case MacroRoutineLine::Type::StartBlock:
+			ok = parseLine(0, L"{");
+			break;
+		case MacroRoutineLine::Type::EndBlock:
+			ok = parseLine(0, L"}");
+			break;
+		case MacroRoutineLine::Type::BlockCommands:
+			// Replay the captured body lines
+			for (const std::wstring& bodyLine : body)
+			{
+				// Skip empty/whitespace-only lines
+				if (bodyLine.find_first_not_of(L" \t\r\n") == std::wstring::npos)
+					continue;
+				bool bodyOk = parseLine(0, bodyLine);
+				if (!bodyOk)
+					anyError = true;
+			}
+			break;
+		}
+		if (!ok) anyError = true;
+	}
+	return !anyError;
 }
 
 BaseParse* CScriptParser::parseCondition(const std::wstring& line) const
@@ -2778,6 +2894,123 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 			{
 				ParseBrackets* brackets = const_cast<ParseBrackets*>(dynamic_cast<const ParseBrackets*>(previous));
 
+				// ── Check for macro call ──────────────────────────────────────
+				const MacroData* macro = _data->findMacro(keyword->keyword());
+				if (macro)
+				{
+					// Extract argument strings from brackets (comma-separated items)
+					std::vector<std::wstring> macroArgs;
+					std::wstring currentArg;
+					int depth = 0;
+					for (const BaseParse* item : brackets->constList())
+					{
+						if (item->type() == ParseType::Symbol)
+						{
+							const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(item);
+							if (sym->symbol() == SymbolType::Comma && depth == 0)
+							{
+								// Trim whitespace
+								size_t s = currentArg.find_first_not_of(L" \t");
+								size_t e = currentArg.find_last_not_of(L" \t");
+								if (s != std::wstring::npos)
+									macroArgs.push_back(currentArg.substr(s, e - s + 1));
+								else
+									macroArgs.push_back(L"");
+								currentArg.clear();
+								continue;
+							}
+							else if (sym->symbol() == SymbolType::OpenBracket) depth++;
+							else if (sym->symbol() == SymbolType::CloseBracket) depth--;
+						}
+						currentArg += item->data();
+					}
+					// Last arg
+					{
+						size_t s = currentArg.find_first_not_of(L" \t");
+						size_t e = currentArg.find_last_not_of(L" \t");
+						if (s != std::wstring::npos)
+							macroArgs.push_back(currentArg.substr(s, e - s + 1));
+					}
+
+					delete keyword;
+					// Remove the brackets from parseList
+					if (!parseList.empty()) parseList.erase(parseList.begin());
+					delete brackets;
+
+					if (macro->hasBlock)
+					{
+						// Push state — body lines will be captured in parseLine
+						MacroCallState state;
+						state.macro = macro;
+						state.args = macroArgs;
+						state.depth = 0;
+						state.inBody = false;
+						_macroStack.push_back(state);
+
+						// Check if '{' or a single-statement body follows on the same line
+						bool foundBlock = false;
+						std::wstring singleBody;
+
+						for (auto rem = parseList.begin(); rem != parseList.end(); ++rem)
+						{
+							if ((*rem)->type() == ParseType::Symbol &&
+								dynamic_cast<const ParseSymbol*>(*rem)->symbol() == SymbolType::StartBlock)
+							{
+								// Consume the { — start body capture immediately
+								_macroStack.back().inBody = true;
+								_macroStack.back().depth = 1;
+								delete* rem;
+								++rem;
+								// Any remaining items after { are the first statement
+								if (rem != parseList.end())
+								{
+									std::wstring firstBodyLine;
+									for (auto rest = rem; rest != parseList.end(); ++rest)
+									{
+										firstBodyLine += (*rest)->data();
+										auto next = rest; ++next;
+										if (next != parseList.end())
+											firstBodyLine += L" ";
+										delete* rest;
+									}
+									if (!firstBodyLine.empty())
+										_macroStack.back().body.push_back(firstBodyLine + L";");
+								}
+								foundBlock = true;
+								parseList.clear();
+								break;
+							}
+							// Accumulate non-brace items as potential single-statement body
+							if (!singleBody.empty()) singleBody += L" ";
+							singleBody += (*rem)->data();
+							delete* rem;
+						}
+						parseList.clear();
+
+						// If no { was found but there are items, it's a single-statement body
+						// — expand immediately without waiting for parseLine
+						if (!foundBlock && !singleBody.empty())
+						{
+							std::vector<std::wstring> body = { singleBody + L";" };
+							std::vector<std::wstring> args = _macroStack.back().args;
+							const MacroData* m = _macroStack.back().macro;
+							_macroStack.pop_back();
+							if (!_expandMacro(m, args, body))
+								error = true;
+						}
+						break;
+					}
+					else
+					{
+						// No block — expand immediately
+						if (!_expandMacro(macro, macroArgs, {}))
+							error = true;
+					}
+
+					previous = parse;
+					continue;
+				}
+
 				// create the new function parse
 				ParseFunction* func = new ParseFunction(keyword->line(), keyword->keyword());
 				func->setPosition(keyword->startingPos(), brackets->endingPos());
@@ -3866,7 +4099,83 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 	if (_isInComment)
 		status = ParseStatus::Comment;
 
-	// If we're inside a skipped #ifdef block, only process lines that start
+	// ── Macro body capture ────────────────────────────────────────────────────
+	if (!_macroStack.empty())
+	{
+		MacroCallState& state = _macroStack.back();
+
+		if (!state.inBody)
+		{
+			// Waiting for the opening brace
+			std::wstring trimmed = line;
+			size_t first = trimmed.find_first_not_of(L" \t");
+			if (first != std::wstring::npos && trimmed[first] == L'{')
+			{
+				state.inBody = true;
+				state.depth = 1;
+				// If there's content after the { on the same line, buffer it
+				std::wstring rest = trimmed.substr(first + 1);
+				size_t rFirst = rest.find_first_not_of(L" \t");
+				if (rFirst != std::wstring::npos)
+				{
+					// Check if this single line also closes the block
+					for (wchar_t c : rest)
+					{
+						if (c == L'{') state.depth++;
+						else if (c == L'}') state.depth--;
+					}
+					if (state.depth <= 0)
+					{
+						// Single-line body
+						std::wstring bodyLine = rest.substr(0, rest.find_last_not_of(L" \t}") + 1);
+						if (!bodyLine.empty())
+							state.body.push_back(bodyLine);
+						const MacroData* macro = state.macro;
+						std::vector<std::wstring> args = state.args;
+						std::vector<std::wstring> body = state.body;
+						_macroStack.pop_back();
+						return _expandMacro(macro, args, body);
+					}
+					state.body.push_back(rest);
+				}
+				return true;
+			}
+			else if (first != std::wstring::npos)
+			{
+				// No brace — treat the whole line as a single-statement body
+				const MacroData* macro = state.macro;
+				std::vector<std::wstring> args = state.args;
+				std::vector<std::wstring> body = { trimmed };
+				_macroStack.pop_back();
+				return _expandMacro(macro, args, body);
+			}
+			// Empty line — keep waiting
+		}
+		else
+		{
+			// Counting braces to track nesting depth
+			for (wchar_t c : line)
+			{
+				if (c == L'{') state.depth++;
+				else if (c == L'}') state.depth--;
+			}
+
+			if (state.depth <= 0)
+			{
+				// Closing brace reached — expand
+				const MacroData* macro = state.macro;
+				std::vector<std::wstring> args = state.args;
+				std::vector<std::wstring> body = state.body;
+				_macroStack.pop_back();
+				return _expandMacro(macro, args, body);
+			}
+			else
+			{
+				state.body.push_back(line);
+				return true;
+			}
+		}
+	}
 	// with '#' so we can correctly track nested #ifdef / #endif depth.
 	bool inSkippedBlock = !_ifDefStack.empty() && !_ifDefStack.back().active;
 	if (inSkippedBlock)
@@ -4270,6 +4579,7 @@ void CScriptParser::resetForRealPass()
 	_subEndedOnLine = false;
 	_inLineContinuation = false;
 	_continuationText.clear();
+	_macroStack.clear();
 	_prePassDepth = 0;
 	_prePassMode = false;
 	_isInComment = false;

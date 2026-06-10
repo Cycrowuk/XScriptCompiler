@@ -240,6 +240,14 @@ std::pair<std::wstring, std::wstring> CScriptData::findNamespaceForFunction(unsi
 	return { L"", L"" };
 }
 
+const MacroData* CScriptData::findMacro(const std::wstring& name) const
+{
+	auto itr = _macros.find(name);
+	if (itr != _macros.end())
+		return &itr->second;
+	return nullptr;
+}
+
 const Function* CScriptData::getSpecialGlobalFunction(SpecialFunction func) const
 {
 	auto itr = _specialFunctions.find(func);
@@ -547,6 +555,7 @@ void CScriptData::resetData()
 	_globalFunctions.clear();
 	_functionAliases.clear();
 	_namespaceFunctions.clear();
+	_macros.clear();
 	_objectFunctions.clear();
 	_objectTypeFunctions.clear();
 	_wareTypes.clear();
@@ -631,7 +640,7 @@ bool CScriptData::saveData(const std::wstring& filename)
 		return false;
 
 	// write the header
-	unsigned int dataCount = 18;
+	unsigned int dataCount = 19;
 	if (!_writeHeader(outfile, "XSCRIPTDATA", DATAVERSION, dataCount))
 		return false;
 
@@ -1130,6 +1139,56 @@ bool CScriptData::saveData(const std::wstring& filename)
 		}
 	}
 
+	// Write macros — name + args + routine lines
+	{
+		if (!_writeHeader(outfile, "MACRO", 1, static_cast<unsigned int>(_macros.size())))
+			return false;
+
+		for (const auto& m : _macros)
+		{
+			const MacroData& macro = m.second;
+			unsigned short nameSize    = static_cast<unsigned short>(macro.name.size());
+			unsigned short argCount    = static_cast<unsigned short>(macro.argNames.size());
+			unsigned short routineCount = static_cast<unsigned short>(macro.routine.size());
+			unsigned char  hasBlock    = macro.hasBlock ? 1 : 0;
+
+			outfile.write(reinterpret_cast<const char*>(&nameSize),     sizeof(nameSize));
+			if (!WriteWideString(outfile, macro.name)) return false;
+			outfile.write(reinterpret_cast<const char*>(&argCount),     sizeof(argCount));
+			outfile.write(reinterpret_cast<const char*>(&routineCount), sizeof(routineCount));
+			outfile.write(reinterpret_cast<const char*>(&hasBlock),     sizeof(hasBlock));
+			if (outfile.bad()) return false;
+
+			for (const auto& argName : macro.argNames)
+			{
+				unsigned short argNameSize = static_cast<unsigned short>(argName.size());
+				outfile.write(reinterpret_cast<const char*>(&argNameSize), sizeof(argNameSize));
+				if (!WriteWideString(outfile, argName)) return false;
+			}
+
+			for (const auto& rline : macro.routine)
+			{
+				unsigned char  rtype    = static_cast<unsigned char>(rline.type);
+				unsigned short textSize = static_cast<unsigned short>(rline.text.size());
+				unsigned short funcArgCount = static_cast<unsigned short>(rline.funcArgs.size());
+				outfile.write(reinterpret_cast<const char*>(&rtype),       sizeof(rtype));
+				outfile.write(reinterpret_cast<const char*>(&textSize),    sizeof(textSize));
+				outfile.write(reinterpret_cast<const char*>(&funcArgCount),sizeof(funcArgCount));
+				if (outfile.bad()) return false;
+				if (textSize > 0)
+					if (!WriteWideString(outfile, rline.text)) return false;
+				for (const auto& fa : rline.funcArgs)
+				{
+					unsigned long  fid    = static_cast<unsigned long>(fa.funcId);
+					short          argPos = static_cast<short>(fa.argPos);
+					outfile.write(reinterpret_cast<const char*>(&fid),    sizeof(fid));
+					outfile.write(reinterpret_cast<const char*>(&argPos), sizeof(argPos));
+					if (outfile.bad()) return false;
+				}
+			}
+		}
+	}
+
 	outfile.close();
 	return true;
 }
@@ -1140,9 +1199,9 @@ bool CScriptData::loadData(const std::wstring& filename)
 	if (!infile || !infile.is_open())
 		return false;
 
-	DataFileHeader mainheader = _readHeader(infile, DATAVERSION);
-	if (!mainheader.success || mainheader.header != "XSCRIPTDATA")
-		return false;
+	DataFileHeader mainheader = _readHeader(infile, 0); // read without version check
+	if (!mainheader.success || mainheader.header != "XSCRIPTDATA" || mainheader.version != DATAVERSION)
+		return false; // wrong version — rebuild the .dat with --builddata
 
 	for (unsigned int i = 0; i < mainheader.count; i++)
 	{
@@ -1596,6 +1655,76 @@ bool CScriptData::loadData(const std::wstring& filename)
 					_constData[entry.code].setStrData(entry.strID);
 				}
 			}
+			else if (header.header == "MACRO")
+			{
+				// Read one macro per inner loop iteration
+				MacroData macro;
+				macro.hasBlock = false;
+
+				unsigned short nameSize;
+				infile.read(reinterpret_cast<char*>(&nameSize), sizeof(nameSize));
+				if (infile.bad()) return false;
+				macro.name = ReadWideString(infile, nameSize);
+
+				unsigned short argCount;
+				infile.read(reinterpret_cast<char*>(&argCount), sizeof(argCount));
+				if (infile.bad()) return false;
+
+				unsigned short routineCount;
+				infile.read(reinterpret_cast<char*>(&routineCount), sizeof(routineCount));
+				if (infile.bad()) return false;
+
+				unsigned char hasBlock;
+				infile.read(reinterpret_cast<char*>(&hasBlock), sizeof(hasBlock));
+				if (infile.bad()) return false;
+				macro.hasBlock = (hasBlock != 0);
+
+				for (unsigned short ai = 0; ai < argCount; ai++)
+				{
+					unsigned short argNameSize;
+					infile.read(reinterpret_cast<char*>(&argNameSize), sizeof(argNameSize));
+					if (infile.bad()) return false;
+					macro.argNames.push_back(ReadWideString(infile, argNameSize));
+				}
+
+				for (unsigned short ri = 0; ri < routineCount; ri++)
+				{
+					MacroRoutineLine rline;
+					unsigned char rtype;
+					infile.read(reinterpret_cast<char*>(&rtype), sizeof(rtype));
+					if (infile.bad()) return false;
+					rline.type = static_cast<MacroRoutineLine::Type>(rtype);
+
+					unsigned short textSize;
+					infile.read(reinterpret_cast<char*>(&textSize), sizeof(textSize));
+					if (infile.bad()) return false;
+
+					unsigned short funcArgCount;
+					infile.read(reinterpret_cast<char*>(&funcArgCount), sizeof(funcArgCount));
+					if (infile.bad()) return false;
+
+					if (textSize > 0)
+						rline.text = ReadWideString(infile, textSize);
+
+					for (unsigned short fi = 0; fi < funcArgCount; fi++)
+					{
+						MacroRoutineLine::FuncArg fa;
+						unsigned long fid;
+						short argPos;
+						infile.read(reinterpret_cast<char*>(&fid),    sizeof(fid));
+						infile.read(reinterpret_cast<char*>(&argPos), sizeof(argPos));
+						if (infile.bad()) return false;
+						fa.funcId = static_cast<unsigned int>(fid);
+						fa.argPos = static_cast<int>(argPos);
+						rline.funcArgs.push_back(fa);
+					}
+
+					macro.routine.push_back(rline);
+				}
+
+				if (!macro.name.empty())
+					_macros[macro.name] = macro;
+			}
 		}
 	}
 
@@ -1629,7 +1758,7 @@ CScriptData::DataFileHeader CScriptData::_readHeader(std::ifstream& in, short ve
 	if (!in.good())
 		return DataFileHeader({ false });
 
-	// check the version if specifed
+	// check the version if specified
 	if (version && header.version > version)
 		return DataFileHeader({ false });
 

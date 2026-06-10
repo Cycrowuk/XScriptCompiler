@@ -33,6 +33,7 @@ namespace XScript
 		void _readProperties(rapidxml::xml_node<wchar_t>* root_node);
 		void _readCustomEntries(rapidxml::xml_node<wchar_t>* root_node);
 		void _readCustomEntry(rapidxml::xml_node<wchar_t>* root_node, CustomData *customData);
+		void _readMacros(rapidxml::xml_node<wchar_t>* root_node);
 
 		DataTypes _convertDataType(const std::wstring& type, const std::wstring &extraData);
 		ParDef _convertParDef(const std::wstring& type);

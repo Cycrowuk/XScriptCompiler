@@ -170,6 +170,8 @@ int main(int argc, char *argv[])
             if (!loadData(data))
             {
                 std::cout << "FAILED" << std::endl;
+                std::cout << "  Note: if the data file was built with an older version of XScriptCompiler," << std::endl;
+                std::cout << "  please rebuild it using: --builddata <x3fl.xml> --out <data.dat>" << std::endl;
                 return 1;
             }
             std::cout << "OK" << std::endl;
