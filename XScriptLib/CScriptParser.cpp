@@ -223,24 +223,40 @@ bool CScriptParser::includeFile(const std::wstring& filename)
 	return ok;
 }
 
-bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<std::wstring>& body)
+bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine)
 {
 	// Helper: substitute %ARG0%, %ARG1% etc. with the actual argument strings
 	auto substitute = [&](const std::wstring& tmpl) -> std::wstring
+	{
+		std::wstring result = tmpl;
+		for (size_t i = 0; i < args.size(); i++)
 		{
-			std::wstring result = tmpl;
-			for (size_t i = 0; i < args.size(); i++)
+			std::wstring placeholder = L"%ARG" + std::to_wstring(i) + L"%";
+			size_t pos = 0;
+			while ((pos = result.find(placeholder, pos)) != std::wstring::npos)
 			{
-				std::wstring placeholder = L"%ARG" + std::to_wstring(i) + L"%";
-				size_t pos = 0;
-				while ((pos = result.find(placeholder, pos)) != std::wstring::npos)
-				{
-					result.replace(pos, placeholder.size(), args[i]);
-					pos += args[i].size();
-				}
+				result.replace(pos, placeholder.size(), args[i]);
+				pos += args[i].size();
 			}
-			return result;
-		};
+		}
+		return result;
+	};
+
+	// Set up macro call context — used by _addError/_addWarning to redirect
+	// warnings about macro argument variables back to this call site.
+	// Save previous context to support nested macro expansion.
+	const BaseParse* prevMacroCallNode = _macroCallNode;
+	std::vector<std::wstring> prevMacroCallArgNames = _macroCallArgNames;
+	std::vector<const BaseParse*> prevMacroCallArgNodes = _macroCallArgNodes;
+
+	ParseKeyword* callNode = new ParseKeyword(sourceLine, sourceLine);
+	callNode->setLinePosition(linePos);
+	callNode->setFile(_currentFile.empty() ? L"" : _currentFile.back());
+	callNode->setPosition(0, sourceLine.size());
+
+	_macroCallNode = callNode;
+	_macroCallArgNames = args;
+	_macroCallArgNodes = argNodes;
 
 	// Replay each routine line
 	bool anyError = false;
@@ -304,21 +320,21 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 					while (pos < trimmed.size() && iswalpha(trimmed[pos]))
 						word += trimmed[pos++];
 					if (word == L"while" || word == L"whilenot" ||
-						word == L"if" || word == L"ifnot" ||
-						word == L"else")
+					    word == L"if"    || word == L"ifnot"    ||
+					    word == L"else")
 						needsSemicolon = false;
 				}
 			}
 			if (needsSemicolon)
 				expanded += L";";
-			ok = parseLine(0, expanded);
+			ok = parseLine(linePos, expanded);
 			break;
 		}
 		case MacroRoutineLine::Type::StartBlock:
-			ok = parseLine(0, L"{");
+			ok = parseLine(linePos, L"{");
 			break;
 		case MacroRoutineLine::Type::EndBlock:
-			ok = parseLine(0, L"}");
+			ok = parseLine(linePos, L"}");
 			break;
 		case MacroRoutineLine::Type::BlockCommands:
 			// Replay the captured body lines
@@ -327,7 +343,7 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 				// Skip empty/whitespace-only lines
 				if (bodyLine.find_first_not_of(L" \t\r\n") == std::wstring::npos)
 					continue;
-				bool bodyOk = parseLine(0, bodyLine);
+				bool bodyOk = parseLine(linePos, bodyLine);
 				if (!bodyOk)
 					anyError = true;
 			}
@@ -335,6 +351,15 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 		}
 		if (!ok) anyError = true;
 	}
+
+	// Restore previous macro context (supports nested macro expansion)
+	delete callNode;
+	for (const BaseParse* node : argNodes)
+		delete node; // delete cloned single-token argument nodes
+	_macroCallNode = prevMacroCallNode;
+	_macroCallArgNames = prevMacroCallArgNames;
+	_macroCallArgNodes = prevMacroCallArgNodes;
+
 	return !anyError;
 }
 
@@ -2899,8 +2924,12 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 				if (macro)
 				{
 					// Extract argument strings from brackets (comma-separated items)
+					// Also track single-token arguments (e.g. "$myArr") so warnings
+					// about them can point to their exact position at the call site.
 					std::vector<std::wstring> macroArgs;
+					std::vector<const BaseParse*> macroArgNodes; // cloned single-token nodes, or nullptr
 					std::wstring currentArg;
+					std::vector<const BaseParse*> currentArgTokens;
 					int depth = 0;
 					for (const BaseParse* item : brackets->constList())
 					{
@@ -2916,13 +2945,22 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 									macroArgs.push_back(currentArg.substr(s, e - s + 1));
 								else
 									macroArgs.push_back(L"");
+
+								// If exactly one token made up this argument, clone it
+								if (currentArgTokens.size() == 1)
+									macroArgNodes.push_back(CopyParse(currentArgTokens[0]));
+								else
+									macroArgNodes.push_back(nullptr);
+
 								currentArg.clear();
+								currentArgTokens.clear();
 								continue;
 							}
 							else if (sym->symbol() == SymbolType::OpenBracket) depth++;
 							else if (sym->symbol() == SymbolType::CloseBracket) depth--;
 						}
 						currentArg += item->data();
+						currentArgTokens.push_back(item);
 					}
 					// Last arg
 					{
@@ -2930,7 +2968,17 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 						size_t e = currentArg.find_last_not_of(L" \t");
 						if (s != std::wstring::npos)
 							macroArgs.push_back(currentArg.substr(s, e - s + 1));
+
+						if (currentArgTokens.size() == 1)
+							macroArgNodes.push_back(CopyParse(currentArgTokens[0]));
+						else
+							macroArgNodes.push_back(nullptr);
 					}
+
+					// Capture original line info before keyword is deleted — used for
+					// error reporting back to the macro call site
+					size_t macroLinePos = keyword->linePos();
+					std::wstring macroSourceLine = keyword->line();
 
 					delete keyword;
 					// Remove the brackets from parseList
@@ -2941,10 +2989,13 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 					{
 						// Push state — body lines will be captured in parseLine
 						MacroCallState state;
-						state.macro = macro;
-						state.args = macroArgs;
-						state.depth = 0;
-						state.inBody = false;
+						state.macro     = macro;
+						state.args      = macroArgs;
+						state.argNodes  = macroArgNodes;
+						state.depth     = 0;
+						state.inBody    = false;
+						state.linePos   = macroLinePos;
+						state.sourceLine = macroSourceLine;
 						_macroStack.push_back(state);
 
 						// Check if '{' or a single-statement body follows on the same line
@@ -2958,8 +3009,8 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 							{
 								// Consume the { — start body capture immediately
 								_macroStack.back().inBody = true;
-								_macroStack.back().depth = 1;
-								delete* rem;
+								_macroStack.back().depth  = 1;
+								delete *rem;
 								++rem;
 								// Any remaining items after { are the first statement
 								if (rem != parseList.end())
@@ -2971,7 +3022,7 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 										auto next = rest; ++next;
 										if (next != parseList.end())
 											firstBodyLine += L" ";
-										delete* rest;
+										delete *rest;
 									}
 									if (!firstBodyLine.empty())
 										_macroStack.back().body.push_back(firstBodyLine + L";");
@@ -2983,7 +3034,7 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 							// Accumulate non-brace items as potential single-statement body
 							if (!singleBody.empty()) singleBody += L" ";
 							singleBody += (*rem)->data();
-							delete* rem;
+							delete *rem;
 						}
 						parseList.clear();
 
@@ -2993,9 +3044,12 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 						{
 							std::vector<std::wstring> body = { singleBody + L";" };
 							std::vector<std::wstring> args = _macroStack.back().args;
+							std::vector<const BaseParse*> argNodes = _macroStack.back().argNodes;
 							const MacroData* m = _macroStack.back().macro;
+							size_t mLinePos = _macroStack.back().linePos;
+							std::wstring mSourceLine = _macroStack.back().sourceLine;
 							_macroStack.pop_back();
-							if (!_expandMacro(m, args, body))
+							if (!_expandMacro(m, args, argNodes, body, mLinePos, mSourceLine))
 								error = true;
 						}
 						break;
@@ -3003,7 +3057,7 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 					else
 					{
 						// No block — expand immediately
-						if (!_expandMacro(macro, macroArgs, {}))
+						if (!_expandMacro(macro, macroArgs, macroArgNodes, {}, macroLinePos, macroSourceLine))
 							error = true;
 					}
 
@@ -3294,7 +3348,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 		{
 			if (expression->list().size() == 2)
 			{
-				if (expression->list()[0]->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(expression->list()[0])->operType() == Operators::Subtract && expression->list()[1]->type() == ParseType::Integer)
+				if(expression->list()[0]->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(expression->list()[0])->operType() == Operators::Subtract && expression->list()[1]->type() == ParseType::Integer)
 				{
 					ParseInteger* integer = const_cast<ParseInteger*>(dynamic_cast<const ParseInteger*>(expression->list()[1]));
 					integer->negate();
@@ -3691,7 +3745,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 								const_cast<BaseParse*>(newExpr)->setFromParse(expr);
 								args->addParse(const_cast<BaseParse*>(newExpr));
 							}
-							delete expr;
+							delete expr;							
 						}
 						else
 						{
@@ -4112,7 +4166,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 			if (first != std::wstring::npos && trimmed[first] == L'{')
 			{
 				state.inBody = true;
-				state.depth = 1;
+				state.depth  = 1;
 				// If there's content after the { on the same line, buffer it
 				std::wstring rest = trimmed.substr(first + 1);
 				size_t rFirst = rest.find_first_not_of(L" \t");
@@ -4132,9 +4186,12 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 							state.body.push_back(bodyLine);
 						const MacroData* macro = state.macro;
 						std::vector<std::wstring> args = state.args;
+						std::vector<const BaseParse*> argNodes = state.argNodes;
 						std::vector<std::wstring> body = state.body;
+						size_t mLinePos = state.linePos;
+						std::wstring mSourceLine = state.sourceLine;
 						_macroStack.pop_back();
-						return _expandMacro(macro, args, body);
+						return _expandMacro(macro, args, argNodes, body, mLinePos, mSourceLine);
 					}
 					state.body.push_back(rest);
 				}
@@ -4145,12 +4202,15 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 				// No brace — treat the whole line as a single-statement body
 				const MacroData* macro = state.macro;
 				std::vector<std::wstring> args = state.args;
+				std::vector<const BaseParse*> argNodes = state.argNodes;
 				std::vector<std::wstring> body = { trimmed };
+				size_t mLinePos = state.linePos;
+				std::wstring mSourceLine = state.sourceLine;
 				_macroStack.pop_back();
-				return _expandMacro(macro, args, body);
+				return _expandMacro(macro, args, argNodes, body, mLinePos, mSourceLine);
 			}
 			// Empty line — keep waiting
-		}
+			}
 		else
 		{
 			// Counting braces to track nesting depth
@@ -4165,9 +4225,12 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 				// Closing brace reached — expand
 				const MacroData* macro = state.macro;
 				std::vector<std::wstring> args = state.args;
+				std::vector<const BaseParse*> argNodes = state.argNodes;
 				std::vector<std::wstring> body = state.body;
+				size_t mLinePos = state.linePos;
+				std::wstring mSourceLine = state.sourceLine;
 				_macroStack.pop_back();
-				return _expandMacro(macro, args, body);
+				return _expandMacro(macro, args, argNodes, body, mLinePos, mSourceLine);
 			}
 			else
 			{
@@ -6873,9 +6936,31 @@ void CScriptParser::_errorArgumentDatatype(const ParseArguments* arguments, unsi
 	_errors.push_back(fail);
 }
 
+const BaseParse* CScriptParser::_resolveMacroReportNode(const BaseParse* parse) const
+{
+	// If we're inside a macro expansion and the flagged item corresponds to one
+	// of the macro's argument variables, report at the original argument's
+	// position at the call site (preferred), or the whole call site as fallback.
+	if (_macroCallNode && !_macroCallArgNames.empty())
+	{
+		for (size_t i = 0; i < _macroCallArgNames.size(); i++)
+		{
+			if (!_macroCallArgNames[i].empty() && parse->data() == _macroCallArgNames[i])
+			{
+				if (i < _macroCallArgNodes.size() && _macroCallArgNodes[i])
+					return _macroCallArgNodes[i];
+				return _macroCallNode;
+			}
+		}
+	}
+	return parse;
+}
+
 ParseFail* CScriptParser::_addError(ParseErrors error, const BaseParse* parse)
 {
-	ParseFail* fail = new ParseFail(parse, error);
+	const BaseParse* reportNode = _resolveMacroReportNode(parse);
+
+	ParseFail* fail = new ParseFail(reportNode, error);
 	_errors.push_back(fail);
 
 	// add any data
@@ -6892,12 +6977,14 @@ Warnings& CScriptParser::_addWarning(ParseWarnings type, const BaseParse* parse)
 	if (_prePassMode)
 		return dummy;
 
+	const BaseParse* reportNode = _resolveMacroReportNode(parse);
+
 	// Check for duplicate warning — same type, same variable name, same line
 	for (auto& existing : _warnings)
 	{
 		if (existing.warning == type &&
-			existing.linePos == parse->linePos() &&
-			existing.line == parse->line())
+			existing.linePos == reportNode->linePos() &&
+			existing.line == reportNode->line())
 		{
 			// For warnings that include a variable/object name in data[0],
 			// also match on that to avoid suppressing different variables
@@ -6912,7 +6999,7 @@ Warnings& CScriptParser::_addWarning(ParseWarnings type, const BaseParse* parse)
 		}
 	}
 
-	_warnings.push_back({ type, parse->startingPos(), parse->endingPos(), parse->linePos(), parse->line(), parse->file() });
+	_warnings.push_back({ type, reportNode->startingPos(), reportNode->endingPos(), reportNode->linePos(), reportNode->line(), reportNode->file() });
 	return _warnings.back();
 }
 
