@@ -1124,7 +1124,7 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
             {
                 if (aItr == retItr)
                     ++size;
-                else if ((*aItr)->pardef() == ParDef::CallName)
+                else if ((*aItr)->pardef() == ParDef::CallName || (*aItr)->pardef() == ParDef::Label)
                     ++size;
                 else
                     size += 2;
