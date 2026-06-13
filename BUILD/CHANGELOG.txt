@@ -30,3 +30,12 @@ v0.6
 	
 v0.7
 	Fixed minus operator '-' correctly working as negative integer
+	Fixed nested if with incorrect "end"
+	Added chained assignment expression, ie $x = $y = 1;
+	Added function overloads, allowing multiple functions with the same name but different arguments
+	Added namespace support to functions
+	Added Macro support to data file
+	Added "foreach" macro
+	Added #datatype preprocessor to advise the compiler
+	Added multi-line #define statements using a trailing \
+	
