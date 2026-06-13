@@ -1,5 +1,5 @@
 # XScript Compiler
-### Version 0.6 BETA
+### Version 0.7 BETA
 #### X3 Farnham's Legacy Script Compiler
 
 Website: https://www.xpluginmanager.co.uk/xscript/
@@ -98,6 +98,7 @@ XScriptCompiler.exe --load_data default_data.dat --decompile myscript.xml --out 
 | `--load_data <file>` | Path to the compiled game data file |
 | `--decompile <file>` | Path to the compiled XML script to decompile |
 | `--out <file>` | Path for the XScript source output |
+| `--usenamespace` | Emit namespaced function calls (e.g. `Utils::random`) instead of the plain global name, where a namespace mapping exists |
 
 The decompiler resolves command IDs back to their function names, constants back to their symbolic names (e.g. `TRUE`/`FALSE`, `PLAYERSHIP`, `RaceFlag::NPC`), and boolean arguments to `TRUE`/`FALSE`. Commands from third-party mods that use a DataType prefix (e.g. `SHIPCOMMAND_1000`) are emitted using the prefix notation rather than raw integers.
 
@@ -169,6 +170,15 @@ An assignment uses a single `=` and must have a variable or array on the left:
 $variable = 10;
 $array[1] = 10;
 ```
+
+**Chained (double) assignment** — assigning the same value to two variables in one statement:
+
+```xscript
+$x = $y = -1;
+$x = $y = random(2);
+```
+
+The compiler expands this so `$y` is assigned first, then `$x` is assigned the value of `$y`.
 
 ### Expression Operators
 
@@ -272,6 +282,31 @@ Functions translate to X3 script commands. Arguments are comma-separated inside 
 ```xscript
 incomingMessage("Hello", PlayerLog::Alert, TRUE);
 $sector = getSectorByCoord(22, 3);
+```
+
+### Function Overloads
+
+Some functions have multiple variants with different argument counts. These can share a single name — the compiler picks the best match based on the number (and type) of arguments supplied:
+
+```xscript
+$x = random(10);       // random(max) — 1 argument
+$x = random(5, 10);     // randomFrom(min, max) — 2 arguments, same name
+```
+
+Where an argument can be either a literal script-name string or a variable, the compiler also disambiguates by argument type — a string literal prefers the `CALLNAME` variant, while a variable prefers the general variant:
+
+```xscript
+registerHotkey("plugin.myscript");  // string literal — CALLNAME variant
+registerHotkey($scriptName);        // variable — general variant
+```
+
+### Namespaces
+
+Functions and constants can be organised under a namespace using `::`, purely for organisation and autocomplete — `Namespace::name` resolves to the underlying global function or constant:
+
+```xscript
+$x = Utils::random(10);        // same as random(10)
+$flag = RaceFlag::NPC;          // constant namespace
 ```
 
 ### Object Methods and Properties
@@ -520,6 +555,17 @@ Set the script description, version, and command ID directly in the source file:
 
 These are equivalent to calling `setDescription`, `setVersion`, and `setCommand` in the body of the script, but placing them at the top makes the intent clear. `#COMMAND` also accepts a named object command constant.
 
+### Datatype Hints
+
+`#datatype` tells the compiler the type(s) a variable will hold, so object methods and properties can be validated even when the compiler cannot infer the type from an assignment (e.g. a variable received as a script argument):
+
+```xscript
+#datatype $wing DATATYPE_WING
+#datatype $obj DATATYPE_SHIP|DATATYPE_STATION
+```
+
+Multiple types are separated by `|`. This is a hint only — it does not generate any script output, it simply informs the type checker.
+
 ### Defines
 
 ```xscript
@@ -541,6 +587,17 @@ Remove a previously defined symbol:
 
 ```xscript
 #undef DEBUG
+```
+
+**Multi-line defines** — a trailing `\` continues the define onto the next line:
+
+```xscript
+#define BIG_VALUE \
+    100 + 200 + 300
+
+#define COMPLEX_CHECK(a, b) \
+    (a > 0) && \
+    (b > 0)
 ```
 
 ### Conditional Compilation
@@ -607,6 +664,32 @@ All preprocessor state (`#define`, `#ifdef` depth) is shared between the includi
 
 ---
 
+## Function Macros
+
+X3 has no native `for`/`foreach` construct — only `while`. The compiler provides language-level macros, defined in the data file, that expand to native XScript at compile time. The built-in `foreach` macro is one example:
+
+```xscript
+foreach($item, $myArray)
+{
+    incomingMessage($item->name, PlayerLog::Alert, TRUE);
+}
+```
+
+This expands into the equivalent `while` loop with a counter, array lookup, and increment — written exactly as if you had typed it yourself. The generated script contains no trace of the macro; it is a pure compile-time expansion.
+
+A single-statement body (no braces) is also supported:
+
+```xscript
+foreach($item, $myArray)
+    incomingMessage($item->name, PlayerLog::Alert, TRUE);
+```
+
+Warnings about a macro's arguments — for example, if `$myArray` is uninitialised or not an array — are reported against the `foreach(...)` call itself, not the internal expanded code.
+
+Additional macros may be defined in `x3fl.xml` under `<Macros>`, following the same `<Block>`/`<BlockCommands/>`/`%ARGn%` substitution pattern as `foreach`.
+
+---
+
 ## Type Checking
 
 The compiler tracks object types through assignments and function return values. Methods are validated against the declared type of the object.
@@ -622,8 +705,7 @@ Type mismatches produce warnings rather than errors, since X3 script execution i
 
 ## Known Limitations (Beta)
 
-- Double assignment (`$a = $b = func()`) is not yet supported
-- Multi-line string continuation with `\` is not yet implemented
+- Multi-line string literal continuation with `\` is not yet implemented (multi-line `#define` is supported)
 - `goto` targets are not validated until `finalise` — forward `goto` references will compile but may produce runtime errors if the label does not exist
 
 ---
@@ -655,9 +737,9 @@ The data file is compiled from `x3fl.xml` using the data compiler tool. The bina
 A Visual Studio Code extension (`xscript-x3fl-extension.zip`) provides editor support for `.xs` files.
 
 **Features:**
-- Syntax highlighting for all XScript keywords, operators, constants, variables, and preprocessor directives
-- IntelliSense — autocomplete for functions, object methods, properties, and constants, with parameter hints and documentation from the definition file
-- Hover documentation — hover over any function or constant to see its description, parameters, and return type
+- Syntax highlighting for all XScript keywords, operators, constants, variables, and preprocessor directives (including `#datatype` and multi-line `#define`)
+- IntelliSense — autocomplete for functions, object methods, properties, constants, namespaces (`Utils::`), and function macros (`foreach`), with parameter hints and documentation from the definition file
+- Hover documentation — hover over any function, constant, namespace member, or macro to see its description, parameters, and return type
 - Error and warning squiggles — compiler errors appear as red/yellow underlines directly in the editor, listed in the Problems panel (`Ctrl+Shift+M`)
 - Compile from the editor — click the play button in the editor title bar, or use the right-click context menu
 - Compile on save — optionally compile automatically whenever a `.xs` file is saved
@@ -688,7 +770,18 @@ Place `default_data.dat` (or `x3fl.dat`) in your workspace root folder and the e
 
 ## Version History
 
-**0.6 BETA** — Current release
+**0.7 BETA** — Current release
+- Double (chained) assignment — `$x = $y = -1;` and `$x = $y = random(2);`
+- Function overloads/aliases — multiple functions sharing a name, resolved by argument count, with `CALLNAME` vs string-literal disambiguation (e.g. `registerHotkey`)
+- Namespaces — `Utils::random(...)` resolves to the underlying global function; namespaced constants (e.g. `RaceFlag::NPC`) supported alongside namespaced functions
+- Function macros — language-level constructs (e.g. `foreach($value, $array) { ... }`) that expand to native `while` loops at compile time; defined in the data file via `<Macros>`
+- `#datatype` preprocessor directive — hints a variable's type(s) for the type checker (`#datatype $wing DATATYPE_WING`)
+- Multi-line `#define` — trailing `\` continues a define onto subsequent lines
+- Fixed nested `if` blocks producing incorrect consecutive closing braces
+- Fixed `$x - 2` being misparsed as negation; `random(-1)` and other negative-literal arguments now compile correctly
+- VS Code extension updated to v1.3.0 — namespace/macro autocomplete, hover, signature help; `#datatype` and multi-line `#define` syntax highlighting
+
+**0.6 BETA** — Previous release
 - While loop condition re-evaluation — `++`/`--` and function calls in `while(...)` conditions re-evaluate correctly on each iteration
 - `break` and `continue` inside while loops
 - Nested function calls as arguments — `random($i + 10)`, `if(inc($count))`, etc.

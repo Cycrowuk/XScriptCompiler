@@ -1664,7 +1664,7 @@
 				<Argument pardef="NUMBER" description="The maximum random value"/>
 			</Arguments>
 		</Function>
-		<Function id="117" name="isSignalHandling" description="Returns if the signal handling of the script enabled">
+		<Function id="117" name="isSignalHandling" namespace="signals" namespaceAlias="isHandling" description="Returns if the signal handling of the script enabled">
 			<Example>if(isSignalHandling())</Example>
 			<Arguments>
 				<ReturnValue type="if">
@@ -1672,7 +1672,7 @@
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="129" name="getValue" description="Gets a value from an array or table" specialtype="getarray">
+		<Function id="129" name="getValue" namespace="storage" namespaceAlias="get"	description="Gets a value from an array or table" specialtype="getarray">
 			<Example>$return = $array[$value];</Example>
 			<Arguments>
 				<ReturnValue type="if">
@@ -1682,7 +1682,7 @@
 				<Argument pardef="VALUE" description="The value key or array id"/>
 			</Arguments>
 		</Function>
-		<Function id="130" name="setValue" description="Sets a value to an array or table" specialtype="setarray">
+		<Function id="130" name="setValue" namespace="storage" namespaceAlias="set"	 description="Sets a value to an array or table" specialtype="setarray">
 			<Example>$array[$id] = $value;</Example>
 			<Arguments>
 				<Argument pardef="ARRAYTABLE" description="The variable of the Array/Table"/>
@@ -1690,7 +1690,7 @@
 				<Argument pardef="VALUE" description="The value to set in the array/table"/>
 			</Arguments>
 		</Function>
-		<Function id="131" name="arraySize" description="Returns the current size of the array">
+		<Function id="131" name="arraySize" namespace="array" namespaceAlias="size" description="Returns the current size of the array">
 			<Example>$size = arraySize($array);</Example>
 			<Arguments>
 				<ReturnValue type="if">
@@ -1718,7 +1718,7 @@
 			</Arguments>
 		</Function>
 
-		<Function id="655" name="getMainType" description="Returns the main type id of a given ware">
+		<Function id="655" name="getMainType" namespace="ware" namespaceAlias="mainType" description="Returns the main type id of a given ware">
 			<Example>$maintype = getMainType(SS_WARE_LFLSCANNER);</Example>
 			<Arguments>
 				<ReturnValue type="return">
@@ -1730,7 +1730,7 @@
 				<ObjectType name="mainType" datatype="DATATYPE_WARE"/>
 			</ObjectTypes>
 		</Function>
-		<Function id="658" name="getMaxSubTypes" description="Returns the total amount of items for a main ware type">
+		<Function id="658" name="getMaxSubTypes" namespace="ware" namespaceAlias="subType"  description="Returns the total amount of items for a main ware type">
 			<Example>$amt = getMaxSubTypes(MAINTYPE);</Example>
 			<Arguments>
 				<ReturnValue type="return">
@@ -1738,6 +1738,9 @@
 				</ReturnValue>
 				<Argument pardef="NUMBER" description="The main type"/>
 			</Arguments>
+			<ObjectTypes>
+				<ObjectType name="subType" datatype="DATATYPE_WARE"/>
+			</ObjectTypes>
 		</Function>
 		<Function id="700" name="getObjectClass" description="Gets the top level object class of the given object">
 			<Example>$variable = $object->getObjectClass();</Example>
@@ -1750,7 +1753,7 @@
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="743" name="getPlayerShip" description="Gets the current player ship object">
+		<Function id="743" name="getPlayerShip" namespace="player" namespaceAlias="ship" description="Gets the current player ship object">
 			<Example>$ship = getPlayerShip();</Example>
 			<Arguments>
 				<ReturnValue type="if">
@@ -1758,7 +1761,7 @@
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="1042" name="speak" description="Speak a certain voice file">
+		<Function id="1042" name="speak" namespace="voice" description="Speak a certain voice file">
 			<Example>START speak(17, 1000, 100);</Example>
 			<Arguments>
 				<ReturnValue type="start">
@@ -1769,7 +1772,7 @@
 				<Argument pardef="NUMBER" description="The priority"/>
 			</Arguments>
 		</Function>
-		<Function id="1081" name="get2DValue" description="Gets the value from a 2D array/table" specialtype="getdoublearray">
+		<Function id="1081" name="get2DValue" namespace="array" description="Gets the value from a 2D array/table" specialtype="getdoublearray">
 			<Example>$ship = $array[1][2];</Example>
 			<Arguments>
 				<ReturnValue type="if">
@@ -1780,7 +1783,7 @@
 				<Argument pardef="VALUE" description="The second value/key"/>
 			</Arguments>
 		</Function>
-		<Function id="1082" name="set2DValue" description="Sets a value to a 2D array or table" specialtype="setdoublearray">
+		<Function id="1082" name="set2DValue" namespace="array"  description="Sets a value to a 2D array or table" specialtype="setdoublearray">
 			<Example>$array[$id][$id2] = $value;</Example>
 			<Arguments>
 				<Argument pardef="ARRAYTABLE" description="The variable of the Array/Table"/>
@@ -1789,7 +1792,7 @@
 				<Argument pardef="VALUE" description="The value to set in the array/table"/>
 			</Arguments>
 		</Function>
-		<Function id="1092" name="arrayAssign" description="Assigns an item item from another array" specialtype="arrayassign">
+		<Function id="1092" name="arrayAssign" namespace="array" namespaceAlias="assign" description="Assigns an item item from another array" specialtype="arrayassign">
 			<Example>$array[$id] = $array2[$id2];</Example>
 			<Arguments>
 				<Argument pardef="ARRAYTABLE" description="The variable of the Array/Table"/>
@@ -1815,7 +1818,7 @@
 				</RefObject>
 			</Arguments>
 		</Function>
-		<Function id="1734" name="tableSize" description="Returns the size of the table">
+		<Function id="1734" name="tableSize" namespace="table" namespaceAlias="size" description="Returns the size of the table">
 			<Example>$size = tableSize($table);</Example>
 			<Arguments>
 				<ReturnValue type="if">
@@ -1827,7 +1830,7 @@
 				<ObjectType name="size" datatype="DATATYPE_TABLE"/>
 			</ObjectTypes>
 		</Function>
-		<Function id="1737" name="clearTable" description="Removes all the entries in a table">
+		<Function id="1737" name="clearTable" namespace="table" namespaceAlias="clear" description="Removes all the entries in a table">
 			<Example>clearTable($table);</Example>
 			<Arguments>
 				<Argument pardef="74" description="The table data"/>
@@ -1997,7 +2000,7 @@
 				<Argument pardef="RACE" description="The race to ignore"/>
 			</Arguments>
 		</Function>
-		<Function id="128" name="arrayAlloc" description="Creates an array of a certain size">
+		<Function id="128" name="arrayAlloc" namespace="array" namespaceAlias="alloc" description="Creates an array of a certain size">
 			<Arguments allownull="true">
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_ARRAY</ReturnValue>
@@ -25885,11 +25888,14 @@
 				<Expression value="%ARG1%_counter = 0"/>
 				<Expression value="while(%ARG1%_counter < $0)">
 					<FunctionArgument id="131">
-						<PassedArgument pos="0"/>
+						<PassedArgument pos="1"/>
 					</FunctionArgument>					
 				</Expression>
-				<Expression value="{"/>
-				<Expression value="}"/>
+				<Block>
+					<Expression value="%ARG0% = %ARG1%[%ARG1%_counter]"/>
+					<Expression value="inc(%ARG1%_counter)"/>
+					<BlockCommands/>
+				</Block>
 			</Routine>
 		</Macro>
 		<FunctionMacro name="arrayPopBack" function="136" description="Removes the last entry from the array">

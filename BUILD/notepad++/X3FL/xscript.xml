@@ -5863,6 +5863,11 @@
 			<Overload>
 			</Overload>
 		</KeyWord>
+		<KeyWord name="disbandWing" func="yes" descr="Disbands the specified wing, removing all ships from it and destroying the wing.">
+			<Overload>
+				<Param name="WING" descr="Wing handle to disband"/>
+			</Overload>
+		</KeyWord>
 		<KeyWord name="disconnect" func="yes" descr="Disconnects the specified station from a complex.">
 			<Overload>
 			</Overload>
@@ -6731,6 +6736,17 @@
 				<Param name="STATIONSERIAL" descr="Station serial to filter by (null for any)"/>
 				<Param name="NUMBER" descr="Maximum jump distance (null for unlimited)"/>
 				<Param name="NUMBER" descr="Maximum number of results (null for all)"/>
+			</Overload>
+		</KeyWord>
+		<KeyWord name="findWingByName" func="yes" descr="Finds a wing by its name and owner race. Returns the wing handle if found.">
+			<Overload retVal="">
+				<Param name="VARSTRING" descr="Wing name to search for"/>
+				<Param name="RACE" descr="Owner race filter"/>
+			</Overload>
+		</KeyWord>
+		<KeyWord name="findWingFindByID" func="yes" descr="Finds a wing by its numeric ID. Returns the wing handle if found.">
+			<Overload retVal="">
+				<Param name="NUMBER" descr="Wing ID to search for"/>
 			</Overload>
 		</KeyWord>
 		<KeyWord name="findresourceMinjumps" func="yes" descr="Search the universe for a resource and find the closest">
@@ -16912,22 +16928,6 @@
 		<KeyWord name="wingCustomExists" func="yes" descr="Returns 1 if a custom wing entry with the specified ID exists, 0 otherwise.">
 			<Overload retVal="">
 				<Param name="NUMBER" descr="Custom entry ID to check"/>
-			</Overload>
-		</KeyWord>
-		<KeyWord name="wingDisband" func="yes" descr="Disbands the specified wing, removing all ships from it and destroying the wing.">
-			<Overload>
-				<Param name="WING" descr="Wing handle to disband"/>
-			</Overload>
-		</KeyWord>
-		<KeyWord name="wingFindByID" func="yes" descr="Finds a wing by its numeric ID. Returns the wing handle if found.">
-			<Overload retVal="">
-				<Param name="NUMBER" descr="Wing ID to search for"/>
-			</Overload>
-		</KeyWord>
-		<KeyWord name="wingFindByName" func="yes" descr="Finds a wing by its name and owner race. Returns the wing handle if found.">
-			<Overload retVal="">
-				<Param name="VARSTRING" descr="Wing name to search for"/>
-				<Param name="RACE" descr="Owner race filter"/>
 			</Overload>
 		</KeyWord>
 		<KeyWord name="wingGetCommandUpgrade" func="yes" descr="Gets the upgrade ware or ID assigned to the specified wing command slot.">
