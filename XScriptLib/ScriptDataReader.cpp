@@ -70,7 +70,46 @@ bool ScriptDataReader::readData(const std::wstring& filename)
 	buffer->push_back('\0');
 
 	rapidxml::xml_document<wchar_t>* doc = new rapidxml::xml_document<wchar_t>();
-	doc->parse<0>(&(*buffer)[0]);
+	try
+	{
+		doc->parse<0>(&(*buffer)[0]);
+	}
+	catch (const rapidxml::parse_error& e)
+	{
+		// Calculate approximate line number from the error position in the buffer
+		unsigned int lineNum = 1;
+		const wchar_t* errorPos = e.where<wchar_t>();
+		if (errorPos && errorPos >= buffer->data())
+		{
+			for (const wchar_t* p = buffer->data(); p < errorPos && *p; ++p)
+				if (*p == L'\n') ++lineNum;
+		}
+
+		// Extract a short snippet of context around the error
+		std::wstring context;
+		if (errorPos)
+		{
+			size_t len = 0;
+			while (errorPos[len] && errorPos[len] != L'\n' && len < 60)
+				++len;
+			context = std::wstring(errorPos, len);
+		}
+
+		std::wstring msg = L"XML Parse Error in '";
+		msg += filename;
+		msg += L"' at line ";
+		msg += std::to_wstring(lineNum);
+		msg += L": ";
+		msg += Utils::s2ws(e.what());
+		if (!context.empty())
+		{
+			msg += L"\n  Near: ";
+			msg += context;
+		}
+		delete buffer;
+		delete doc;
+		throw std::exception(Utils::ws2s(msg).c_str());
+	}
 
 	rapidxml::xml_node<wchar_t>* root_node = doc->first_node(L"XScript");
 
@@ -122,9 +161,6 @@ bool ScriptDataReader::readData(const std::wstring& filename)
 
 	// read any of the custom entries
 	_readCustomEntries(root_node);
-
-	// read any function macros
-	_readMacros(root_node);
 
 	// finished, clear the data
 	delete buffer;
@@ -427,7 +463,7 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 	{
 		for (rapidxml::xml_node<wchar_t>* childNode = node->first_node(L"Function"); childNode; childNode = childNode->next_sibling(L"Function"))
 		{
-			std::wstring id, desc, code, object, specialType, alias, nsName, nsAlias;
+			std::wstring id, desc, code, object, specialType;
 			bool allowKeyword = false;
 			for (rapidxml::xml_attribute<wchar_t>* attr = childNode->first_attribute(); attr; attr = attr->next_attribute())
 			{
@@ -444,12 +480,6 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 					specialType = attr->value();
 				else if (name == L"allowkeyword")
 					allowKeyword = _parseBoolean(attr->value());
-				else if (name == L"alias")
-					alias = attr->value();
-				else if (name == L"namespace")
-					nsName = attr->value();
-				else if (name == L"namespaceAlias")
-					nsAlias = attr->value();
 			}
 
 			if (id.empty())
@@ -653,18 +683,6 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 					if (_pData->_globalFunctions.find(code) != _pData->_globalFunctions.end())
 						throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, Functions, duplicate global function name '", code, L"'")).c_str());
 					_pData->_globalFunctions[code] = iID;
-				}
-
-				// If this function has an alias, register it as an overload under that alias name
-				if (!alias.empty())
-					_pData->_functionAliases[alias].push_back(iID);
-
-				// If this function belongs to a namespace, register it there
-				// Use namespaceAlias if provided, otherwise fall back to the function's own name
-				if (!nsName.empty())
-				{
-					std::wstring nsKey = nsAlias.empty() ? code : nsAlias;
-					_pData->_namespaceFunctions[nsName][nsKey] = iID;
 				}
 			}
 		}
@@ -1145,136 +1163,5 @@ void ScriptDataReader::_checkConstant(const std::wstring& str, const std::wstrin
 	{
 		if (_pData->_constData.find(str) != _pData->_constData.end())
 			throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, ", section, L", Duplicate constant found '", str, L"'")).c_str());
-	}
-}
-
-void ScriptDataReader::_readMacros(rapidxml::xml_node<wchar_t>* root_node)
-{
-	rapidxml::xml_node<wchar_t>* macrosNode = root_node->first_node(L"Macros");
-	if (!macrosNode)
-		return;
-
-	for (rapidxml::xml_node<wchar_t>* macroNode = macrosNode->first_node(L"Macro");
-		macroNode; macroNode = macroNode->next_sibling(L"Macro"))
-	{
-		MacroData macro;
-		macro.hasBlock = false;
-
-		// Read name attribute
-		rapidxml::xml_attribute<wchar_t>* nameAttr = macroNode->first_attribute(L"name");
-		if (!nameAttr)
-			continue;
-		macro.name = nameAttr->value();
-
-		// Read arguments
-		rapidxml::xml_node<wchar_t>* argsNode = macroNode->first_node(L"Arguments");
-		if (argsNode)
-		{
-			for (rapidxml::xml_node<wchar_t>* argNode = argsNode->first_node(L"Argument");
-				argNode; argNode = argNode->next_sibling(L"Argument"))
-			{
-				rapidxml::xml_attribute<wchar_t>* nameA = argNode->first_attribute(L"name");
-				macro.argNames.push_back(nameA ? std::wstring(nameA->value()) : L"");
-			}
-		}
-
-		// Read routine
-		rapidxml::xml_node<wchar_t>* routineNode = macroNode->first_node(L"Routine");
-		if (routineNode)
-		{
-			for (rapidxml::xml_node<wchar_t>* child = routineNode->first_node();
-				child; child = child->next_sibling())
-			{
-				std::wstring nodeName = child->name();
-				MacroRoutineLine line;
-
-				if (nodeName == L"Expression")
-				{
-					line.type = MacroRoutineLine::Type::Expression;
-					rapidxml::xml_attribute<wchar_t>* valAttr = child->first_attribute(L"value");
-					line.text = valAttr ? std::wstring(valAttr->value()) : L"";
-
-					// Read FunctionArgument children — provide $0, $1 substitution values
-					for (rapidxml::xml_node<wchar_t>* fa = child->first_node(L"FunctionArgument");
-						fa; fa = fa->next_sibling(L"FunctionArgument"))
-					{
-						MacroRoutineLine::FuncArg funcArg;
-						funcArg.funcId = 0;
-						funcArg.argPos = -1;
-						rapidxml::xml_attribute<wchar_t>* idAttr = fa->first_attribute(L"id");
-						if (idAttr)
-							funcArg.funcId = static_cast<unsigned int>(std::stoi(std::wstring(idAttr->value())));
-						rapidxml::xml_node<wchar_t>* passedNode = fa->first_node(L"PassedArgument");
-						if (passedNode)
-						{
-							rapidxml::xml_attribute<wchar_t>* posAttr = passedNode->first_attribute(L"pos");
-							if (posAttr)
-								funcArg.argPos = std::stoi(std::wstring(posAttr->value()));
-						}
-						line.funcArgs.push_back(funcArg);
-					}
-					macro.routine.push_back(line);
-				}
-				else if (nodeName == L"Block")
-				{
-					// <Block> ... </Block> emits StartBlock, processes children, then EndBlock
-					MacroRoutineLine startLine;
-					startLine.type = MacroRoutineLine::Type::StartBlock;
-					macro.routine.push_back(startLine);
-
-					for (rapidxml::xml_node<wchar_t>* blockChild = child->first_node();
-						blockChild; blockChild = blockChild->next_sibling())
-					{
-						std::wstring blockNodeName = blockChild->name();
-						MacroRoutineLine bline;
-						if (blockNodeName == L"Expression")
-						{
-							bline.type = MacroRoutineLine::Type::Expression;
-							rapidxml::xml_attribute<wchar_t>* valAttr = blockChild->first_attribute(L"value");
-							bline.text = valAttr ? std::wstring(valAttr->value()) : L"";
-
-							// Read FunctionArgument children inside Block Expression nodes
-							for (rapidxml::xml_node<wchar_t>* fa = blockChild->first_node(L"FunctionArgument");
-								fa; fa = fa->next_sibling(L"FunctionArgument"))
-							{
-								MacroRoutineLine::FuncArg funcArg;
-								funcArg.funcId = 0;
-								funcArg.argPos = -1;
-								rapidxml::xml_attribute<wchar_t>* idAttr = fa->first_attribute(L"id");
-								if (idAttr)
-									funcArg.funcId = static_cast<unsigned int>(std::stoi(std::wstring(idAttr->value())));
-								rapidxml::xml_node<wchar_t>* passedNode = fa->first_node(L"PassedArgument");
-								if (passedNode)
-								{
-									rapidxml::xml_attribute<wchar_t>* posAttr = passedNode->first_attribute(L"pos");
-									if (posAttr)
-										funcArg.argPos = std::stoi(std::wstring(posAttr->value()));
-								}
-								bline.funcArgs.push_back(funcArg);
-							}
-							macro.routine.push_back(bline);
-						}
-						else if (blockNodeName == L"BlockCommands")
-						{
-							bline.type = MacroRoutineLine::Type::BlockCommands;
-							macro.routine.push_back(bline);
-							macro.hasBlock = true;
-						}
-					}
-
-					MacroRoutineLine endLine;
-					endLine.type = MacroRoutineLine::Type::EndBlock;
-					macro.routine.push_back(endLine);
-				}
-				else if (nodeName == L"BlockCommands")
-				{
-					line.type = MacroRoutineLine::Type::BlockCommands;
-					macro.routine.push_back(line);
-					macro.hasBlock = true;
-				}
-			}
-		}
-
-		_pData->_macros[macro.name] = macro;
 	}
 }

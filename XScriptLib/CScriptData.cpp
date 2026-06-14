@@ -190,6 +190,11 @@ const Function* CScriptData::findBestGlobalFunction(const std::wstring& function
 		int bestScore = INT_MIN;
 
 		auto consider = [&](const Function* f) {
+			// Skip object functions — they require $obj->func() and must not
+			// be resolved as a plain global call even when aliased
+			if (!f->refObjType.empty())
+				return;
+
 			int diff = std::abs(countArgs(f) - argCount);
 			int score = scoreFunction(f);
 			if (diff < bestDiff || (diff == bestDiff && score > bestScore))
@@ -212,7 +217,12 @@ const Function* CScriptData::findBestGlobalFunction(const std::wstring& function
 			return best;
 	}
 
-	return findGlobalFunction(function);
+	// Fallback to exact name lookup — but still exclude object functions
+	// since we're resolving a global (non-object) call site
+	const Function* fallback = findGlobalFunction(function);
+	if (fallback && !fallback->refObjType.empty())
+		return nullptr;
+	return fallback;
 }
 
 const Function* CScriptData::findNamespaceFunction(const std::wstring& ns, const std::wstring& alias) const

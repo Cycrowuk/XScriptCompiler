@@ -38,4 +38,8 @@ v0.7
 	Added "foreach" macro
 	Added #datatype preprocessor to advise the compiler
 	Added multi-line #define statements using a trailing \
+
+v0.8
+	Fixed writing out labels to work with X-Studio
+	Fixed function overrides for object functions
 	

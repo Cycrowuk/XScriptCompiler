@@ -5281,6 +5281,13 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		}
 	}
 
+	// Function requires an object ($obj->func) but was called without one — error
+	if (!functionData->object() && !func->refObjType.empty())
+	{
+		_addError(ParseErrors::UnknownFunction, functionData);
+		return false;
+	}
+
 	if (functionData->object())
 	{
 		// has a refobj, but the function doesn't require one
