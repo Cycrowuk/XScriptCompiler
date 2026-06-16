@@ -15,6 +15,7 @@
 #include "ParseProperty.h"
 #include "ParseLabel.h"
 #include "ParseArguments.h"
+#include "ParseNull.h"
 #include "CScriptData.h"
 
 #include <stack>
@@ -905,6 +906,61 @@ void CScript::writeArguments(std::wofstream& out, const ScriptFunction& func, co
 }
 
 
+bool CScript::_needsAutoReturn() const
+{
+    // Suppress the auto-return only when the last entry is a returnCommand AND
+    // it is not inside a conditional (with or without a block).
+    // Cases where the auto-return IS still needed:
+    //   [..., conditional, return]    — single-line condition (no end block)
+    //   [..., return, end]            — return inside a block
+    if (_functions.empty()) return true;
+
+    // If the last entry is not a return, we always need the auto-return
+    if (_functions.back().id != _pScriptData->returnCommand()) return true;
+
+    // Last entry is a return — check if it's inside a conditional.
+    // Case 1: [..., end] — return before end means it was inside a block
+    // (handled: back() would be end, not return, so we'd have returned true above)
+
+    // Case 2: [..., conditional, return] — single-line condition, no end block.
+    // Check the second-to-last entry for a function with a condition retvar.
+    if (_functions.size() >= 2)
+    {
+        const auto& prev = _functions[_functions.size() - 2];
+        if (prev.retvarID >= 0)
+        {
+            const auto* arg = prev.retvarArgument();
+            if (arg && arg->type() == ParseType::Condition)
+                return true; // return is inside a conditional — auto-return still needed
+        }
+    }
+
+    return false; // last entry is a top-level return — no auto-return needed
+}
+
+void CScript::ensureReturn()
+{
+    // Flush any pending end block first, so the check below sees the true
+    // last entry (matching what finalise()/save() would see).
+    if (_pendingEnd)
+        _addEndBlock(_forceEnd);
+
+    if (!_needsAutoReturn())
+    {
+        _lastEnsureReturnInserted = false;
+        return;
+    }
+
+    // Insert a real return(null) entry via the standard mechanism — unlike the
+    // save()-time synthetic patch (which only adjusts the XML output without
+    // touching _functions), this must be a genuine entry since further
+    // functions may be appended after this point in the future.
+    ParseNull* nullArg = new ParseNull(L"null");
+    addFunction(_pScriptData->returnCommand(), nullptr, false);
+    addFunctionArgument(nullArg, ParDef::Unknown);
+    _lastEnsureReturnInserted = true;
+}
+
 bool CScript::save(const std::wstring& file, const std::vector<Function>& functionData)
 {
     std::wofstream out;
@@ -971,37 +1027,7 @@ bool CScript::save(const std::wstring& file, const std::vector<Function>& functi
     // Calculate once whether we need to append a final return null.
     // Must be determined BEFORE cmdCount is written to the XML — changing it
     // afterwards would cause a size/entry mismatch.
-    // Suppress the auto-return only when the last entry is a returnCommand AND
-    // it is not inside a conditional (with or without a block).
-    // Cases where the auto-return IS still needed:
-    //   [..., conditional, return]    — single-line condition (no end block)
-    //   [..., return, end]            — return inside a block
-    const bool shouldIncludeReturn = [&]() -> bool
-        {
-            if (_functions.empty()) return true;
-
-            // If the last entry is not a return, we always need the auto-return
-            if (_functions.back().id != _pScriptData->returnCommand()) return true;
-
-            // Last entry is a return — check if it's inside a conditional.
-            // Case 1: [..., end] — return before end means it was inside a block
-            // (handled: back() would be end, not return, so we'd have returned true above)
-
-            // Case 2: [..., conditional, return] — single-line condition, no end block.
-            // Check the second-to-last entry for a function with a condition retvar.
-            if (_functions.size() >= 2)
-            {
-                const auto& prev = _functions[_functions.size() - 2];
-                if (prev.retvarID >= 0)
-                {
-                    const auto* arg = prev.retvarArgument();
-                    if (arg && arg->type() == ParseType::Condition)
-                        return true; // return is inside a conditional — auto-return still needed
-                }
-            }
-
-            return false; // last entry is a top-level return — no auto-return needed
-        }();
+    const bool shouldIncludeReturn = _needsAutoReturn();
 
     size_t cmdCount = _functions.size();
     if (shouldIncludeReturn)

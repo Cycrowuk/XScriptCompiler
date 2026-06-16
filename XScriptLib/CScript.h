@@ -98,6 +98,7 @@ namespace XScript
 		int _lastInsertPos = -1;
 		bool _pendingEnd = false; // proposed end block — flushed lazily, skipped before else/else-if
 		bool _forceEnd = false; // force end block, even if not strictly necessary (e.g. after return)
+		bool _lastEnsureReturnInserted = false; // set by ensureReturn() — true if a synthetic return(null) was added
 
 	public:
 		CScript(const CScriptData *data);
@@ -133,9 +134,12 @@ namespace XScript
 		bool finalise();
 		bool save(const std::wstring& file, const std::vector<Function> &functionData);
 		void writeArguments(std::wofstream& out, const ScriptFunction& func, const BaseParse* parse, bool isRetvar) const;
+		void ensureReturn(); // append a synthetic "return(null)" if the last entry isn't already a top-level return; returns true if one was inserted
+		bool ensureReturnWasInserted() const { return _lastEnsureReturnInserted; }
 
 	private:
 		bool _addEndBlock(bool forceBlock);
+		bool _needsAutoReturn() const; // shared logic: does the function/script need a synthetic return appended?
 		void _addVariables(const BaseParse* arg);
 		void _simplifyExpression(const BaseParse* parse, std::vector<const BaseParse*>& newArgs);
 		void _parseExpressionList(const std::vector<const BaseParse*>& list, std::vector<const BaseParse*>::const_iterator ignoreItem, std::vector<const BaseParse*>&output);

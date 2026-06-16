@@ -5916,8 +5916,25 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			_conditionStack.empty())
 		{
 			// This } closes the function body
-			delete list.front();
+			const BaseParse* closingBrace = list.front();
 			list.clear();
+			_currentScript->ensureReturn(); // guarantee the function ends with a return
+
+			// If a synthetic "return(null)" was just inserted (the function had
+			// no explicit return at the end), check that null is a valid return
+			// type — same as if the user had written "return(null);" themselves.
+			if (_currentScript->ensureReturnWasInserted() &&
+				!_functionReturnTypes.empty() &&
+				_functionReturnTypes.find(DataTypes::Null) == _functionReturnTypes.end())
+			{
+				Warnings& warn = _addWarning(ParseWarnings::InvalidDataType, closingBrace);
+				warn.data.push_back(L"null");
+				warn.data.push_back(L"-1"); // -1 = return value, not an argument index
+				warn.data.push_back(_getDataTypesString({ DataTypes::Null }));
+				warn.data.push_back(_getDataTypesString(_functionReturnTypes));
+			}
+
+			delete closingBrace;
 			_inFunctionDef    = false;
 			_functionDefDepth = 0;
 			_functionDefName.clear();
