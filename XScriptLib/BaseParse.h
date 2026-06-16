@@ -103,6 +103,15 @@ namespace XScript
 		UnknownPreprocessor,
 		AmbiguousObjectFunction,
 		IncompleteLine,
+		InvalidFunctionDefinition,	// Generic/fallback — malformed function definition header
+		CodeOutsideFunction,		// Code found outside a function definition block
+		NestedFunctionDefinition,	// "function" keyword found while already inside a function
+		MissingFunctionBodyBrace,	// Content found before the opening { of a function body
+		MissingFunctionName,		// No valid function name after "function" / return type
+		MissingFunctionParameterList,	// No "(...)" parameter list after the function name
+		InvalidFunctionParameterType,	// Parameter type is not a recognised pardef/datatype
+		MissingFunctionParameterVariable,	// Parameter type not followed by a $variable
+		DuplicateFunctionParameterName,	// Same $variable name used more than once
 	};
 	enum class Conditions
 	{

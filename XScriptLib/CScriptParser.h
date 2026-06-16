@@ -125,6 +125,14 @@ namespace XScript {
 		};
 		std::vector<MacroCallState> _macroStack; // supports nested macros
 
+		// Function definition state
+		// When parsing a function definition body, _inFunctionDef is true.
+		// _functionDefDepth tracks brace nesting so we know when the body ends.
+		bool         _inFunctionDef      = false;
+		int          _functionDefDepth   = 0;
+		std::wstring _functionDefName;   // e.g. "main"
+		std::unordered_set<DataTypes> _functionReturnTypes; // empty = no declared return type (no checking)
+
 		// When inside macro expansion, points to a synthetic node representing the
 		// original macro call site (for error/warning location), and the list of
 		// argument strings (e.g. "$myArr") + their original parse nodes (if a
@@ -193,6 +201,7 @@ namespace XScript {
 		bool includeFile(const std::wstring& filename); // process an #include file inline
 		bool _expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine);
 		const BaseParse* _resolveMacroReportNode(const BaseParse* parse) const;
+		bool _parseFunctionDefinition(const std::vector<const BaseParse*>& list, size_t linePos);
 		BaseParse* parseCondition(const std::wstring& line) const;
 		BaseParse* parseConstant(const std::wstring& line) const;
 		bool parseLine(size_t linePos, const std::wstring &line);

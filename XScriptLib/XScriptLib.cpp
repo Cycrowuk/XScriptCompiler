@@ -155,7 +155,7 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 		str << std::setw(12) << strm.str() << " ";
 
 		std::cout << "Compile Error [#" << static_cast<unsigned int>((*itr)->error()) << "]: " << str.str();
-	
+
 		switch ((*itr)->error())
 		{
 		case ParseErrors::InternalFunctionError:
@@ -322,6 +322,38 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 		case ParseErrors::AmbiguousObjectFunction:
 			std::cout << "- Ambiguous object function '" << converter.to_bytes((*itr)->data(0)) << "', unable to determine matching function: " << converter.to_bytes((*itr)->data(1));
 			break;
+		case ParseErrors::InvalidFunctionDefinition:
+			std::cout << "- Invalid function definition";
+			if (!(*itr)->data(0).empty())
+				std::cout << " '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::CodeOutsideFunction:
+			std::cout << "- Code is not allowed outside of a function definition";
+			break;
+		case ParseErrors::NestedFunctionDefinition:
+			std::cout << "- Nested function definitions are not supported - close the current function with '}' before starting a new one";
+			break;
+		case ParseErrors::MissingFunctionBodyBrace:
+			std::cout << "- Expected '{' to start the function body";
+			break;
+		case ParseErrors::MissingFunctionName:
+			std::cout << "- Expected a function name after 'function'";
+			break;
+		case ParseErrors::MissingFunctionParameterList:
+			std::cout << "- Expected '(' to start the function's parameter list";
+			break;
+		case ParseErrors::InvalidFunctionParameterType:
+			std::cout << "- Invalid parameter type";
+			if (!(*itr)->data(0).empty())
+				std::cout << " '" << converter.to_bytes((*itr)->data(0)) << "'";
+			std::cout << " - expected a recognised datatype or pardef name";
+			break;
+		case ParseErrors::MissingFunctionParameterVariable:
+			std::cout << "- Expected a $variable name after the parameter type";
+			break;
+		case ParseErrors::DuplicateFunctionParameterName:
+			std::cout << "- Duplicate parameter name '" << converter.to_bytes((*itr)->data(0)) << "' - each parameter must have a unique name";
+			break;
 		}
 		std::cout << std::endl;
 		std::cout << "\t" + sLine << std::endl;
@@ -334,7 +366,7 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 	return 1;
 }
 
-bool compileScriptFile(const std::wstring& filename, const std::wstring& out, const std::vector<std::wstring>& defines)
+bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
 {
 	if (!g_scriptData)
 		throw std::exception("Unable to Compile script, No game data loaded");
@@ -342,32 +374,76 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 	// load the script parser
 	XScript::CScriptParser parser(g_scriptData);
 
-	// inject any command-line defines before parsing begins
-	for (const auto& def : defines)
-		parser.addDefine(def);
-
-	// ── Pass 1 (pre-pass) — collect gosub variable types ──────────────────
+	// read the script file using the parser
 	parser.addCurrentFile(filename);
+	std::wifstream infile(filename);
+	std::wstring line;
+	int iLine = 0;
+	while (std::getline(infile, line))
 	{
-		std::wifstream infile(filename);
-		std::wstring line;
-		int iLine = 0;
-		while (std::getline(infile, line))
-		{
-			++iLine;
-			if (!parser.prePassLine(iLine, line))
-				break;
-		}
+		++iLine;
+		if (!parser.parseLine(iLine, line))
+			break;
+
 	}
 	parser.removeCurrentFile();
+	infile.close();
 
-	parser.resetForRealPass();
+	if (!parser.errorData().empty())
+	{
+		displayError(parser, line);
+		return false;
+	}
 
-	// Re-inject defines after reset so they're available for pass 2
-	for (const auto& def : defines)
-		parser.addDefine(def);
+	if (!parser.finalise())
+	{
+		displayError(parser, line);
+		return false;
+	}
 
-	// ── Pass 2 (real pass) — full compile ─────────────────────────────────
+	if (parser.hasWarnings())
+		displayWarnings(parser);
+
+	XScript::CScript* script = parser.currentScript();
+	if (script->save(out, g_scriptData->functionData()))
+	{
+		XLib::FileIO f(out);
+		if (f.exists() && f.isFileExtension("pck"))
+		{
+			size_t size;
+			unsigned char* readData = (unsigned char*)f.readAll(&size);
+			if (readData)
+			{
+				size_t newSize;
+				unsigned char* data = XLib::PCKData(readData, size, &newSize, false);
+				if (data)
+				{
+					f.close();
+					XLib::FileIO fWrite(out, true);
+					fWrite.write((const char*)data, newSize);
+					fWrite.close();
+					delete[]data;
+				}
+				delete[]readData;
+			}
+		}
+		return true;
+	}
+
+	return false;
+}
+
+bool compileScriptFile(const std::wstring& filename, const std::wstring& out, const std::vector<std::wstring>& defines)
+{
+	if (!g_scriptData)
+		throw std::exception("Unable to Compile script, No game data loaded");
+
+	XScript::CScriptParser parser(g_scriptData);
+
+	// Pre-register command-line defines
+	for (const auto& d : defines)
+		parser.addDefine(d);
+
 	parser.addCurrentFile(filename);
 	std::wifstream infile(filename);
 	std::wstring line;
@@ -403,7 +479,7 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 		if (f.exists() && f.isFileExtension("pck"))
 		{
 			size_t size;
-			unsigned char* readData = (unsigned char *)f.readAll(&size);
+			unsigned char* readData = (unsigned char*)f.readAll(&size);
 			if (readData)
 			{
 				size_t newSize;
@@ -414,9 +490,9 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 					XLib::FileIO fWrite(out, true);
 					fWrite.write((const char*)data, newSize);
 					fWrite.close();
-					delete[]data;
+					delete[] data;
 				}
-				delete[]readData;
+				delete[] readData;
 			}
 		}
 		return true;
@@ -425,9 +501,9 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 	return false;
 }
 
-bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
+bool compileScriptFile(const std::string& filename, const std::string& out)
 {
-	return compileScriptFile(filename, out, {});
+	return compileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(out));
 }
 
 bool compileScriptFile(const std::string& filename, const std::string& out, const std::vector<std::string>& defines)
@@ -438,16 +514,11 @@ bool compileScriptFile(const std::string& filename, const std::string& out, cons
 	return compileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(out), wdefines);
 }
 
-bool compileScriptFile(const std::string& filename, const std::string& out)
-{
-	return compileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(out), {});
-}
-
 
 bool decompileScriptFile(const std::wstring& filename, const std::wstring& output, bool useNamespace)
 {
 	if (!g_scriptData)
-		throw std::exception("Unable to Compile script, No game data loaded");
+		throw std::exception("Unable to Decompile script, No game data loaded");
 
 	XScript::ScriptRead reader(g_scriptData);
 	reader.setUseNamespace(useNamespace);
@@ -460,17 +531,25 @@ bool decompileScriptFile(const std::wstring& filename, const std::wstring& outpu
 
 bool decompileScriptFile(const std::wstring& filename, const std::wstring& output)
 {
-	return decompileScriptFile(filename, output, false);
+	if (!g_scriptData)
+		throw std::exception("Unable to Compile script, No game data loaded");
+
+	XScript::ScriptRead reader(g_scriptData);
+
+	bool success = reader.read(filename);
+	if (success)
+		success = reader.write(output);
+	return success;
+}
+
+bool decompileScriptFile(const std::string& filename, const std::string& output)
+{
+	return decompileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(output));
 }
 
 bool decompileScriptFile(const std::string& filename, const std::string& output, bool useNamespace)
 {
 	return decompileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(output), useNamespace);
-}
-
-bool decompileScriptFile(const std::string& filename, const std::string& output)
-{
-	return decompileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(output), false);
 }
 bool loadData(const std::wstring& dataFile)
 {

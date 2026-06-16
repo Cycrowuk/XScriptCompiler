@@ -145,6 +145,10 @@ void CScriptParser::_clearData()
 	_whileGeneratedVariables = 0;
 	_createdExpressions.clear();
 	_ifDefStack.clear();
+	_inFunctionDef    = false;
+	_functionDefDepth = 0;
+	_functionDefName.clear();
+	_functionReturnTypes.clear();
 }
 
 bool CScriptParser::hasWarnings() const
@@ -1996,6 +2000,13 @@ bool CScriptParser::_parsePreprocessor(std::vector<const BaseParse*>& list)
 			}
 			else if (keyword->keyword() == L"datatype")
 			{
+				// #datatype is only valid inside a function definition body
+				if (!_inFunctionDef || _functionDefDepth == 0)
+				{
+					_addError(ParseErrors::CodeOutsideFunction, list[1]);
+					return false;
+				}
+
 				// #datatype $varname DATATYPE_X
 				// #datatype $varname DATATYPE_X|DATATYPE_Y
 				// Sets the type hint for $varname so object method resolution works correctly.
@@ -2567,6 +2578,34 @@ bool CScriptParser::parseConstants(const std::vector<const BaseParse*>& list, st
 				condition->setFromParse(keyword);
 				newList.push_back(condition);
 			}
+			// "function" keyword — pass through for _parseFunctionDefinition to handle
+			if (keyword->keyword() == L"function")
+			{
+				newList.push_back(*itr);
+				previous = *itr;
+				continue;
+			}
+
+			// "void" — treat as DATATYPE_NULL for function return type declarations
+			if (keyword->keyword() == L"void")
+			{
+				const ConstantData* nullConst = _data->findConstant(L"DATATYPE_NULL");
+				if (nullConst)
+				{
+					ParseConstant* c = new ParseConstant(keyword->line(), nullConst);
+					c->setFromParse(keyword);
+					newList.push_back(c);
+					delete* itr;
+				}
+				else
+				{
+					// DATATYPE_NULL not found — pass through as-is
+					newList.push_back(*itr);
+				}
+				previous = newList.back();
+				continue;
+			}
+
 			// is a function
 			else if ((itr + 1) != list.end() && (*(itr + 1))->type() == ParseType::Brackets)
 			{
@@ -4547,6 +4586,8 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 		}
 	}
 
+
+
 	// prepare the processing list
 	// We process everything upto an end line ';' or an end block '}'
 	// This can include multiple lines
@@ -4668,6 +4709,10 @@ void CScriptParser::resetForRealPass()
 	_ifDefStack.clear();
 	_conditionStack.clear();
 	_createdExpressions.clear();
+	_inFunctionDef    = false;
+	_functionDefDepth = 0;
+	_functionDefName.clear();
+	_functionReturnTypes.clear();
 }
 
 bool CScriptParser::_checkExpressionValidity(const BaseParse* parse)
@@ -5104,7 +5149,14 @@ bool CScriptParser::_doInternalFunction(InternalFunctions func, const ParseArgum
 	switch (func)
 	{
 	case InternalFunctions::SetArguments:
-		return _setArguments(arguments);
+	{
+		// setArgument() is no longer supported — arguments are declared in
+		// the function definition header: function DATATYPE_X main(DATATYPE_Y $arg)
+		ParseFail* fail = new ParseFail(arguments, ParseErrors::InvalidPreprocessor);
+		fail->addData(L"setArgument is not supported — declare arguments in the function definition header");
+		_errors.push_back(fail);
+		return false;
+	}
 	case InternalFunctions::SetDescription:
 		return _setDescription(arguments);
 	case InternalFunctions::SetVersion:
@@ -5576,6 +5628,60 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	if (_prePassMode)
 		return true;
 
+	// ── Return type check ────────────────────────────────────────────────────
+	// If this is a return() call inside a function definition, check the argument
+	// type against the declared function return type(s) — including DATATYPE_NULL
+	// (void), where returning any non-null value should be flagged. Multiple
+	// allowed types (DATATYPE_NULL|DATATYPE_SHIP) are supported — the return
+	// value's type must match at least one of them.
+	if (_inFunctionDef && func->name == L"return" &&
+		!_functionReturnTypes.empty() &&
+		functionData->arguments() && functionData->arguments()->count() > 0)
+	{
+		const BaseParse* retArg = functionData->arguments()->get(0);
+		std::unordered_set<DataTypes> retDts;
+
+		if (retArg->type() == ParseType::Variable)
+			retDts = _getActualDataTypes(retArg);
+		else if (retArg->type() == ParseType::Function)
+		{
+			const ParseFunction* retFunc = dynamic_cast<const ParseFunction*>(retArg);
+			if (retFunc->returnVariable())
+				retDts = _getActualDataTypes(retFunc->returnVariable());
+		}
+		else if (retArg->type() == ParseType::Constant)
+		{
+			const ParseConstant* c = dynamic_cast<const ParseConstant*>(retArg);
+			DataTypes st = c->subType();
+			retDts.insert(st != DataTypes::Unknown ? st : c->dataType());
+		}
+		else if (retArg->type() == ParseType::Null)
+		{
+			retDts.insert(DataTypes::Null);
+		}
+
+		if (!retDts.empty() && retDts.find(DataTypes::Unknown) == retDts.end())
+		{
+			bool matches = false;
+			for (DataTypes dt : retDts)
+			{
+				if (_functionReturnTypes.find(dt) != _functionReturnTypes.end())
+				{
+					matches = true;
+					break;
+				}
+			}
+			if (!matches)
+			{
+				Warnings& warn = _addWarning(ParseWarnings::InvalidDataType, retArg);
+				warn.data.push_back(retArg->data());
+				warn.data.push_back(L"-1"); // -1 = return value, not an argument index
+				warn.data.push_back(_getDataTypesString(retDts));
+				warn.data.push_back(_getDataTypesString(_functionReturnTypes));
+			}
+		}
+	}
+
 	// When running as an inline function inside an else-if condition expression,
 	// insert BEFORE the opening if block rather than appending after the end block.
 	bool isInsideElseIf = false;
@@ -5721,6 +5827,103 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		list.clear();
 		if (!parseConstants(originalList, list))
 			return false;
+	}
+
+	// ── Function definition / outside-function enforcement ────────────────────
+	// By here: brackets are grouped, $variables are ParseVariable, constants resolved.
+	if (!list.empty())
+	{
+		// If the list starts with { and we're waiting for the function body open brace
+		if (_inFunctionDef && _functionDefDepth == 0)
+		{
+			if (list.front()->type() == ParseType::Symbol &&
+				dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::StartBlock)
+			{
+				_functionDefDepth = 1;
+				// Consume the { and fall through to process any remaining tokens
+				delete list.front();
+				list.erase(list.begin());
+				if (list.empty())
+					return true;
+				// Fall through — rest of list is first statement in function body
+			}
+			else
+			{
+				_addError(ParseErrors::MissingFunctionBodyBrace, list.front());
+				return false;
+			}
+		}
+
+		// function keyword — parse the definition header
+		if (list.front()->type() == ParseType::Keyword &&
+			dynamic_cast<const ParseKeyword*>(list.front())->keyword() == L"function")
+		{
+			if (_inFunctionDef)
+			{
+				_addError(ParseErrors::NestedFunctionDefinition, list.front());
+				return false;
+			}
+			size_t lp = list.front()->linePos();
+			if (!_parseFunctionDefinition(list, lp))
+				return false;
+
+			// _parseFunctionDefinition has set _inFunctionDef and consumed the
+			// conceptual header — now strip the header tokens from the list so
+			// the rest (opening { and any following code) can be processed normally.
+			// The header is: "function" [returnType] name brackets [{ ...]
+			// After _parseFunctionDefinition the list still contains all original
+			// tokens; remove up to and including the brackets node.
+			while (!list.empty())
+			{
+				const BaseParse* front = list.front();
+				bool isBrackets = (front->type() == ParseType::Brackets);
+				delete front;
+				list.erase(list.begin());
+				if (isBrackets)
+					break; // brackets was the last header token — stop here
+			}
+
+			// If the list now starts with { consume it as the function body open
+			if (!list.empty() && list.front()->type() == ParseType::Symbol &&
+				dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::StartBlock)
+			{
+				_functionDefDepth = 1;
+				delete list.front();
+				list.erase(list.begin());
+			}
+
+			// If nothing left, we're done
+			if (list.empty())
+				return true;
+
+			// Otherwise fall through — the rest of the list is the first
+			// statement inside the function body; process it normally below.
+		}
+
+		// Outside a function definition — only allow { waiting state (handled above)
+		if (!_inFunctionDef)
+		{
+			_addError(ParseErrors::CodeOutsideFunction, list.front());
+			return false;
+		}
+
+		// Detect the function's closing } — it's a lone EndBlock when no
+		// while/if blocks are open (_conditionStack is empty).
+		if (_inFunctionDef && _functionDefDepth > 0 &&
+			list.size() == 1 &&
+			list.front()->type() == ParseType::Symbol &&
+			dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::EndBlock &&
+			_conditionStack.empty())
+		{
+			// This } closes the function body
+			delete list.front();
+			list.clear();
+			_inFunctionDef    = false;
+			_functionDefDepth = 0;
+			_functionDefName.clear();
+			_functionReturnTypes.clear();
+			return true;
+		}
 	}
 
 	// Desugar ++, --, +=, -=, *=, /= before any other processing
@@ -6358,6 +6561,16 @@ void CScriptParser::_checkWarnings(const std::vector<const BaseParse*>& list)
 		}
 		else if ((*itr)->type() == ParseType::Variable)
 		{
+			// Skip assignment targets — $var = ... — the variable is being defined here,
+			// not read, so an uninitialised warning is not appropriate
+			auto next = std::next(itr);
+			if (next != list.end() && (*next)->type() == ParseType::Symbol)
+			{
+				const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(*next);
+				if (sym->symbol() == SymbolType::Assignment)
+					continue;
+			}
+
 			const ParseVariable* vari = dynamic_cast<const ParseVariable*>(*itr);
 			auto dts = vari->currentDataTypes();
 			if (dts.empty()) dts = (*_pVariables)[vari->name()];
@@ -6941,6 +7154,235 @@ void CScriptParser::_errorArgumentDatatype(const ParseArguments* arguments, unsi
 	fail->addData(std::to_wstring(static_cast<int>(got)));
 	fail->addData(std::to_wstring(static_cast<int>(wanted)));
 	_errors.push_back(fail);
+}
+
+// ── Function definition parser ────────────────────────────────────────────────
+// Handles: function [ReturnType] name(ParamType $param, ...) [  {  ]
+// Returns false on a parse error.
+bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>& list, size_t linePos)
+{
+	// list[0] is the "function" keyword — skip it
+	size_t idx = 1;
+
+	// Optional return type — after parseConstants runs, DATATYPE_NULL becomes
+	// a ParseConstant with dataType()==DataTypes::DataType, and pardef keywords
+	// like VARSECTOR become ParseConstant with dataType()==DataTypes::ParDef.
+	// "void" stays as ParseKeyword since it's not a registered constant.
+	// Multiple types can be combined with '|': DATATYPE_NULL|DATATYPE_SHIP
+	std::wstring returnTypeName;
+	std::unordered_set<DataTypes> returnDataTypes; // empty = no return type declared (no checking)
+	if (idx < list.size())
+	{
+		bool isReturnType = false;
+		DataTypes firstType = DataTypes::Unknown;
+		bool firstIsVoid = false;
+
+		if (list[idx]->type() == ParseType::Keyword)
+		{
+			const ParseKeyword* kw = dynamic_cast<const ParseKeyword*>(list[idx]);
+			if (kw->keyword() == L"void")
+			{
+				returnTypeName = L"void";
+				firstType      = DataTypes::Null;
+				firstIsVoid    = true;
+				isReturnType   = true;
+			}
+		}
+		else if (list[idx]->type() == ParseType::Constant)
+		{
+			const ParseConstant* c = dynamic_cast<const ParseConstant*>(list[idx]);
+			// A DataType constant (e.g. DATATYPE_NULL) used as return type
+			if (c->dataType() == DataTypes::DataType)
+			{
+				returnTypeName = c->data();
+				// Only treat as return type if a later token is the function name (keyword)
+				// — scan past any |-separated additional types to find it
+				size_t scan = idx + 1;
+				while (scan + 1 < list.size() &&
+					list[scan]->type() == ParseType::Operator &&
+					list[scan + 1]->type() == ParseType::Constant)
+					scan += 2;
+				if (scan < list.size() && list[scan]->type() == ParseType::Keyword)
+				{
+					isReturnType = true;
+					firstType    = static_cast<DataTypes>(c->id());
+				}
+			}
+			// A ParDef constant — if a later token (past any |) is the function
+			// name, treat as return type
+			else if (c->dataType() == DataTypes::ParDef)
+			{
+				size_t scan = idx + 1;
+				while (scan + 1 < list.size() &&
+					list[scan]->type() == ParseType::Operator &&
+					list[scan + 1]->type() == ParseType::Constant)
+					scan += 2;
+				if (scan < list.size() && list[scan]->type() == ParseType::Keyword)
+				{
+					returnTypeName = c->data();
+					isReturnType   = true;
+				}
+			}
+		}
+
+		if (isReturnType)
+		{
+			idx++;
+			if (!firstIsVoid && firstType != DataTypes::Unknown)
+				returnDataTypes.insert(firstType);
+			else if (firstIsVoid)
+				returnDataTypes.insert(DataTypes::Null);
+
+			// Consume any further |-separated DATATYPE_* constants
+			while (idx + 1 < list.size() &&
+				list[idx]->type() == ParseType::Operator &&
+				list[idx + 1]->type() == ParseType::Constant)
+			{
+				const ParseConstant* nextC = dynamic_cast<const ParseConstant*>(list[idx + 1]);
+				if (nextC->dataType() == DataTypes::DataType || nextC->dataType() == DataTypes::ParDef)
+				{
+					returnTypeName += L"|" + nextC->data();
+					if (nextC->dataType() == DataTypes::DataType)
+						returnDataTypes.insert(static_cast<DataTypes>(nextC->id()));
+					idx += 2;
+				}
+				else
+					break;
+			}
+		}
+	}
+
+	// Function name
+	if (idx >= list.size() || list[idx]->type() != ParseType::Keyword)
+	{
+		_addError(ParseErrors::MissingFunctionName, list[0]);
+		return false;
+	}
+	const ParseKeyword* nameKw = dynamic_cast<const ParseKeyword*>(list[idx]);
+	std::wstring funcName = nameKw->keyword();
+	idx++;
+
+	// Parameter list — must be brackets
+	if (idx >= list.size() || list[idx]->type() != ParseType::Brackets)
+	{
+		_addError(ParseErrors::MissingFunctionParameterList, list[0]);
+		return false;
+	}
+	const ParseBrackets* brackets = dynamic_cast<const ParseBrackets*>(list[idx]);
+	idx++;
+
+	// Parse parameters: DATATYPE_X $var, DATATYPE_Y $var2, ...
+	// Comma-separated pairs in the brackets' constList
+	const auto params = brackets->constList();
+	std::unordered_set<std::wstring> seenParamNames;
+	size_t pi = 0;
+	while (pi < params.size())
+	{
+		// Skip commas
+		if (params[pi]->type() == ParseType::Symbol)
+		{
+			const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(params[pi]);
+			if (sym->symbol() == SymbolType::Comma) { pi++; continue; }
+		}
+
+		// Expect: pardef constant (VARSECTOR, VARSTRING, etc.) or pardef keyword
+		// After parseConstants, pardef names become ParseConstant with dataType()==ParDef
+		ParDef pardef = ParDef::Unknown;
+		std::wstring paramTypeName;
+
+		if (params[pi]->type() == ParseType::Constant)
+		{
+			const ParseConstant* c = dynamic_cast<const ParseConstant*>(params[pi]);
+			if (c->dataType() == DataTypes::ParDef)
+			{
+				pardef        = static_cast<ParDef>(c->id());
+				paramTypeName = c->data();
+			}
+			else
+			{
+				_addError(ParseErrors::InvalidFunctionParameterType, params[pi]);
+				return false;
+			}
+		}
+		else if (params[pi]->type() == ParseType::Keyword)
+		{
+			// Still a keyword — look it up directly
+			paramTypeName = dynamic_cast<const ParseKeyword*>(params[pi])->keyword();
+			const ParDefData* pd = _data->findParDefData(paramTypeName);
+			if (pd)
+				pardef = pd->id;
+			else
+			{
+				ParseFail* fail = new ParseFail(params[pi], ParseErrors::InvalidFunctionParameterType);
+				fail->addData(paramTypeName);
+				_errors.push_back(fail);
+				return false;
+			}
+		}
+		else
+		{
+			_addError(ParseErrors::InvalidFunctionParameterType, params[pi]);
+			return false;
+		}
+		pi++;
+
+		// Expect: $variable
+		if (pi >= params.size() || params[pi]->type() != ParseType::Variable)
+		{
+			_addError(ParseErrors::MissingFunctionParameterVariable, params[pi < params.size() ? pi : pi - 1]);
+			return false;
+		}
+		const ParseVariable* paramVar = dynamic_cast<const ParseVariable*>(params[pi]);
+		pi++;
+
+		// Check for duplicate parameter names — each must be unique
+		if (seenParamNames.find(paramVar->name()) != seenParamNames.end())
+		{
+			ParseFail* fail = new ParseFail(paramVar, ParseErrors::DuplicateFunctionParameterName);
+			fail->addData(paramVar->name());
+			_errors.push_back(fail);
+			return false;
+		}
+		seenParamNames.insert(paramVar->name());
+
+		// Register as a script argument
+		_currentScript->addArgument(paramVar->name(), L"", pardef, paramTypeName);
+
+		// Register the variable in the parser's own tracking map so it's
+		// considered initialised and type-hinted — prevents spurious
+		// "variable has not been initialised" warnings for parameters
+		const ParDefData* pd = _data->getParDefData(pardef);
+		if (pd && !pd->datatypes.empty())
+			(*_pVariables)[paramVar->name()] = pd->datatypes;
+		else
+			(*_pVariables)[paramVar->name()] = { DataTypes::Unknown }; // known but untyped
+	}
+
+	// Optional opening brace on the same line
+	bool openBraceFound = false;
+	if (idx < list.size() && list[idx]->type() == ParseType::Symbol)
+	{
+		const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(list[idx]);
+		if (sym->symbol() == SymbolType::StartBlock)
+		{
+			openBraceFound      = true;
+			_inFunctionDef      = true;
+			_functionDefDepth   = 1;
+			_functionDefName    = funcName;
+			_functionReturnTypes = returnDataTypes;
+		}
+	}
+
+	if (!openBraceFound)
+	{
+		// No brace yet — flag that we're waiting for it
+		_inFunctionDef      = true;
+		_functionDefDepth   = 0;
+		_functionDefName    = funcName;
+		_functionReturnTypes = returnDataTypes;
+	}
+
+	return true;
 }
 
 const BaseParse* CScriptParser::_resolveMacroReportNode(const BaseParse* parse) const

@@ -6813,7 +6813,7 @@
 			</Arguments>
 			<Example>if $asteroid->hasCollectibleRocks() { ... }</Example>
 		</Function>
-		<Function id="1215" name="sendIncomingMessage" description="Sends an incoming communication message to the player from this object, with an optional flag to show as interactive menu.">
+		<Function id="1215" name="sendIncomingMessage" alias="incomingMessage" description="Sends an incoming communication message to the player from this object, with an optional flag to show as interactive menu.">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
