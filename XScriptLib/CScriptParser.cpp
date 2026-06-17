@@ -5116,7 +5116,8 @@ bool CScriptParser::_runFunction(ParseFunction* function, InlineState inlineStat
 			}
 		}
 
-		const Function* func = _data->findObjectFunction(function->function());
+		int argCount = function->arguments() ? static_cast<int>(function->arguments()->count()) : 0;
+		const Function* func = _data->findBestObjectFunction(function->function(), argCount, function->arguments());
 		if (func)
 			return _doGlobalFunction(func, function, inlineState);
 

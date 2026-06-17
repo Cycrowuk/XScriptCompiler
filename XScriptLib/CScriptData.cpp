@@ -276,6 +276,80 @@ const Function* CScriptData::findObjectFunction(const std::wstring& function) co
 	return NULL;
 }
 
+const Function* CScriptData::findBestObjectFunction(const std::wstring& function, int argCount, const ParseArguments* args) const
+{
+	// Mirrors findBestGlobalFunction, but for $obj->function() calls — only
+	// considers functions that DO require an object (non-empty refObjType),
+	// the opposite filter to the global lookup.
+	static constexpr int PARDEF_CALLNAME = 7;
+	auto scoreFunction = [&](const Function* f) -> int
+	{
+		if (!args) return 0;
+		int score = 0;
+		int checkCount = min(static_cast<int>(args->count()), static_cast<int>(f->arguments.size()));
+		for (int ai = 0; ai < checkCount; ai++)
+		{
+			const BaseParse* arg = args->get(ai);
+			bool isCallName = (static_cast<int>(f->arguments[ai].pardef) == PARDEF_CALLNAME);
+			bool isString   = (arg->type() == ParseType::String);
+			if (isCallName && isString)    score += 2;
+			else if (isCallName && !isString) score -= 2;
+			else if (!isCallName && isString) score -= 1;
+		}
+		return score;
+	};
+
+	auto countArgs = [](const Function* f) -> int {
+		int n = 0;
+		for (const auto& a : f->arguments)
+			if (a.pardef != ParDef::RetVar) n++;
+		return n;
+	};
+
+	// If there are aliases (overloads) for this name, pick the best match
+	auto aliasItr = _functionAliases.find(function);
+	if (aliasItr != _functionAliases.end())
+	{
+		const Function* best = nullptr;
+		int bestDiff = INT_MAX;
+		int bestScore = INT_MIN;
+
+		auto consider = [&](const Function* f) {
+			// Only consider functions that DO require an object — this is the
+			// $obj->func() lookup, the inverse of the global-call filter
+			if (f->refObjType.empty())
+				return;
+
+			int diff = std::abs(countArgs(f) - argCount);
+			int score = scoreFunction(f);
+			if (diff < bestDiff || (diff == bestDiff && score > bestScore))
+			{
+				bestDiff = diff;
+				bestScore = score;
+				best = f;
+			}
+		};
+
+		for (unsigned int id : aliasItr->second)
+			if (id < _functionData.size())
+				consider(&_functionData[id]);
+
+		auto primaryItr = _objectFunctions.find(function);
+		if (primaryItr != _objectFunctions.end())
+			consider(&_functionData[primaryItr->second]);
+
+		if (best)
+			return best;
+	}
+
+	// Fallback to exact name lookup — but only return it if it actually
+	// requires an object; otherwise this isn't a valid $obj-> call target
+	const Function* fallback = findObjectFunction(function);
+	if (fallback && fallback->refObjType.empty())
+		return nullptr;
+	return fallback;
+}
+
 const Properties* CScriptData::findObjectProperty(const std::wstring& prop) const
 {
 	auto itr = _objectProperties.find(prop);

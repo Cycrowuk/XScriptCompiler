@@ -338,6 +338,7 @@ namespace XScript
 		const MacroData* findMacro(const std::wstring& name) const;
 		const Function* getSpecialGlobalFunction(SpecialFunction func) const;
 		const Function* findObjectFunction(const std::wstring& function) const;
+		const Function* findBestObjectFunction(const std::wstring& function, int argCount, const ParseArguments* args = nullptr) const;
 		const Properties* findObjectProperty(const std::wstring& prop) const;
 		const Function* findObjectPropertySetter(const std::wstring& prop) const;
 		const Function* findObjectPropertyGetter(const std::wstring& prop) const;
