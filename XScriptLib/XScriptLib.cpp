@@ -374,7 +374,29 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
 	// load the script parser
 	XScript::CScriptParser parser(g_scriptData);
 
-	// read the script file using the parser
+	// ── Pass 1 (pre-pass) ───────────────────────────────────────────────────
+	// Reads the file once to hoist subroutine/label variable types and other
+	// forward-reference information before the real compile runs.
+	parser.addCurrentFile(filename);
+	{
+		std::wifstream prefile(filename);
+		std::wstring preline;
+		int iPreLine = 0;
+		while (std::getline(prefile, preline))
+		{
+			++iPreLine;
+			if (!parser.prePassLine(iPreLine, preline))
+				break;
+		}
+		prefile.close();
+	}
+	parser.removeCurrentFile();
+
+	// Reset all per-pass state (errors, warnings, current data list, etc.)
+	// while preserving what pass 1 learned (e.g. _subVariables).
+	parser.resetForRealPass();
+
+	// ── Pass 2 (real compile) ───────────────────────────────────────────────
 	parser.addCurrentFile(filename);
 	std::wifstream infile(filename);
 	std::wstring line;
@@ -440,10 +462,30 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 
 	XScript::CScriptParser parser(g_scriptData);
 
-	// Pre-register command-line defines
+	// Pre-register command-line defines — these persist across resetForRealPass()
+	// so they remain active for both the pre-pass and the real compile pass.
 	for (const auto& d : defines)
 		parser.addDefine(d);
 
+	// ── Pass 1 (pre-pass) ───────────────────────────────────────────────────
+	parser.addCurrentFile(filename);
+	{
+		std::wifstream prefile(filename);
+		std::wstring preline;
+		int iPreLine = 0;
+		while (std::getline(prefile, preline))
+		{
+			++iPreLine;
+			if (!parser.prePassLine(iPreLine, preline))
+				break;
+		}
+		prefile.close();
+	}
+	parser.removeCurrentFile();
+
+	parser.resetForRealPass();
+
+	// ── Pass 2 (real compile) ───────────────────────────────────────────────
 	parser.addCurrentFile(filename);
 	std::wifstream infile(filename);
 	std::wstring line;
