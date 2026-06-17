@@ -10,12 +10,12 @@
 
 using namespace XScript;
 
-ScriptRead::ScriptRead(CScriptData *data) : _pData(data),
-	_version(0),
-	_engine(0),
-	_command(0),
-	_inserted(0),
-	_useNamespace(false)
+ScriptRead::ScriptRead(CScriptData* data) : _pData(data),
+_version(0),
+_engine(0),
+_command(0),
+_inserted(0),
+_useNamespace(false)
 {
 
 }
@@ -35,7 +35,7 @@ bool ScriptRead::read(const std::wstring& filename)
 	XLib::String unpackedData;
 	std::vector<wchar_t>* buffer = NULL;
 
-	if(f.isFileExtension("pck"))
+	if (f.isFileExtension("pck"))
 	{
 		size_t fileSize;
 		char* fileData = f.readAll(&fileSize);
@@ -47,7 +47,7 @@ bool ScriptRead::read(const std::wstring& filename)
 		}
 
 		size_t unpackedSize;
-		unsigned char *unpacked = XLib::UnPCKData((unsigned char *)fileData, fileSize, &unpackedSize);
+		unsigned char* unpacked = XLib::UnPCKData((unsigned char*)fileData, fileSize, &unpackedSize);
 		if (!unpackedSize || !unpacked)
 		{
 			delete[]fileData;
@@ -80,7 +80,7 @@ bool ScriptRead::read(const std::wstring& filename)
 	rapidxml::xml_node<wchar_t>* root_node = doc->first_node(L"script");
 	if (!root_node)
 	{
-		if(buffer)
+		if (buffer)
 			delete buffer;
 		delete doc;
 		throw std::exception("No <script> node found in file");
@@ -117,7 +117,7 @@ bool ScriptRead::read(const std::wstring& filename)
 			arraySize = std::stoi(val);
 	}
 
-	if(!isArray || arraySize != 10)
+	if (!isArray || arraySize != 10)
 	{
 		if (buffer)
 			delete buffer;
@@ -167,7 +167,7 @@ bool ScriptRead::read(const std::wstring& filename)
 		}
 	}
 
-//	in.close();
+	//	in.close();
 
 	if (buffer)
 		delete buffer;
@@ -181,29 +181,52 @@ bool ScriptRead::write(const std::wstring& outfile)
 	if (out.bad())
 		throw std::exception("Unable to open file for writing");
 
-	unsigned int i = 0;
-	for (auto itr = _arguments.begin(); itr != _arguments.end(); itr++, i++)
-	{
-		auto data = _pData->getParDefData(itr->type);
-		if (data)
-			out << L"SetArgument($" << _variables[i] << ", \"" << itr->desc << "\", " << data->code << ");" << std::endl;
-	}
-
 	if (_version)
-		out << L"SetVersion(" << _version << ");" << std::endl;
+		out << L"#VERSION " << _version << std::endl;
 	if (!_desc.empty())
-		out << L"SetDescription(\"" << _desc << "\");" << std::endl;
+		out << L"#DESCRIPTION \"" << _desc << "\"" << std::endl;
 
 	if (_command)
 	{
 		auto cmd = _pData->getCommand(DataTypes::ObjectCommand, _command);
 		if (cmd)
-			out << L"SetCommand(" << cmd->id << ");" << std::endl;
+			out << L"#COMMAND " << cmd->id << std::endl;
 	}
 
 	out << std::endl;
 
-	unsigned int indent = 0;	
+	// Build the parameter list for the function header from the script's
+	// arguments — replaces the old SetArgument(...) calls.
+	out << L"function main(";
+	{
+		unsigned int i = 0;
+		bool first = true;
+		for (auto itr = _arguments.begin(); itr != _arguments.end(); itr++, i++)
+		{
+			auto data = _pData->getParDefData(itr->type);
+			if (!data)
+				continue;
+			if (!first)
+				out << L", ";
+			first = false;
+			out << data->code << L" $" << _variables[i];
+		}
+	}
+	out << L")" << std::endl;
+	out << L"{" << std::endl;
+
+	// Preserve argument descriptions (no longer expressible in the function
+	// header syntax itself) as comments directly under the opening brace.
+	{
+		unsigned int i = 0;
+		for (auto itr = _arguments.begin(); itr != _arguments.end(); itr++, i++)
+		{
+			if (!itr->desc.empty())
+				out << L"   // $" << _variables[i] << L": " << itr->desc << std::endl;
+		}
+	}
+
+	unsigned int indent = 1;
 	bool isIndentNonBlock = false;
 	int debug = 0;
 	for (auto itr = _commands.begin(); itr != _commands.end(); itr++, debug++)
@@ -330,7 +353,7 @@ bool ScriptRead::write(const std::wstring& outfile)
 				auto findItr = _labels.find(itr->arguments.front());
 				if (findItr == _labels.end())
 					throw std::exception("Missing label entry");
-				
+
 				out << findItr->second;
 			}
 			else
@@ -371,6 +394,9 @@ bool ScriptRead::write(const std::wstring& outfile)
 			out << "{" << std::endl;
 		}
 	}
+
+	// Close the function body
+	out << L"}" << std::endl;
 
 	return true;
 }
@@ -478,8 +504,8 @@ bool ScriptRead::_readCode(rapidxml::xml_node<wchar_t>* node)
 	}
 
 	// find all label references
-	for(unsigned int i = 0; i < _commands.size(); i++)
-	{		
+	for (unsigned int i = 0; i < _commands.size(); i++)
+	{
 		if (_commands[i].data && _commands[i].data->id == _pData->defineLabelCommand())
 			_labels[std::to_wstring(i)] = _commands[i].arguments.front();
 	}
@@ -677,7 +703,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 					ParDef pd = currentFunction->data->arguments[a].pardef;
 					if (pd == ParDef::CallName)
 					{
-						if(type != L"string")
+						if (type != L"string")
 							throw std::exception(Utils::ws2s(Utils::CombineStrings(L"Invalid sval '", type, L"' for callname pardef, Expected 'string'")).c_str());
 
 						if (currentFunction->arguments.size() <= a)
@@ -721,7 +747,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 					currentFunction->condition = _parseCondition(value, currentFunction->isBlock, currentFunction->isElseCondition);
 					++currentArg;
 				}
-				else if(strArg == L"RefObj")
+				else if (strArg == L"RefObj")
 					argType = std::stoi(value);
 			}
 			else if (argType >= 0)
@@ -762,7 +788,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 			}
 		}
 	}
-	
+
 	return true;
 }
 
@@ -780,7 +806,7 @@ bool ScriptRead::_readArguments(rapidxml::xml_node<wchar_t>* node)
 				return false;
 		}
 	}
-	
+
 	return true;
 }
 
