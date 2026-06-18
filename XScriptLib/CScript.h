@@ -136,6 +136,7 @@ namespace XScript
 		void writeArguments(std::wofstream& out, const ScriptFunction& func, const BaseParse* parse, bool isRetvar) const;
 		void ensureReturn(); // append a synthetic "return(null)" if the last entry isn't already a top-level return; returns true if one was inserted
 		bool ensureReturnWasInserted() const { return _lastEnsureReturnInserted; }
+		bool isLabelAvailable(const std::wstring& name) const; // true if this label name hasn't been used yet
 
 	private:
 		bool _addEndBlock(bool forceBlock);

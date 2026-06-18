@@ -112,6 +112,13 @@ namespace XScript
 		InvalidFunctionParameterType,	// Parameter type is not a recognised pardef/datatype
 		MissingFunctionParameterVariable,	// Parameter type not followed by a $variable
 		DuplicateFunctionParameterName,	// Same $variable name used more than once
+		EndsubWithoutLabel,			// "endsub" used before any label/sub has been defined
+		DuplicateLabel,				// Label or sub name already exists
+		MissingSubName,				// "sub" keyword not followed by a valid name
+		MissingSubParameterList,		// "sub name" not followed by "()"
+		SubParametersNotAllowed,		// "sub name(...)" — subs cannot take parameters
+		NestedSubDefinition,			// "sub" found while already inside a sub block
+		MissingSubBodyBrace,			// Content found before the opening { of a sub body
 	};
 	enum class Conditions
 	{

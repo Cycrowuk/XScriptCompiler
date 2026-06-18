@@ -133,6 +133,36 @@ namespace XScript {
 		std::wstring _functionDefName;   // e.g. "main"
 		std::unordered_set<DataTypes> _functionReturnTypes; // empty = no declared return type (no checking)
 
+		// True once any label (whether from "name:" or "sub name() {" sugar) has
+		// been defined in the current function body. Used to validate that a
+		// bare "endsub" call only appears after at least one sub/label exists.
+		bool _anyLabelSeen = false;
+
+		// "sub name() { ... }" sugar state — tracks brace depth so the matching
+		// "}" can be replaced with an automatic "endsub;" call.
+		bool _inSubDef    = false;
+		int  _subDefDepth = 0;
+
+		// True once "function main() {...}" has been fully closed. Subs that
+		// appear in the source BEFORE main closes have their actions held in
+		// _pendingSubActions rather than run immediately, so that main's
+		// compiled commands always come first in the output regardless of
+		// where in the source file the sub physically appears.
+		bool _mainCompleted = false;
+
+		// A single deferred sub action — either defining a label (the sub's
+		// own "name:" entry) or running a fully-parsed statement (the sub's
+		// body content, including the synthetic "endsub;" call at its close).
+		// Stored in source order so subs that appeared before main still
+		// compile out in the same relative order, just after main's commands.
+		struct PendingSubAction
+		{
+			const ParseKeyword* label = nullptr;        // non-null = "add this label"
+			std::vector<const BaseParse*> statement;     // non-empty = "run this statement"
+		};
+		std::vector<PendingSubAction> _pendingSubActions;
+		std::unordered_set<std::wstring> _deferredLabelNames; // tracks label names that have been deferred but not yet written to _currentScript
+
 		// When inside macro expansion, points to a synthetic node representing the
 		// original macro call site (for error/warning location), and the list of
 		// argument strings (e.g. "$myArr") + their original parse nodes (if a
@@ -202,6 +232,7 @@ namespace XScript {
 		bool _expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine);
 		const BaseParse* _resolveMacroReportNode(const BaseParse* parse) const;
 		bool _parseFunctionDefinition(const std::vector<const BaseParse*>& list, size_t linePos);
+		bool _parseSubDefinition(const std::vector<const BaseParse*>& list, size_t linePos);
 		BaseParse* parseCondition(const std::wstring& line) const;
 		BaseParse* parseConstant(const std::wstring& line) const;
 		bool parseLine(size_t linePos, const std::wstring &line);

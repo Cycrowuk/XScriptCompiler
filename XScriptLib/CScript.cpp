@@ -938,6 +938,11 @@ bool CScript::_needsAutoReturn() const
     return false; // last entry is a top-level return — no auto-return needed
 }
 
+bool CScript::isLabelAvailable(const std::wstring& name) const
+{
+    return _labels.find(name) == _labels.end();
+}
+
 void CScript::ensureReturn()
 {
     // Flush any pending end block first, so the check below sees the true

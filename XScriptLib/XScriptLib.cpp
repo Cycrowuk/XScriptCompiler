@@ -155,7 +155,7 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 		str << std::setw(12) << strm.str() << " ";
 
 		std::cout << "Compile Error [#" << static_cast<unsigned int>((*itr)->error()) << "]: " << str.str();
-
+	
 		switch ((*itr)->error())
 		{
 		case ParseErrors::InternalFunctionError:
@@ -218,7 +218,10 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 			std::cout << "- Invalid Expression, empty expression after assignment";
 			break;
 		case ParseErrors::InvalidLabel:
-			std::cout << "- Invalid label name '" << converter.to_bytes((*itr)->data(0)) << "' already exists";
+			std::cout << "- Invalid label name '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::DuplicateLabel:
+			std::cout << "- Duplicate label or sub name '" << converter.to_bytes((*itr)->data(0)) << "' - each label and sub must have a unique name";
 			break;
 		case ParseErrors::InvalidStartCondition:
 			std::cout << "- Invalid START condition, not compatible with function '" << converter.to_bytes((*itr)->data(0)) << "'";
@@ -354,6 +357,24 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 		case ParseErrors::DuplicateFunctionParameterName:
 			std::cout << "- Duplicate parameter name '" << converter.to_bytes((*itr)->data(0)) << "' - each parameter must have a unique name";
 			break;
+		case ParseErrors::EndsubWithoutLabel:
+			std::cout << "- 'endsub' cannot be used before any label/sub has been defined";
+			break;
+		case ParseErrors::MissingSubName:
+			std::cout << "- Expected a sub name after 'sub'";
+			break;
+		case ParseErrors::MissingSubParameterList:
+			std::cout << "- Expected '()' after the sub name";
+			break;
+		case ParseErrors::SubParametersNotAllowed:
+			std::cout << "- Subs cannot take parameters - use empty parentheses, e.g. 'sub name()'";
+			break;
+		case ParseErrors::NestedSubDefinition:
+			std::cout << "- Nested sub definitions are not supported - close the current sub with '}' before starting a new one";
+			break;
+		case ParseErrors::MissingSubBodyBrace:
+			std::cout << "- Expected '{' to start the sub body";
+			break;
 		}
 		std::cout << std::endl;
 		std::cout << "\t" + sLine << std::endl;
@@ -433,7 +454,7 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
 		if (f.exists() && f.isFileExtension("pck"))
 		{
 			size_t size;
-			unsigned char* readData = (unsigned char*)f.readAll(&size);
+			unsigned char* readData = (unsigned char *)f.readAll(&size);
 			if (readData)
 			{
 				size_t newSize;

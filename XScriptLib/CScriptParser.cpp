@@ -145,10 +145,16 @@ void CScriptParser::_clearData()
 	_whileGeneratedVariables = 0;
 	_createdExpressions.clear();
 	_ifDefStack.clear();
-	_inFunctionDef    = false;
+	_inFunctionDef = false;
 	_functionDefDepth = 0;
 	_functionDefName.clear();
 	_functionReturnTypes.clear();
+	_anyLabelSeen = false;
+	_inSubDef = false;
+	_subDefDepth = 0;
+	_mainCompleted = false;
+	_pendingSubActions.clear();
+	_deferredLabelNames.clear();
 }
 
 bool CScriptParser::hasWarnings() const
@@ -231,20 +237,20 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 {
 	// Helper: substitute %ARG0%, %ARG1% etc. with the actual argument strings
 	auto substitute = [&](const std::wstring& tmpl) -> std::wstring
-	{
-		std::wstring result = tmpl;
-		for (size_t i = 0; i < args.size(); i++)
 		{
-			std::wstring placeholder = L"%ARG" + std::to_wstring(i) + L"%";
-			size_t pos = 0;
-			while ((pos = result.find(placeholder, pos)) != std::wstring::npos)
+			std::wstring result = tmpl;
+			for (size_t i = 0; i < args.size(); i++)
 			{
-				result.replace(pos, placeholder.size(), args[i]);
-				pos += args[i].size();
+				std::wstring placeholder = L"%ARG" + std::to_wstring(i) + L"%";
+				size_t pos = 0;
+				while ((pos = result.find(placeholder, pos)) != std::wstring::npos)
+				{
+					result.replace(pos, placeholder.size(), args[i]);
+					pos += args[i].size();
+				}
 			}
-		}
-		return result;
-	};
+			return result;
+		};
 
 	// Set up macro call context — used by _addError/_addWarning to redirect
 	// warnings about macro argument variables back to this call site.
@@ -324,8 +330,8 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 					while (pos < trimmed.size() && iswalpha(trimmed[pos]))
 						word += trimmed[pos++];
 					if (word == L"while" || word == L"whilenot" ||
-					    word == L"if"    || word == L"ifnot"    ||
-					    word == L"else")
+						word == L"if" || word == L"ifnot" ||
+						word == L"else")
 						needsSemicolon = false;
 				}
 			}
@@ -2578,8 +2584,9 @@ bool CScriptParser::parseConstants(const std::vector<const BaseParse*>& list, st
 				condition->setFromParse(keyword);
 				newList.push_back(condition);
 			}
-			// "function" keyword — pass through for _parseFunctionDefinition to handle
-			if (keyword->keyword() == L"function")
+			// "function"/"sub" keywords — pass through for _parseFunctionDefinition/
+			// _parseSubDefinition to handle
+			if (keyword->keyword() == L"function" || keyword->keyword() == L"sub")
 			{
 				newList.push_back(*itr);
 				previous = *itr;
@@ -3028,12 +3035,12 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 					{
 						// Push state — body lines will be captured in parseLine
 						MacroCallState state;
-						state.macro     = macro;
-						state.args      = macroArgs;
-						state.argNodes  = macroArgNodes;
-						state.depth     = 0;
-						state.inBody    = false;
-						state.linePos   = macroLinePos;
+						state.macro = macro;
+						state.args = macroArgs;
+						state.argNodes = macroArgNodes;
+						state.depth = 0;
+						state.inBody = false;
+						state.linePos = macroLinePos;
 						state.sourceLine = macroSourceLine;
 						_macroStack.push_back(state);
 
@@ -3048,8 +3055,8 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 							{
 								// Consume the { — start body capture immediately
 								_macroStack.back().inBody = true;
-								_macroStack.back().depth  = 1;
-								delete *rem;
+								_macroStack.back().depth = 1;
+								delete* rem;
 								++rem;
 								// Any remaining items after { are the first statement
 								if (rem != parseList.end())
@@ -3061,7 +3068,7 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 										auto next = rest; ++next;
 										if (next != parseList.end())
 											firstBodyLine += L" ";
-										delete *rest;
+										delete* rest;
 									}
 									if (!firstBodyLine.empty())
 										_macroStack.back().body.push_back(firstBodyLine + L";");
@@ -3073,7 +3080,7 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 							// Accumulate non-brace items as potential single-statement body
 							if (!singleBody.empty()) singleBody += L" ";
 							singleBody += (*rem)->data();
-							delete *rem;
+							delete* rem;
 						}
 						parseList.clear();
 
@@ -3387,7 +3394,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 		{
 			if (expression->list().size() == 2)
 			{
-				if(expression->list()[0]->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(expression->list()[0])->operType() == Operators::Subtract && expression->list()[1]->type() == ParseType::Integer)
+				if (expression->list()[0]->type() == ParseType::Operator && dynamic_cast<const ParseOperator*>(expression->list()[0])->operType() == Operators::Subtract && expression->list()[1]->type() == ParseType::Integer)
 				{
 					ParseInteger* integer = const_cast<ParseInteger*>(dynamic_cast<const ParseInteger*>(expression->list()[1]));
 					integer->negate();
@@ -3784,7 +3791,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 								const_cast<BaseParse*>(newExpr)->setFromParse(expr);
 								args->addParse(const_cast<BaseParse*>(newExpr));
 							}
-							delete expr;							
+							delete expr;
 						}
 						else
 						{
@@ -4205,7 +4212,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 			if (first != std::wstring::npos && trimmed[first] == L'{')
 			{
 				state.inBody = true;
-				state.depth  = 1;
+				state.depth = 1;
 				// If there's content after the { on the same line, buffer it
 				std::wstring rest = trimmed.substr(first + 1);
 				size_t rFirst = rest.find_first_not_of(L" \t");
@@ -4249,7 +4256,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 				return _expandMacro(macro, args, argNodes, body, mLinePos, mSourceLine);
 			}
 			// Empty line — keep waiting
-			}
+		}
 		else
 		{
 			// Counting braces to track nesting depth
@@ -4554,7 +4561,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 				delete sym;
 				if (error)
 				{
-					_addError(ParseErrors::InvalidLabel, parseList.front());
+					_addError(ParseErrors::DuplicateLabel, parseList.front());
 					delete parseList.front();
 				}
 				parseList.clear();
@@ -4612,27 +4619,41 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 				bool success = _parseDataList(_currentDataList);
 				if (success)
 				{
-					// if the processing was successful, we can now actually run it to convert it into actual script commands
-					success = _runDataList(_currentDataList, true);
-
-					if (success && !_deferredLists.empty())
+					// Sub blocks that appear in the source before "function main"
+					// has closed have their statements buffered rather than run
+					// immediately — main's commands must always come first in
+					// the compiled output. _parseDataList already fully validated
+					// and transformed this statement, so it's safe to defer.
+					if (!_prePassMode && _inSubDef && !_mainCompleted && !_currentDataList.empty())
 					{
-						for (auto& deferredList : _deferredLists)
-						{
-							std::vector<const BaseParse*> dl(deferredList);
-							if (!_runDataList(dl, true))
-							{
-								success = false;
-								break;
-							}
-							// Add to created data for cleanup
-							for (auto* p : dl)
-								_createdData.push_back(p);
-						}
-						_deferredLists.clear();
+						PendingSubAction action;
+						action.statement = _currentDataList;
+						_pendingSubActions.push_back(action);
 					}
+					else
+					{
+						// if the processing was successful, we can now actually run it to convert it into actual script commands
+						success = _runDataList(_currentDataList, true);
 
-					_currentScript->flushPostRun();
+						if (success && !_deferredLists.empty())
+						{
+							for (auto& deferredList : _deferredLists)
+							{
+								std::vector<const BaseParse*> dl(deferredList);
+								if (!_runDataList(dl, true))
+								{
+									success = false;
+									break;
+								}
+								// Add to created data for cleanup
+								for (auto* p : dl)
+									_createdData.push_back(p);
+							}
+							_deferredLists.clear();
+						}
+
+						_currentScript->flushPostRun();
+					}
 
 					// reset the generated variables so we dont have too many created
 					if (_generatedVariables >= 10)
@@ -4709,10 +4730,16 @@ void CScriptParser::resetForRealPass()
 	_ifDefStack.clear();
 	_conditionStack.clear();
 	_createdExpressions.clear();
-	_inFunctionDef    = false;
+	_inFunctionDef = false;
 	_functionDefDepth = 0;
 	_functionDefName.clear();
 	_functionReturnTypes.clear();
+	_anyLabelSeen = false;
+	_inSubDef = false;
+	_subDefDepth = 0;
+	_mainCompleted = false;
+	_pendingSubActions.clear();
+	_deferredLabelNames.clear();
 }
 
 bool CScriptParser::_checkExpressionValidity(const BaseParse* parse)
@@ -5227,7 +5254,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	// If we're inside a condition block (depth > 0) it's a conditional return —
 	// the sub continues, so don't terminate the pre-scan yet.
 	if (_prePassMode && _prePassDepth == 0 &&
-		(func->id == _data->returnCommand() || func->id == _data->endCommand()))
+		(func->id == _data->returnCommand() || func->id == _data->endCommand() || func->name == L"endsub"))
 	{
 		_subEndedOnLine = true;
 		_currentSubLabel.clear();
@@ -5629,6 +5656,15 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	if (_prePassMode)
 		return true;
 
+	// ── endsub validity check ────────────────────────────────────────────────
+	// "endsub" only makes sense once at least one label (sub) has been defined
+	// earlier in the script. Using it before any label exists is an error.
+	if (func->name == L"endsub" && !_anyLabelSeen)
+	{
+		_addError(ParseErrors::EndsubWithoutLabel, functionData);
+		return false;
+	}
+
 	// ── Return type check ────────────────────────────────────────────────────
 	// If this is a return() call inside a function definition, check the argument
 	// type against the declared function return type(s) — including DATATYPE_NULL
@@ -5855,6 +5891,26 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			}
 		}
 
+		// If the list starts with { and we're waiting for the sub body open brace
+		if (_inSubDef && _subDefDepth == 0)
+		{
+			if (!list.empty() && list.front()->type() == ParseType::Symbol &&
+				dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::StartBlock)
+			{
+				_subDefDepth = 1;
+				delete list.front();
+				list.erase(list.begin());
+				if (list.empty())
+					return true;
+				// Fall through — rest of list is first statement in sub body
+			}
+			else if (!list.empty())
+			{
+				_addError(ParseErrors::MissingSubBodyBrace, list.front());
+				return false;
+			}
+		}
+
 		// function keyword — parse the definition header
 		if (list.front()->type() == ParseType::Keyword &&
 			dynamic_cast<const ParseKeyword*>(list.front())->keyword() == L"function")
@@ -5901,16 +5957,114 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			// statement inside the function body; process it normally below.
 		}
 
-		// Outside a function definition — only allow { waiting state (handled above)
-		if (!_inFunctionDef)
+		// sub keyword — syntax sugar for "name: ... endsub;". Subs are top-level
+		// constructs, siblings of "function main() {...}" — NOT nested inside it.
+		if (!list.empty() && list.front()->type() == ParseType::Keyword &&
+			dynamic_cast<const ParseKeyword*>(list.front())->keyword() == L"sub")
+		{
+			if (_inFunctionDef)
+			{
+				// "sub" found while still inside main's body/header — not allowed,
+				// subs must be declared outside the function entirely.
+				_addError(ParseErrors::NestedSubDefinition, list.front());
+				return false;
+			}
+			if (_inSubDef)
+			{
+				_addError(ParseErrors::NestedSubDefinition, list.front());
+				return false;
+			}
+			size_t lp = list.front()->linePos();
+			if (!_parseSubDefinition(list, lp))
+				return false;
+
+			// Strip the header tokens: "sub" name brackets [{ ...]
+			// Note: the name token was already pushed into _createdData by
+			// _addLabel() inside _parseSubDefinition — it must NOT be deleted
+			// here too, or it will be double-freed. Only the "sub" keyword and
+			// the (now-empty) brackets node are owned solely by this list.
+			delete list.front(); // "sub" keyword
+			list.erase(list.begin());
+			list.erase(list.begin()); // name token — ownership already transferred to _createdData
+			if (!list.empty() && list.front()->type() == ParseType::Brackets)
+			{
+				delete list.front();
+				list.erase(list.begin());
+			}
+
+			// If the list now starts with { consume it as the sub body open
+			if (!list.empty() && list.front()->type() == ParseType::Symbol &&
+				dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::StartBlock)
+			{
+				_subDefDepth = 1;
+				delete list.front();
+				list.erase(list.begin());
+			}
+
+			if (list.empty())
+				return true;
+
+			// Otherwise fall through — the rest of the list is the first
+			// statement inside the sub body; process it normally below.
+		}
+
+		// Outside both a function body and a sub body — only allow { waiting
+		// states (handled above), the "function"/"sub" keywords (handled
+		// above), and preprocessor directives (handled earlier in parseLine).
+		// Anything else here is genuinely misplaced code.
+		if (!_inFunctionDef && !_inSubDef)
 		{
 			_addError(ParseErrors::CodeOutsideFunction, list.front());
 			return false;
 		}
 
+		// Detect the sub's closing } — replaced with an automatic "endsub;" call.
+		// Must be checked before the function-closing check below, since a sub
+		// is nested inside the function body and its brace closes first.
+		if (_inSubDef && _subDefDepth > 0 &&
+			list.size() == 1 &&
+			list.front()->type() == ParseType::Symbol &&
+			dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::EndBlock &&
+			_conditionStack.empty())
+		{
+			const BaseParse* closingBrace = list.front();
+			list.clear();
+			_inSubDef = false;
+			_subDefDepth = 0;
+
+			// Emit the equivalent of a bare "endsub;" call — same construction
+			// pattern used elsewhere for special keyword statements with no
+			// arguments (see parseFunctions' special-keyword handling).
+			const Function* endsubFunc = _data->findGlobalFunction(L"endsub");
+			if (endsubFunc)
+			{
+				ParseFunction* endsubCall = new ParseFunction(closingBrace->line(), L"endsub");
+				endsubCall->setFromParse(closingBrace);
+				ParseArguments* args = new ParseArguments(closingBrace->line());
+				endsubCall->setArguments(args);
+				_createdData.push_back(endsubCall);
+
+				if (!_prePassMode && !_mainCompleted)
+				{
+					// main hasn't closed yet — defer this call so it runs
+					// after main's commands, in order with the rest of the sub.
+					PendingSubAction action;
+					action.statement = { endsubCall };
+					_pendingSubActions.push_back(action);
+				}
+				else if (!_doGlobalFunction(endsubFunc, endsubCall, InlineState::Normal))
+				{
+					delete closingBrace;
+					return false;
+				}
+			}
+			delete closingBrace;
+			return true;
+		}
+
 		// Detect the function's closing } — it's a lone EndBlock when no
-		// while/if blocks are open (_conditionStack is empty).
-		if (_inFunctionDef && _functionDefDepth > 0 &&
+		// while/if blocks are open (_conditionStack is empty) and no sub is open.
+		if (_inFunctionDef && _functionDefDepth > 0 && !_inSubDef &&
 			list.size() == 1 &&
 			list.front()->type() == ParseType::Symbol &&
 			dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::EndBlock &&
@@ -5919,27 +6073,62 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			// This } closes the function body
 			const BaseParse* closingBrace = list.front();
 			list.clear();
-			_currentScript->ensureReturn(); // guarantee the function ends with a return
-
-			// If a synthetic "return(null)" was just inserted (the function had
-			// no explicit return at the end), check that null is a valid return
-			// type — same as if the user had written "return(null);" themselves.
-			if (_currentScript->ensureReturnWasInserted() &&
-				!_functionReturnTypes.empty() &&
-				_functionReturnTypes.find(DataTypes::Null) == _functionReturnTypes.end())
+			// Only insert the auto-return and run the type check during the real
+			// pass — during prepass nothing gets written to _currentScript, so
+			// ensureReturn would fire on an empty _functions list and incorrectly
+			// insert a return(null) as the very first compiled entry.
+			if (!_prePassMode)
 			{
-				Warnings& warn = _addWarning(ParseWarnings::InvalidDataType, closingBrace);
-				warn.data.push_back(L"null");
-				warn.data.push_back(L"-1"); // -1 = return value, not an argument index
-				warn.data.push_back(_getDataTypesString({ DataTypes::Null }));
-				warn.data.push_back(_getDataTypesString(_functionReturnTypes));
+				_currentScript->ensureReturn();
+
+				if (_currentScript->ensureReturnWasInserted() &&
+					!_functionReturnTypes.empty() &&
+					_functionReturnTypes.find(DataTypes::Null) == _functionReturnTypes.end())
+				{
+					Warnings& warn = _addWarning(ParseWarnings::InvalidDataType, closingBrace);
+					warn.data.push_back(L"null");
+					warn.data.push_back(L"-1");
+					warn.data.push_back(_getDataTypesString({ DataTypes::Null }));
+					warn.data.push_back(_getDataTypesString(_functionReturnTypes));
+				}
 			}
 
 			delete closingBrace;
-			_inFunctionDef    = false;
+			_inFunctionDef = false;
 			_functionDefDepth = 0;
 			_functionDefName.clear();
 			_functionReturnTypes.clear();
+			// Note: _anyLabelSeen is intentionally NOT reset here — labels/subs
+			// are global to the whole script file, not scoped to main alone.
+
+			// main has now fully closed — any sub blocks that appeared earlier
+			// in the source file were buffered rather than run immediately, so
+			// that main's compiled commands always come first in the output.
+			// Replay each action now, in original relative order.
+			_mainCompleted = true;
+			if (!_prePassMode && !_pendingSubActions.empty())
+			{
+				for (auto& action : _pendingSubActions)
+				{
+					if (action.label)
+					{
+						if (!_currentScript->addLabel(action.label))
+						{
+							_addError(ParseErrors::DuplicateLabel, action.label);
+							return false;
+						}
+					}
+					else
+					{
+						if (!_runDataList(action.statement, true))
+							return false;
+						_currentScript->flushPostRun();
+					}
+				}
+				_pendingSubActions.clear();
+				_deferredLabelNames.clear();
+			}
+
 			return true;
 		}
 	}
@@ -6138,6 +6327,28 @@ bool CScriptParser::_addLabel(const ParseKeyword* keyword)
 		_subVariables[_currentSubLabel]; // ensure entry exists
 		_pVariables = &_subVariables[_currentSubLabel]; // redirect writes to sub map
 		_prePassDepth = 0;
+		return true;
+	}
+
+	_anyLabelSeen = true; // a label exists — endsub is now valid from here on
+
+	if (!_mainCompleted)
+	{
+		// Check for duplicates against both already-deferred labels and already-written labels
+		const std::wstring& name = keyword->keyword();
+		if (_deferredLabelNames.find(name) != _deferredLabelNames.end() ||
+			!_currentScript->isLabelAvailable(name))
+			return false; // duplicate — caller will report the error
+
+		// This label is part of a sub that appears before "function main"
+		// closes — defer the actual script write so it ends up after main's
+		// commands in the compiled output, preserving the sub's relative
+		// position among other deferred sub actions.
+		_deferredLabelNames.insert(name);
+		PendingSubAction action;
+		action.label = keyword;
+		_pendingSubActions.push_back(action);
+		_createdData.push_back(keyword);
 		return true;
 	}
 
@@ -7201,9 +7412,9 @@ bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>
 			if (kw->keyword() == L"void")
 			{
 				returnTypeName = L"void";
-				firstType      = DataTypes::Null;
-				firstIsVoid    = true;
-				isReturnType   = true;
+				firstType = DataTypes::Null;
+				firstIsVoid = true;
+				isReturnType = true;
 			}
 		}
 		else if (list[idx]->type() == ParseType::Constant)
@@ -7223,7 +7434,7 @@ bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>
 				if (scan < list.size() && list[scan]->type() == ParseType::Keyword)
 				{
 					isReturnType = true;
-					firstType    = static_cast<DataTypes>(c->id());
+					firstType = static_cast<DataTypes>(c->id());
 				}
 			}
 			// A ParDef constant — if a later token (past any |) is the function
@@ -7238,7 +7449,7 @@ bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>
 				if (scan < list.size() && list[scan]->type() == ParseType::Keyword)
 				{
 					returnTypeName = c->data();
-					isReturnType   = true;
+					isReturnType = true;
 				}
 			}
 		}
@@ -7313,7 +7524,7 @@ bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>
 			const ParseConstant* c = dynamic_cast<const ParseConstant*>(params[pi]);
 			if (c->dataType() == DataTypes::ParDef)
 			{
-				pardef        = static_cast<ParDef>(c->id());
+				pardef = static_cast<ParDef>(c->id());
 				paramTypeName = c->data();
 			}
 			else
@@ -7383,10 +7594,10 @@ bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>
 		const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(list[idx]);
 		if (sym->symbol() == SymbolType::StartBlock)
 		{
-			openBraceFound      = true;
-			_inFunctionDef      = true;
-			_functionDefDepth   = 1;
-			_functionDefName    = funcName;
+			openBraceFound = true;
+			_inFunctionDef = true;
+			_functionDefDepth = 1;
+			_functionDefName = funcName;
 			_functionReturnTypes = returnDataTypes;
 		}
 	}
@@ -7394,10 +7605,73 @@ bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>
 	if (!openBraceFound)
 	{
 		// No brace yet — flag that we're waiting for it
-		_inFunctionDef      = true;
-		_functionDefDepth   = 0;
-		_functionDefName    = funcName;
+		_inFunctionDef = true;
+		_functionDefDepth = 0;
+		_functionDefName = funcName;
 		_functionReturnTypes = returnDataTypes;
+	}
+
+	return true;
+}
+
+// ── Sub definition parser (syntax sugar) ───────────────────────────────────────
+// Handles: sub name() [  {  ]
+// "sub name() { ... }" is sugar for "name: ... endsub;" — the keyword + name +
+// empty parameter list are consumed here and replaced with a label definition
+// via _addLabel; the matching "}" (handled by the caller in _parseDataList) is
+// replaced with an automatic "endsub;" call.
+bool CScriptParser::_parseSubDefinition(const std::vector<const BaseParse*>& list, size_t linePos)
+{
+	// list[0] is the "sub" keyword — skip it
+	size_t idx = 1;
+
+	// Sub name
+	if (idx >= list.size() || list[idx]->type() != ParseType::Keyword)
+	{
+		_addError(ParseErrors::MissingSubName, list[0]);
+		return false;
+	}
+	const ParseKeyword* nameKw = dynamic_cast<const ParseKeyword*>(list[idx]);
+	idx++;
+
+	// Parameter list — must be brackets, and must be empty (subs take no arguments)
+	if (idx >= list.size() || list[idx]->type() != ParseType::Brackets)
+	{
+		_addError(ParseErrors::MissingSubParameterList, list[0]);
+		return false;
+	}
+	const ParseBrackets* brackets = dynamic_cast<const ParseBrackets*>(list[idx]);
+	if (!brackets->constList().empty())
+	{
+		_addError(ParseErrors::SubParametersNotAllowed, list[idx]);
+		return false;
+	}
+	idx++;
+
+	// Define the label using the sub's name — same path a plain "name:" takes
+	if (!_addLabel(nameKw))
+	{
+		_addError(ParseErrors::DuplicateLabel, nameKw);
+		return false;
+	}
+
+	// Optional opening brace on the same line
+	bool openBraceFound = false;
+	if (idx < list.size() && list[idx]->type() == ParseType::Symbol)
+	{
+		const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(list[idx]);
+		if (sym->symbol() == SymbolType::StartBlock)
+		{
+			openBraceFound = true;
+			_inSubDef = true;
+			_subDefDepth = 1;
+		}
+	}
+
+	if (!openBraceFound)
+	{
+		_inSubDef = true;
+		_subDefDepth = 0;
 	}
 
 	return true;
