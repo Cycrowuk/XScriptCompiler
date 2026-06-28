@@ -119,6 +119,11 @@ namespace XScript
 		SubParametersNotAllowed,		// "sub name(...)" — subs cannot take parameters
 		NestedSubDefinition,			// "sub" found while already inside a sub block
 		MissingSubBodyBrace,			// Content found before the opening { of a sub body
+		UserFunctionCallNotStandalone,	// User function call used inside a larger expression (not supported)
+		UserFunctionArgumentCountMismatch,	// Wrong number of arguments passed to a user function call
+		ReturnValueNotAllowed,			// "return($x)" used inside main/a sub where it isn't valid
+		DuplicateUserFunctionName,		// A "function name(...)" definition's name collides with an existing label/sub/function
+		UserFunctionNameConflict,		// Function name collides with an existing script command or constant
 	};
 	enum class Conditions
 	{

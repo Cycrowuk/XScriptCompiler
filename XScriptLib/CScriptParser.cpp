@@ -155,6 +155,9 @@ void CScriptParser::_clearData()
 	_mainCompleted = false;
 	_pendingSubActions.clear();
 	_deferredLabelNames.clear();
+	_userFunctions.clear();
+	_currentUserFunction.clear();
+	_mangledToOriginal.clear();
 }
 
 bool CScriptParser::hasWarnings() const
@@ -2630,7 +2633,18 @@ bool CScriptParser::parseConstants(const std::vector<const BaseParse*>& list, st
 					continue;
 				}
 
-				auto constant = parseConstant(keyword->keyword());
+				// If we're inside a local-scoped user function, every $variable
+				// reference is mangled to a uniquely-named global variable so it
+				// can never collide with or be visible to other functions/subs.
+				std::wstring lookupName = keyword->keyword();
+				if (!_currentUserFunction.empty() && !lookupName.empty() && lookupName[0] == L'$')
+				{
+					std::wstring mangled = _mangleVarName(lookupName, _currentUserFunction);
+					_mangledToOriginal[mangled] = lookupName; // remember original for display
+					lookupName = mangled;
+				}
+
+				auto constant = parseConstant(lookupName);
 				constant->setFromParse(keyword);
 				if (constant->type() == ParseType::Failed)
 				{
@@ -4740,6 +4754,10 @@ void CScriptParser::resetForRealPass()
 	_mainCompleted = false;
 	_pendingSubActions.clear();
 	_deferredLabelNames.clear();
+	// Note: _userFunctions is NOT cleared here — it was collected during
+	// prepass and is needed for resolving calls during the real pass.
+	_currentUserFunction.clear();
+	_mangledToOriginal.clear();
 }
 
 bool CScriptParser::_checkExpressionValidity(const BaseParse* parse)
@@ -5155,6 +5173,35 @@ bool CScriptParser::_runFunction(ParseFunction* function, InlineState inlineStat
 	}
 	else
 	{
+		// User-defined local-scoped function call — desugars to argument
+		// assignments + gosub + (optional) return-value retrieval. Checked
+		// before internal/global function resolution since these names only
+		// exist as compiler sugar, not real script commands.
+		auto userFuncItr = _userFunctions.find(function->function());
+		if (userFuncItr != _userFunctions.end())
+		{
+			if (!_inFunctionDef && !_inSubDef)
+			{
+				_addError(ParseErrors::CodeOutsideFunction, function);
+				return false;
+			}
+
+			// Recursion warning — calling the function we're currently inside
+			if (!_prePassMode && _currentUserFunction == function->function())
+			{
+				Warnings& warn = _addWarning(ParseWarnings::RecursiveFunctionCall, function);
+				warn.data.push_back(function->function());
+			}
+
+			return _expandUserFunctionCall(function, userFuncItr->second);
+		}
+
+		// "return($x)" inside a local-scoped user function sets that
+		// function's own mangled return variable and exits via endsub —
+		// it must NOT fall through to the normal script-wide return handling.
+		if (!_currentUserFunction.empty() && function->function() == L"return")
+			return _expandUserFunctionReturn(function);
+
 		//first check for any internal functions
 		InternalFunctions ifunc = _data->findInternalFunction(function->function());
 		if (ifunc != InternalFunctions::Unknown)
@@ -5166,7 +5213,19 @@ bool CScriptParser::_runFunction(ParseFunction* function, InlineState inlineStat
 		if (func)
 			return _doGlobalFunction(func, function, inlineState);
 
-		ParseFail* fail = new ParseFail(function, ParseErrors::UnknownFunction);
+		ParseFail* fail = nullptr;
+		if (_prePassMode)
+		{
+			// During prepass, a name we don't yet recognise might still turn
+			// out to be a forward-declared user function (its "function
+			// name(...)" definition appears later in the file). Since prepass
+			// reads the whole file before the real pass begins, _userFunctions
+			// will be fully populated by the time the real pass reaches this
+			// same call — so silently skip rather than error here.
+			return true;
+		}
+
+		fail = new ParseFail(function, ParseErrors::UnknownFunction);
 		fail->addData(function->function());
 		_errors.push_back(fail);
 		return false;
@@ -5384,7 +5443,7 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 			if (dt.empty())
 			{
 				Warnings& warn = _addWarning(ParseWarnings::NullVariable, functionData->object());
-				warn.data.push_back(functionData->object()->data());
+				warn.data.push_back(_displayVarName(functionData->object()->data()));
 			}
 			if (!dt.empty() && dt.find(DataTypes::Unknown) == dt.end() && !func->refObjType.empty())
 			{
@@ -5557,12 +5616,12 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 			if (dts.empty())
 			{
 				Warnings& warn = _addWarning(ParseWarnings::NullVariable, arg);
-				warn.data.push_back(arg->data());
+				warn.data.push_back(_displayVarName(arg->data()));
 			}
 			else if (!d->datatypes.empty() && !_isValidDataType(dts, d->datatypes))
 			{
 				Warnings& warn = _addWarning(ParseWarnings::InvalidDataType, arg);
-				warn.data.push_back(arg->data());
+				warn.data.push_back(_displayVarName(arg->data()));
 				warn.data.push_back(std::to_wstring(i));
 				warn.data.push_back(_getDataTypesString(dts));
 				warn.data.push_back(_getDataTypesString(d->datatypes));
@@ -5858,13 +5917,67 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 	if (!_parseNamespaces(list))
 		return false;
 
+	// ── Pre-scan for a local-scoped user function header ───────────────────────
+	// If this batch is "function [returnType] name(...) [{ first-statement...]"
+	// (header and the first body statement landed in the same accumulated
+	// list — e.g. when "{" was on the function's own line), parseConstants
+	// below would mangle the header's own tokens incorrectly AND fail to
+	// mangle the first statement's $variables, since _currentUserFunction
+	// isn't set until our function-detection block runs (which is AFTER
+	// parseConstants). Detect the header here, early, purely to set
+	// _currentUserFunction for the duration of this parseConstants call.
+	bool prescanSetUserFunction = false;
+	if (!list.empty() && list[0]->type() == ParseType::Keyword &&
+		dynamic_cast<const ParseKeyword*>(list[0])->keyword() == L"function" &&
+		_currentUserFunction.empty())
+	{
+		size_t scanIdx = 1;
+		// Skip return type tokens (pardef/DATATYPE keywords, possibly joined by
+		// '|' operators). Advance past any keyword that is NOT immediately followed
+		// by a Brackets node — that keyword is either a return type or part of a
+		// multi-type return; the keyword whose NEXT token IS a Brackets is the name.
+		while (scanIdx < list.size() && list[scanIdx]->type() == ParseType::Keyword)
+		{
+			if (scanIdx + 1 < list.size() && list[scanIdx + 1]->type() == ParseType::Brackets)
+				break; // this keyword is immediately before the brackets — it's the name
+			if (scanIdx + 1 < list.size() && list[scanIdx + 1]->type() == ParseType::Operator)
+				scanIdx += 2; // skip this keyword + the '|' separator and loop again
+			else
+				scanIdx++; // skip this return-type keyword and try the next
+		}
+
+		if (scanIdx < list.size() && list[scanIdx]->type() == ParseType::Keyword &&
+			scanIdx + 1 < list.size() && list[scanIdx + 1]->type() == ParseType::Brackets)
+		{
+			std::wstring prospectiveName = dynamic_cast<const ParseKeyword*>(list[scanIdx])->keyword();
+			if (prospectiveName != L"main")
+			{
+				_currentUserFunction = prospectiveName;
+				prescanSetUserFunction = true;
+			}
+		}
+	}
+
 	// replace the constant
 	{
 		std::vector<const BaseParse*> originalList(list);
 		list.clear();
 		if (!parseConstants(originalList, list))
+		{
+			if (prescanSetUserFunction)
+				_currentUserFunction.clear();
 			return false;
+		}
 	}
+
+	// Only clear here if our function-detection block below won't be setting
+	// it properly itself (e.g. this batch turned out not to actually be a
+	// function header after all, or parsing it failed before reaching that
+	// point) — the real, authoritative _currentUserFunction assignment
+	// happens inside _parseUserFunctionDefinition; this pre-scan value is
+	// only meant to cover the gap during this one parseConstants call.
+	if (prescanSetUserFunction)
+		_currentUserFunction.clear();
 
 	// ── Function definition / outside-function enforcement ────────────────────
 	// By here: brackets are grouped, $variables are ParseVariable, constants resolved.
@@ -5924,12 +6037,12 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			if (!_parseFunctionDefinition(list, lp))
 				return false;
 
-			// _parseFunctionDefinition has set _inFunctionDef and consumed the
-			// conceptual header — now strip the header tokens from the list so
-			// the rest (opening { and any following code) can be processed normally.
+			// _parseFunctionDefinition has set _inFunctionDef/_inSubDef (and the
+			// corresponding depth) appropriately for either main or a
+			// non-main user function — now strip the header tokens from the
+			// list so the rest (opening { and any following code) can be
+			// processed normally.
 			// The header is: "function" [returnType] name brackets [{ ...]
-			// After _parseFunctionDefinition the list still contains all original
-			// tokens; remove up to and including the brackets node.
 			while (!list.empty())
 			{
 				const BaseParse* front = list.front();
@@ -5940,11 +6053,12 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 					break; // brackets was the last header token — stop here
 			}
 
-			// If the list now starts with { consume it as the function body open
+			// If the list now starts with { consume it as the body open —
+			// depth tracking was already set correctly inside
+			// _parseFunctionDefinition/_parseUserFunctionDefinition above.
 			if (!list.empty() && list.front()->type() == ParseType::Symbol &&
 				dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::StartBlock)
 			{
-				_functionDefDepth = 1;
 				delete list.front();
 				list.erase(list.begin());
 			}
@@ -6031,6 +6145,7 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			list.clear();
 			_inSubDef = false;
 			_subDefDepth = 0;
+			_currentUserFunction.clear(); // no-op if this was a plain sub, not a user function
 
 			// Emit the equivalent of a bare "endsub;" call — same construction
 			// pattern used elsewhere for special keyword statements with no
@@ -6117,6 +6232,10 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 							_addError(ParseErrors::DuplicateLabel, action.label);
 							return false;
 						}
+					}
+					else if (action.assignTarget)
+					{
+						_emitMangledAssignment(action.assignTarget, action.assignValue);
 					}
 					else
 					{
@@ -6806,7 +6925,7 @@ void CScriptParser::_checkWarnings(const std::vector<const BaseParse*>& list)
 			if (dts.empty())
 			{
 				Warnings& warn = _addWarning(ParseWarnings::NullVariable, vari);
-				warn.data.push_back(vari->data());
+				warn.data.push_back(_displayVarName(vari->data()));
 			}
 		}
 	}
@@ -7491,6 +7610,26 @@ bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>
 	std::wstring funcName = nameKw->keyword();
 	idx++;
 
+	// Non-"main" functions are local-scoped user functions — handled by a
+	// separate path since they desugar to label/gosub with mangled variables
+	// rather than registering real script arguments.
+	if (funcName != L"main")
+	{
+		// Ensure the name doesn't collide with an existing global function,
+		// internal function, or constant — that would cause ambiguity at
+		// call sites since the real command would take priority in resolution.
+		if (_data->findGlobalFunction(funcName) ||
+			_data->findInternalFunction(funcName) != InternalFunctions::Unknown ||
+			_data->findConstant(funcName))
+		{
+			ParseFail* fail = new ParseFail(nameKw, ParseErrors::UserFunctionNameConflict);
+			fail->addData(funcName);
+			_errors.push_back(fail);
+			return false;
+		}
+		return _parseUserFunctionDefinition(list, idx, funcName, returnDataTypes, linePos);
+	}
+
 	// Parameter list — must be brackets
 	if (idx >= list.size() || list[idx]->type() != ParseType::Brackets)
 	{
@@ -7614,6 +7753,230 @@ bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>
 	return true;
 }
 
+// ── User-defined local-scoped function definition parser ───────────────────────
+// Handles: function name(ParamType $param, ...) [  {  ]   where name != "main"
+// Desugars to: name: ... endsub; with all $variables inside mangled to
+// $variable_fn.name so they can never collide with or be visible to other
+// functions/subs. Parameters become assignments at each call site rather than
+// real script arguments. The function's signature (params + return types) is
+// expected to already be known from the prepass scan via _userFunctions.
+bool CScriptParser::_parseUserFunctionDefinition(const std::vector<const BaseParse*>& list, size_t idx,
+	const std::wstring& funcName, const std::unordered_set<DataTypes>& returnDataTypes, size_t linePos)
+{
+	if (_inFunctionDef || _inSubDef)
+	{
+		_addError(ParseErrors::NestedFunctionDefinition, list[0]);
+		return false;
+	}
+
+	// Parameter list — must be brackets
+	if (idx >= list.size() || list[idx]->type() != ParseType::Brackets)
+	{
+		_addError(ParseErrors::MissingFunctionParameterList, list[0]);
+		return false;
+	}
+	const ParseBrackets* brackets = dynamic_cast<const ParseBrackets*>(list[idx]);
+	idx++;
+
+	// Parse parameters the same way main's do, but DON'T register them as real
+	// script arguments — they become per-call assignments to mangled variables.
+	const auto params = brackets->constList();
+	std::unordered_set<std::wstring> seenParamNames;
+	std::vector<UserFunctionParam> parsedParams;
+	size_t pi = 0;
+	while (pi < params.size())
+	{
+		if (params[pi]->type() == ParseType::Symbol)
+		{
+			const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(params[pi]);
+			if (sym->symbol() == SymbolType::Comma) { pi++; continue; }
+		}
+
+		ParDef pardef = ParDef::Unknown;
+		std::wstring paramTypeName;
+		const ParDefData* pd = nullptr;
+
+		// If the token is already a $variable (no type keyword preceding it),
+		// default to VALUE pardef (id=9, "any value").
+		if (params[pi]->type() == ParseType::Variable)
+		{
+			pd = _data->getParDefData(static_cast<ParDef>(9)); // VALUE
+			if (pd)
+			{
+				pardef        = pd->id;
+				paramTypeName = pd->code;
+			}
+			// Don't increment pi — fall through to the variable-reading block below
+		}
+		else if (params[pi]->type() == ParseType::Constant)
+		{
+			const ParseConstant* c = dynamic_cast<const ParseConstant*>(params[pi]);
+			if (c->dataType() == DataTypes::ParDef)
+			{
+				pardef = static_cast<ParDef>(c->id());
+				paramTypeName = c->data();
+				pd = _data->findParDefData(paramTypeName);
+			}
+			else
+			{
+				_addError(ParseErrors::InvalidFunctionParameterType, params[pi]);
+				return false;
+			}
+		}
+		else if (params[pi]->type() == ParseType::Keyword)
+		{
+			paramTypeName = dynamic_cast<const ParseKeyword*>(params[pi])->keyword();
+			pd = _data->findParDefData(paramTypeName);
+			if (pd)
+				pardef = pd->id;
+			else
+			{
+				ParseFail* fail = new ParseFail(params[pi], ParseErrors::InvalidFunctionParameterType);
+				fail->addData(paramTypeName);
+				_errors.push_back(fail);
+				return false;
+			}
+		}
+		else
+		{
+			_addError(ParseErrors::InvalidFunctionParameterType, params[pi]);
+			return false;
+		}
+		// Only increment past the type token if we consumed one;
+		// the VALUE-default branch left pi pointing at the variable already.
+		if (params[pi]->type() != ParseType::Variable)
+			pi++;
+
+		if (pi >= params.size() || params[pi]->type() != ParseType::Variable)
+		{
+			_addError(ParseErrors::MissingFunctionParameterVariable, params[pi < params.size() ? pi : pi - 1]);
+			return false;
+		}
+		const ParseVariable* paramVar = dynamic_cast<const ParseVariable*>(params[pi]);
+		pi++;
+
+		if (seenParamNames.find(_displayVarName(paramVar->name())) != seenParamNames.end())
+		{
+			ParseFail* fail = new ParseFail(paramVar, ParseErrors::DuplicateFunctionParameterName);
+			fail->addData(paramVar->name());
+			_errors.push_back(fail);
+			return false;
+		}
+		seenParamNames.insert(_displayVarName(paramVar->name()));
+		if (pd)
+			const_cast<ParseVariable*>(paramVar)->setDataTypes(pd->datatypes);
+		else
+			const_cast<ParseVariable*>(paramVar)->addDataType(DataTypes::Unknown);
+		(*_pVariables)[paramVar->name()] = paramVar->currentDataTypes();
+
+		UserFunctionParam p;
+		p.pardef = pardef;
+		p.pardefCode = paramTypeName;
+		p.name = _displayVarName(paramVar->name()); // use original name — pre-scan may have mangled it
+		parsedParams.push_back(p);
+	}
+
+	// Register/confirm the signature. During prepass this is the first time
+	// we see it, so register fresh; during the real pass it should already
+	// exist from prepass — but register anyway in case prepass was skipped.
+	UserFunctionDef def;
+	def.name = funcName;
+	def.returnTypes = returnDataTypes;
+	def.params = parsedParams;
+	_userFunctions[funcName] = def;
+
+	if (_prePassMode)
+	{
+		// Hoist mangled parameter variables into this function's variable map
+		// so the real pass doesn't flag them as uninitialised.
+		_currentSubLabel = funcName;
+		_subVariables[_currentSubLabel];
+		_pVariables = &_subVariables[_currentSubLabel];
+		_prePassDepth = 0;
+		for (const auto& p : parsedParams)
+		{
+			std::wstring mangled = _mangleVarName(p.name, funcName);
+			const ParDefData* pd = _data->getParDefData(p.pardef);
+			if (pd && !pd->datatypes.empty())
+				(*_pVariables)[mangled] = pd->datatypes;
+			else
+				(*_pVariables)[mangled] = { DataTypes::Unknown };
+		}
+		// The return variable is also local to this function's scope
+		(*_pVariables)[_userFunctionReturnVar(funcName)] = { DataTypes::Unknown };
+	}
+
+	_currentUserFunction = funcName;
+	_inSubDef = true; // reuse sub brace-tracking machinery
+	_anyLabelSeen = true; // a label now exists — endsub is valid from here
+
+	bool openBraceFound = false;
+	if (idx < list.size() && list[idx]->type() == ParseType::Symbol)
+	{
+		const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(list[idx]);
+		if (sym->symbol() == SymbolType::StartBlock)
+			openBraceFound = true;
+	}
+	_subDefDepth = openBraceFound ? 1 : 0;
+
+	if (_prePassMode)
+		return true; // nothing else to emit during prepass
+
+	// Register the mangled parameter variables and return variable in
+	// _pVariables with their correct datatypes, so the real pass doesn't
+	// flag them as uninitialised in _checkWarnings.
+	for (const auto& p : parsedParams)
+	{
+		std::wstring mangled = _mangleVarName(p.name, funcName);
+		const ParDefData* pd = _data->getParDefData(p.pardef);
+		if (pd && !pd->datatypes.empty())
+			(*_pVariables)[mangled] = pd->datatypes;
+		else
+			(*_pVariables)[mangled] = { DataTypes::Unknown };
+		_mangledToOriginal[mangled] = p.name;
+	}
+	// Return variable is always considered "initialised" (we reset it to null at the top)
+	(*_pVariables)[_userFunctionReturnVar(funcName)] = { DataTypes::Unknown };
+
+	// Emit the label and the return-variable reset, exactly as if the user
+	// had written "funcName:" then "$fn.funcName.return = null;" themselves.
+	ParseKeyword* labelKw = new ParseKeyword(list[0]->line(), _userFunctionLabel(funcName));
+	labelKw->setLinePosition(list[0]->linePos());
+	labelKw->setFile(_currentFile.back());
+	labelKw->setPosition(list[0]->startingPos(), list[0]->endingPos());
+	if (!_addLabel(labelKw))
+	{
+		ParseFail* fail = new ParseFail(labelKw, ParseErrors::DuplicateUserFunctionName);
+		fail->addData(funcName);
+		_errors.push_back(fail);
+		return false;
+	}
+
+	ParseVariable* returnVar = new ParseVariable(list[0]->line(), _userFunctionReturnVar(funcName), nullptr);
+	returnVar->setLinePosition(list[0]->linePos());
+	returnVar->setFile(_currentFile.back());
+	returnVar->setPosition(list[0]->startingPos(), list[0]->endingPos());
+	_createdData.push_back(returnVar);
+	ParseNull* nullLiteral = new ParseNull(list[0]->line());
+	_createdData.push_back(nullLiteral);
+
+	if (!_mainCompleted)
+	{
+		// Defer the return-reset assignment too, so it ends up right after
+		// the (also deferred) label in the final compiled order.
+		PendingSubAction action;
+		action.assignTarget = returnVar;
+		action.assignValue = nullLiteral;
+		_pendingSubActions.push_back(action);
+	}
+	else
+	{
+		_emitMangledAssignment(returnVar, nullLiteral);
+	}
+
+	return true;
+}
+
 // ── Sub definition parser (syntax sugar) ───────────────────────────────────────
 // Handles: sub name() [  {  ]
 // "sub name() { ... }" is sugar for "name: ... endsub;" — the keyword + name +
@@ -7675,6 +8038,268 @@ bool CScriptParser::_parseSubDefinition(const std::vector<const BaseParse*>& lis
 	}
 
 	return true;
+}
+
+// ── User-defined local-scoped function helpers ──────────────────────────────────
+
+std::wstring CScriptParser::_mangleVarName(const std::wstring& varName, const std::wstring& funcName) const
+{
+	// $sector -> $sector_fn.test
+	return varName + L"_fn." + funcName;
+}
+
+std::wstring CScriptParser::_userFunctionReturnVar(const std::wstring& funcName) const
+{
+	// -> $fn.test.return
+	return L"$fn." + funcName + L".return";
+}
+
+std::wstring CScriptParser::_userFunctionLabel(const std::wstring& funcName) const
+{
+	// -> fn.label.test — mangled so a hand-written "gosub test;" can't bypass
+	// the call-expansion (argument assignment + return retrieval) and target
+	// this label directly; also keeps it visually distinct from plain
+	// labels/subs in decompiled or error output.
+	return L"fn.label." + funcName;
+}
+
+std::wstring CScriptParser::_displayVarName(const std::wstring& possiblyMangled) const
+{
+	auto itr = _mangledToOriginal.find(possiblyMangled);
+	if (itr != _mangledToOriginal.end())
+		return itr->second;
+	return possiblyMangled;
+}
+
+// Emits a simple, unconditional "$target = value;" statement directly to the
+// current script, bypassing the full expression/condition machinery in
+// _runExpressionList — safe to use here because these synthetic assignments
+// are always plain (no conditions, no operators, single right-hand value).
+// "value" must be a BaseParse* that _addExpressionItem already knows how to
+// turn into a single argument (ParseVariable, ParseConstant, ParseNull, etc.)
+// Emits "gosub <labelName>;" directly — same construction pattern used for
+// the synthetic "endsub;" call (see the sub-closing-brace handling above).
+// Expands a call to a local-scoped user function into:
+//   $param1_fn.funcName = arg1;
+//   $param2_fn.funcName = arg2;
+//   ...
+//   gosub funcName;
+//   $result = $fn.funcName.return;   (only if the call's return value is used)
+//
+// If the call is the single un-braced statement of an if/while (function->
+// condition() is set and not yet a block), the condition is converted into a
+// block (mirroring how continue/break force a block — see _runParse's
+// StartBlock handling) so all of the expanded statements stay inside it.
+bool CScriptParser::_expandUserFunctionCall(ParseFunction* function, const UserFunctionDef& def)
+{
+	if (_prePassMode)
+		return true; // call expansion produces no new variables prepass needs to hoist
+
+	int argCount = function->arguments() ? static_cast<int>(function->arguments()->count()) : 0;
+	if (argCount != static_cast<int>(def.params.size()))
+	{
+		ParseFail* fail = new ParseFail(function, ParseErrors::UserFunctionArgumentCountMismatch);
+		fail->addData(function->function());
+		fail->addData(std::to_wstring(def.params.size()));
+		fail->addData(std::to_wstring(argCount));
+		_errors.push_back(fail);
+		return false;
+	}
+
+	// If this call is the lone statement of a blockless if/while, force the
+	// condition into a block so our (possibly multiple) expanded statements
+	// all stay inside it — same technique used for forcing a block around
+	// continue/break.
+	const ParseCondition* cond = function->condition() ? dynamic_cast<const ParseCondition*>(function->condition()) : nullptr;
+	bool forcedBlock = false;
+	if (cond && !cond->isBlock())
+	{
+		const_cast<ParseCondition*>(cond)->setBlock(true);
+		// Count how many statements we're about to emit: N argument
+		// assignments + 1 gosub + (1 return-retrieval if used)
+		size_t emittedCount = def.params.size() + 1 + (function->returnVariable() ? 1 : 0);
+		const_cast<ParseCondition*>(cond)->setBlockCount(emittedCount);
+		forcedBlock = true;
+	}
+
+	// Emit argument assignments: $paramName_fn.funcName = argValue;
+	for (size_t i = 0; i < def.params.size(); i++)
+	{
+		const UserFunctionParam& param = def.params[i];
+		const BaseParse* argValue = function->arguments()->get(static_cast<unsigned int>(i));
+
+		std::wstring mangledParamName = _mangleVarName(param.name, def.name);
+		ParseVariable* target = new ParseVariable(function->line(), mangledParamName, nullptr);
+		target->setLinePosition(function->linePos());
+		target->setFile(_currentFile.back());
+		target->setPosition(function->startingPos(), function->endingPos());
+		_createdData.push_back(target);
+		_mangledToOriginal[mangledParamName] = param.name;
+
+		_emitMangledAssignment(target, argValue);
+	}
+
+	// Emit: gosub funcName;
+	if (!_emitGosub(_userFunctionLabel(def.name), function))
+		return false;
+
+	// Emit: $result = $fn.funcName.return;   (only if the caller wants the value)
+	if (function->returnVariable())
+	{
+		ParseVariable* returnSrc = new ParseVariable(function->line(), _userFunctionReturnVar(def.name), nullptr);
+		returnSrc->setLinePosition(function->linePos());
+		returnSrc->setFile(_currentFile.back());
+		returnSrc->setPosition(function->startingPos(), function->endingPos());
+		_createdData.push_back(returnSrc);
+
+		ParseVariable* target = const_cast<ParseVariable*>(function->returnVariable());
+		_emitMangledAssignment(target, returnSrc);
+	}
+
+	// If we forced a block open, close it now that all our statements are in —
+	// using the same mechanism a user-typed "}" goes through (see EndBlock
+	// handling in _runParse), not a fabricated call to "end".
+	if (forcedBlock)
+	{
+		if (!_conditionStack.empty() && _conditionStack.back().type == ConditionType::While)
+			_emitWhileReEval();
+
+		if (!_currentScript->addEndBlock(false))
+		{
+			_addError(ParseErrors::MissingStartBrace, function);
+			return false;
+		}
+
+		if (!_conditionStack.empty())
+		{
+			_conditionStack.pop_back();
+			bool anyWhile = false;
+			for (auto& e : _conditionStack)
+				if (e.type == ConditionType::While) { anyWhile = true; break; }
+			if (!anyWhile)
+				_whileGeneratedVariables = 0;
+		}
+	}
+
+	return true;
+}
+
+// Handles "return($x);" written inside a local-scoped user function body.
+// Unlike main's return (which exits the whole script), this sets the
+// function's own mangled return variable and exits via endsub — equivalent
+// to the user having written "$fn.funcName.return = $x; endsub;" themselves.
+bool CScriptParser::_expandUserFunctionReturn(ParseFunction* function)
+{
+	if (_prePassMode)
+		return true;
+
+	const std::wstring& funcName = _currentUserFunction;
+	auto defItr = _userFunctions.find(funcName);
+
+	// Return-type check — same approach as main's return type checking, but
+	// against this user function's own declared return type(s).
+	if (defItr != _userFunctions.end() && !defItr->second.returnTypes.empty() &&
+		function->arguments() && function->arguments()->count() > 0)
+	{
+		const BaseParse* retArg = function->arguments()->get(0);
+		std::unordered_set<DataTypes> retDts;
+
+		if (retArg->type() == ParseType::Variable)
+			retDts = _getActualDataTypes(retArg);
+		else if (retArg->type() == ParseType::Function)
+		{
+			const ParseFunction* retFunc = dynamic_cast<const ParseFunction*>(retArg);
+			if (retFunc->returnVariable())
+				retDts = _getActualDataTypes(retFunc->returnVariable());
+		}
+		else if (retArg->type() == ParseType::Constant)
+		{
+			const ParseConstant* c = dynamic_cast<const ParseConstant*>(retArg);
+			DataTypes st = c->subType();
+			retDts.insert(st != DataTypes::Unknown ? st : c->dataType());
+		}
+		else if (retArg->type() == ParseType::Null)
+			retDts.insert(DataTypes::Null);
+
+		if (!retDts.empty() && retDts.find(DataTypes::Unknown) == retDts.end())
+		{
+			bool matches = false;
+			for (DataTypes dt : retDts)
+				if (defItr->second.returnTypes.find(dt) != defItr->second.returnTypes.end()) { matches = true; break; }
+
+			if (!matches)
+			{
+				Warnings& warn = _addWarning(ParseWarnings::InvalidDataType, retArg);
+				warn.data.push_back(_displayVarName(retArg->data()));
+				warn.data.push_back(L"-1");
+				warn.data.push_back(_getDataTypesString(retDts));
+				warn.data.push_back(_getDataTypesString(defItr->second.returnTypes));
+			}
+		}
+	}
+
+	// $fn.funcName.return = <argument>;
+	if (function->arguments() && function->arguments()->count() > 0)
+	{
+		ParseVariable* target = new ParseVariable(function->line(), _userFunctionReturnVar(funcName), nullptr);
+		target->setLinePosition(function->linePos());
+		target->setFile(_currentFile.back());
+		target->setPosition(function->startingPos(), function->endingPos());
+		_createdData.push_back(target);
+		_emitMangledAssignment(target, function->arguments()->get(0));
+	}
+
+	// endsub;
+	const Function* endsubFunc = _data->findGlobalFunction(L"endsub");
+	if (endsubFunc)
+	{
+		ParseFunction* endsubCall = new ParseFunction(function->line(), L"endsub");
+		endsubCall->setFromParse(function);
+		ParseArguments* args = new ParseArguments(function->line());
+		endsubCall->setArguments(args);
+		_createdData.push_back(endsubCall);
+		return _doGlobalFunction(endsubFunc, endsubCall, InlineState::Normal);
+	}
+
+	return true;
+}
+
+bool CScriptParser::_emitGosub(const std::wstring& labelName, const BaseParse* sourceNode)
+{
+	if (_prePassMode)
+		return true;
+
+	const Function* gosubFunc = _data->findGlobalFunction(L"gosub");
+	if (!gosubFunc)
+		return true; // shouldn't happen — gosub is a built-in command
+
+	ParseKeyword* labelKw = new ParseKeyword(sourceNode->line(), labelName);
+	labelKw->setLinePosition(sourceNode->linePos());
+	labelKw->setFile(_currentFile.back());
+	labelKw->setPosition(sourceNode->startingPos(), sourceNode->endingPos());
+
+	ParseLabel* label = new ParseLabel(labelKw);
+	delete labelKw; // ParseLabel copies what it needs — matches the established
+	// goto/gosub pattern in parseConstants, which deletes the
+	// source keyword immediately after constructing ParseLabel.
+
+	ParseFunction* gosubCall = new ParseFunction(sourceNode->line(), L"gosub");
+	gosubCall->setFromParse(sourceNode);
+	ParseArguments* args = new ParseArguments(sourceNode->line());
+	args->addParse(label);
+	gosubCall->setArguments(args);
+	_createdData.push_back(gosubCall);
+
+	return _doGlobalFunction(gosubFunc, gosubCall, InlineState::Normal);
+}
+
+void CScriptParser::_emitMangledAssignment(ParseVariable* target, const BaseParse* value)
+{
+	if (_prePassMode)
+		return;
+
+	_currentScript->addNewExpression(target);
+	_addExpressionItem(value);
 }
 
 const BaseParse* CScriptParser::_resolveMacroReportNode(const BaseParse* parse) const

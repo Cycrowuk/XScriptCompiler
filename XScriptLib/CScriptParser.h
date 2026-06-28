@@ -13,6 +13,7 @@
 */
 
 #include "BaseParse.h"
+#include <unordered_map>
 
 // Forward declarations for types used by pointer only in this header
 namespace XScript { struct MacroData; }
@@ -74,6 +75,7 @@ namespace XScript {
 		InvalidConstantGroup,
 		NullVariable,
 		InvalidExpressionOperator,
+		RecursiveFunctionCall,
 	};
 
 	struct Warnings
@@ -157,11 +159,39 @@ namespace XScript {
 		// compile out in the same relative order, just after main's commands.
 		struct PendingSubAction
 		{
-			const ParseKeyword* label = nullptr;        // non-null = "add this label"
-			std::vector<const BaseParse*> statement;     // non-empty = "run this statement"
+			const ParseKeyword* label = nullptr;          // non-null = "add this label"
+			std::vector<const BaseParse*> statement;       // non-empty = "run this statement"
+			ParseVariable* assignTarget = nullptr;         // non-null = "run this direct assignment"
+			const BaseParse* assignValue = nullptr;
 		};
 		std::vector<PendingSubAction> _pendingSubActions;
 		std::unordered_set<std::wstring> _deferredLabelNames; // tracks label names that have been deferred but not yet written to _currentScript
+
+		// ── Local-scoped user functions ────────────────────────────────────────
+		// "function name(...) { ... }" where name != "main" — desugars to a
+		// label/gosub pair with mangled (locally-scoped) variable names.
+		struct UserFunctionParam
+		{
+			ParDef pardef;
+			std::wstring pardefCode;   // e.g. "VARSECTOR"
+			std::wstring name;         // original, unmangled name, e.g. "$sector"
+		};
+		struct UserFunctionDef
+		{
+			std::wstring name;                              // e.g. "test"
+			std::unordered_set<DataTypes> returnTypes;       // empty = no declared return type
+			std::vector<UserFunctionParam> params;
+		};
+		std::unordered_map<std::wstring, UserFunctionDef> _userFunctions; // name -> def, collected during prepass
+
+		// Non-empty while parsing the body of a user function — holds the
+		// function's name, used for variable mangling and recursion detection.
+		std::wstring _currentUserFunction;
+
+		// Maps a mangled variable name (e.g. "$sector_fn.test") back to its
+		// original, user-written name (e.g. "$sector") — used so warnings and
+		// errors are reported using the name the user actually typed.
+		std::unordered_map<std::wstring, std::wstring> _mangledToOriginal;
 
 		// When inside macro expansion, points to a synthetic node representing the
 		// original macro call site (for error/warning location), and the list of
@@ -233,6 +263,17 @@ namespace XScript {
 		const BaseParse* _resolveMacroReportNode(const BaseParse* parse) const;
 		bool _parseFunctionDefinition(const std::vector<const BaseParse*>& list, size_t linePos);
 		bool _parseSubDefinition(const std::vector<const BaseParse*>& list, size_t linePos);
+
+		// User-defined local-scoped function support
+		std::wstring _mangleVarName(const std::wstring& varName, const std::wstring& funcName) const; // $x -> $x_fn.funcName
+		std::wstring _userFunctionReturnVar(const std::wstring& funcName) const;                       // -> $fn.funcName.return
+		std::wstring _userFunctionLabel(const std::wstring& funcName) const;                            // -> fn.label.funcName
+		std::wstring _displayVarName(const std::wstring& possiblyMangled) const;                       // mangled -> original, for messages
+		void _emitMangledAssignment(ParseVariable* target, const BaseParse* value); // emits "$target = value;" directly
+		bool _emitGosub(const std::wstring& labelName, const BaseParse* sourceNode); // emits "gosub labelName;" directly
+		bool _expandUserFunctionCall(ParseFunction* function, const UserFunctionDef& def);
+		bool _expandUserFunctionReturn(ParseFunction* function);
+		bool _parseUserFunctionDefinition(const std::vector<const BaseParse*>& list, size_t idx, const std::wstring& funcName, const std::unordered_set<DataTypes>& returnDataTypes, size_t linePos);
 		BaseParse* parseCondition(const std::wstring& line) const;
 		BaseParse* parseConstant(const std::wstring& line) const;
 		bool parseLine(size_t linePos, const std::wstring &line);

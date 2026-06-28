@@ -97,6 +97,9 @@ void displayWarning(const Warnings& warning)
 	case ParseWarnings::InvalidConstantGroup:
 		std::cout << "- Invalid Constant '" << converter.to_bytes(warning.data[0]) << "' for argument " << std::stoi(warning.data[1]) << ", Expected Group: " << converter.to_bytes(warning.data[2]);
 		break;
+	case ParseWarnings::RecursiveFunctionCall:
+		std::cout << "- Function '" << converter.to_bytes(warning.data[0]) << "' calls itself recursively - shared/mangled arguments and return value will be overwritten on each call";
+		break;
 	}
 
 	std::cout << std::endl;
@@ -222,6 +225,12 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 			break;
 		case ParseErrors::DuplicateLabel:
 			std::cout << "- Duplicate label or sub name '" << converter.to_bytes((*itr)->data(0)) << "' - each label and sub must have a unique name";
+			break;
+		case ParseErrors::DuplicateUserFunctionName:
+			std::cout << "- Duplicate function name '" << converter.to_bytes((*itr)->data(0)) << "' - a label, sub, or function with this name already exists";
+			break;
+		case ParseErrors::UserFunctionNameConflict:
+			std::cout << "- Function name '" << converter.to_bytes((*itr)->data(0)) << "' conflicts with an existing script command or constant - choose a different name";
 			break;
 		case ParseErrors::InvalidStartCondition:
 			std::cout << "- Invalid START condition, not compatible with function '" << converter.to_bytes((*itr)->data(0)) << "'";
@@ -374,6 +383,15 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 			break;
 		case ParseErrors::MissingSubBodyBrace:
 			std::cout << "- Expected '{' to start the sub body";
+			break;
+		case ParseErrors::UserFunctionCallNotStandalone:
+			std::cout << "- Calls to user-defined functions must be a standalone statement (e.g. 'test($arg);' or '$result = test($arg);'), not part of a larger expression";
+			break;
+		case ParseErrors::UserFunctionArgumentCountMismatch:
+			std::cout << "- Function '" << converter.to_bytes((*itr)->data(0)) << "' expects " << converter.to_bytes((*itr)->data(1)) << " argument(s), got " << converter.to_bytes((*itr)->data(2));
+			break;
+		case ParseErrors::ReturnValueNotAllowed:
+			std::cout << "- 'return' with a value is not valid here";
 			break;
 		}
 		std::cout << std::endl;
