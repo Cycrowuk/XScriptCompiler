@@ -399,6 +399,19 @@ const ParDefData* CScriptData::findParDefData(const std::wstring& pardef) const
 	return NULL;
 }
 
+const ParDefData* CScriptData::findParDefForDataType(DataTypes dt) const
+{
+	// Find a pardef whose datatypes set contains exactly this one type.
+	// We don't accept broader pardefs (e.g. VALUE which accepts everything)
+	// since the user should be using the specific pardef keyword instead.
+	for (const auto& pd : _pardefData)
+	{
+		if (pd.datatypes.size() == 1 && pd.datatypes.find(dt) != pd.datatypes.end())
+			return &pd;
+	}
+	return nullptr; // no exact single-type match — caller should error
+}
+
 const ConstantData* CScriptData::findConstant(const std::wstring& constant) const
 {
 	auto itr = _constData.find(constant);

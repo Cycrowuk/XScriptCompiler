@@ -4638,7 +4638,17 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 					// immediately — main's commands must always come first in
 					// the compiled output. _parseDataList already fully validated
 					// and transformed this statement, so it's safe to defer.
-					if (!_prePassMode && _inSubDef && !_mainCompleted && !_currentDataList.empty())
+					// EXCEPTION: lone { and } symbols must run immediately even
+					// in deferred bodies so _conditionStack stays correctly
+					// synchronised — without this, nested if/while braces would
+					// leave _conditionStack permanently empty, causing the sub's
+					// own closing } to be misidentified.
+					bool isLoneBlock = (_currentDataList.size() == 1 &&
+						_currentDataList.front()->type() == ParseType::Symbol &&
+						(dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::StartBlock ||
+							dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::EndBlock));
+
+					if (!_prePassMode && _inSubDef && !_mainCompleted && !_currentDataList.empty() && !isLoneBlock)
 					{
 						PendingSubAction action;
 						action.statement = _currentDataList;
@@ -6023,7 +6033,6 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 				return false;
 			}
 		}
-
 		// function keyword — parse the definition header
 		if (list.front()->type() == ParseType::Keyword &&
 			dynamic_cast<const ParseKeyword*>(list.front())->keyword() == L"function")
@@ -6132,10 +6141,33 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			return false;
 		}
 
+		// Scan the list for { } tokens to track brace depth within the
+		// sub/function body. Must run AFTER header detection so _subDefDepth
+		// is already set to 1 (body level). Captures depth before updating
+		// so the sub-close check can distinguish a nested } from the real one.
+		int subDepthBeforeScan = _subDefDepth;
+		if (_inSubDef && _subDefDepth > 0 && !list.empty())
+		{
+			for (const BaseParse* p : list)
+			{
+				if (p->type() != ParseType::Symbol)
+					continue;
+				SymbolType sym = dynamic_cast<const ParseSymbol*>(p)->symbol();
+				if (sym == SymbolType::StartBlock)
+					_subDefDepth++;
+				else if (sym == SymbolType::EndBlock && _subDefDepth > 1)
+					_subDefDepth--;
+			}
+		}
+
 		// Detect the sub's closing } — replaced with an automatic "endsub;" call.
 		// Must be checked before the function-closing check below, since a sub
 		// is nested inside the function body and its brace closes first.
-		if (_inSubDef && _subDefDepth > 0 &&
+		// Use subDepthBeforeScan == 1 — the depth BEFORE the scan updated it —
+		// so a lone } that was at depth 1 (the function's own level) is correctly
+		// identified even though the scan may have already decremented _subDefDepth.
+		// Keep _conditionStack.empty() as an additional guard for non-deferred bodies.
+		if (_inSubDef && subDepthBeforeScan == 1 &&
 			list.size() == 1 &&
 			list.front()->type() == ParseType::Symbol &&
 			dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::EndBlock &&
@@ -6451,18 +6483,16 @@ bool CScriptParser::_addLabel(const ParseKeyword* keyword)
 
 	_anyLabelSeen = true; // a label exists — endsub is now valid from here on
 
-	if (!_mainCompleted)
+	if (!_mainCompleted && _inSubDef)
 	{
-		// Check for duplicates against both already-deferred labels and already-written labels
+		// This label is part of a sub/function that appears before main closes —
+		// defer so it ends up after main's commands in the compiled output.
+		// Labels inside main's own body (_inFunctionDef, not _inSubDef) write immediately.
 		const std::wstring& name = keyword->keyword();
 		if (_deferredLabelNames.find(name) != _deferredLabelNames.end() ||
 			!_currentScript->isLabelAvailable(name))
 			return false; // duplicate — caller will report the error
 
-		// This label is part of a sub that appears before "function main"
-		// closes — defer the actual script write so it ends up after main's
-		// commands in the compiled output, preserving the sub's relative
-		// position among other deferred sub actions.
 		_deferredLabelNames.insert(name);
 		PendingSubAction action;
 		action.label = keyword;
@@ -7666,6 +7696,19 @@ bool CScriptParser::_parseFunctionDefinition(const std::vector<const BaseParse*>
 				pardef = static_cast<ParDef>(c->id());
 				paramTypeName = c->data();
 			}
+			else if (c->dataType() == DataTypes::DataType)
+			{
+				DataTypes dt = static_cast<DataTypes>(c->id());
+				const ParDefData* pd = _data->findParDefForDataType(dt);
+				if (pd) { pardef = pd->id; paramTypeName = pd->code; }
+				else
+				{
+					ParseFail* fail = new ParseFail(params[pi], ParseErrors::InvalidFunctionParameterType);
+					fail->addData(c->data());
+					_errors.push_back(fail);
+					return false;
+				}
+			}
 			else
 			{
 				_addError(ParseErrors::InvalidFunctionParameterType, params[pi]);
@@ -7803,7 +7846,7 @@ bool CScriptParser::_parseUserFunctionDefinition(const std::vector<const BasePar
 			pd = _data->getParDefData(static_cast<ParDef>(9)); // VALUE
 			if (pd)
 			{
-				pardef        = pd->id;
+				pardef = pd->id;
 				paramTypeName = pd->code;
 			}
 			// Don't increment pi — fall through to the variable-reading block below
@@ -7816,6 +7859,25 @@ bool CScriptParser::_parseUserFunctionDefinition(const std::vector<const BasePar
 				pardef = static_cast<ParDef>(c->id());
 				paramTypeName = c->data();
 				pd = _data->findParDefData(paramTypeName);
+			}
+			else if (c->dataType() == DataTypes::DataType)
+			{
+				// e.g. DATATYPE_INT, DATATYPE_SHIP — find a pardef with exactly
+				// this single datatype. Error if no exact single-type match exists.
+				DataTypes dt = static_cast<DataTypes>(c->id());
+				pd = _data->findParDefForDataType(dt);
+				if (pd)
+				{
+					pardef = pd->id;
+					paramTypeName = pd->code;
+				}
+				else
+				{
+					ParseFail* fail = new ParseFail(params[pi], ParseErrors::InvalidFunctionParameterType);
+					fail->addData(c->data());
+					_errors.push_back(fail);
+					return false;
+				}
 			}
 			else
 			{

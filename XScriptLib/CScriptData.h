@@ -344,6 +344,7 @@ namespace XScript
 		const Function* findObjectPropertyGetter(const std::wstring& prop) const;
 		const Function* findObjectTypeFunction(DataTypes type, const std::wstring& function) const;
 		const ParDefData* findParDefData(const std::wstring& pardef) const;
+		const ParDefData* findParDefForDataType(DataTypes dt) const; // find narrowest pardef accepting this datatype
 		const ConstantData* findConstant(const std::wstring& constant) const;
 		const ConstantData* findConstant(const std::wstring& ns, const std::wstring& constant) const;
 		const DataTypeData* findDatatypeByPrefix(const std::wstring& name, unsigned int& outId) const;
