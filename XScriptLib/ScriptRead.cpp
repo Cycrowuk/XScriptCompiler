@@ -195,8 +195,196 @@ bool ScriptRead::write(const std::wstring& outfile)
 
 	out << std::endl;
 
-	// Build the parameter list for the function header from the script's
-	// arguments — replaces the old SetArgument(...) calls.
+	// ── Pre-scan: identify sub block regions ────────────────────────────────
+	// A sub block is a defineLabelCommand entry followed (at brace depth 0,
+	// i.e. not inside a nested if/while) by an endsub entry.  Everything
+	// before the first such label belongs to main's body; everything from
+	// the first label onward is one or more sub blocks.
+	// We find the index of the first label that is at the top level.
+	size_t mainEndIdx = _commands.size(); // index of first top-level label (or end if none)
+	{
+		int depth = 0;
+		for (size_t i = 0; i < _commands.size(); i++)
+		{
+			const FunctionData& fd = _commands[i];
+
+			if (fd.isBlock && !fd.isElseCondition)
+				depth++;
+			else if (fd.data && fd.data->id == _pData->endCommand())
+				depth--;
+
+			if (fd.data && depth == 0 && fd.data->id == _pData->defineLabelCommand())
+			{
+				// Check that there is a matching endsub at depth 0 somewhere after
+				int d2 = 0;
+				for (size_t j = i + 1; j < _commands.size(); j++)
+				{
+					const FunctionData& fd2 = _commands[j];
+					if (fd2.isBlock && !fd2.isElseCondition) d2++;
+					else if (fd2.data && fd2.data->id == _pData->endCommand()) d2--;
+					if (d2 == 0 && fd2.data && fd2.data->name == L"endsub")
+					{
+						mainEndIdx = i; // this label starts a sub block
+						goto foundFirstSub;
+					}
+				}
+			}
+		}
+	foundFirstSub:;
+	}
+
+	// ── Helper lambda: write a range of commands ─────────────────────────────
+	auto writeCommands = [&](size_t from, size_t to, unsigned int indent)
+		{
+			bool isIndentNonBlock = false;
+			for (size_t idx = from; idx < to; idx++)
+			{
+				auto itr = _commands.begin() + static_cast<ptrdiff_t>(idx);
+
+				if (itr->isBlankLine) { out << std::endl; continue; }
+				if (!itr->comment.empty()) { out << L"// " << itr->comment << std::endl; continue; }
+
+				bool isSpecial = itr->data ? (_pData->findSpecialKeyword(itr->data->name) == itr->data->id) : false;
+
+				if (itr->data && itr->data->id == _pData->endCommand())
+				{
+					if (indent > 0) --indent;
+					for (unsigned int i = 0; i < indent; i++) out << L"   ";
+					out << L"}" << std::endl;
+					continue;
+				}
+				else if (itr->data && itr->data->id == _pData->elseCommand())
+				{
+					for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
+					out << L"}" << std::endl;
+					for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
+					out << L"else" << std::endl;
+					for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
+					out << L"{" << std::endl;
+					continue;
+				}
+				else if (itr->data && itr->data->id == _pData->hiddenGotoCommand())
+					continue;
+				else if (itr->data && itr->data->id == _pData->defineLabelCommand())
+				{
+					// Inside a sub body — plain label, emit as-is
+					out << itr->arguments.front() << L":" << std::endl;
+					continue;
+				}
+				else if (itr->data && itr->data->name == L"endsub")
+				{
+					// Inside a sub body — early endsub (not the closing one)
+					for (unsigned int i = 0; i < indent; i++) out << L"   ";
+					out << L"endsub;" << std::endl;
+					continue;
+				}
+
+				if (itr->isElseCondition)
+				{
+					if (indent > 0) --indent;
+					for (unsigned int i = 0; i < indent; i++) out << L"   ";
+					out << L"}" << std::endl;
+				}
+
+				for (unsigned int i = 0; i < indent; i++) out << L"   ";
+
+				if (isIndentNonBlock) { isIndentNonBlock = false; --indent; }
+
+				bool isCondition = false;
+				if (!itr->condition.empty())
+				{
+					isCondition = true;
+					out << itr->condition;
+					++indent;
+					if (!itr->isBlock) isIndentNonBlock = true;
+					out << L"(";
+				}
+				else if (!itr->retvar.empty())
+				{
+					if (!itr->data || !itr->data->returnArgument)
+						out << itr->retvar;
+				}
+
+				if (itr->data && itr->data == _pData->getSpecialGlobalFunction(SpecialFunction::GetArray))
+				{
+					out << itr->arguments.front() << L"[" << itr->arguments[1] << L"]";
+					isSpecial = true;
+				}
+				else if (itr->data && itr->data == _pData->getSpecialGlobalFunction(SpecialFunction::SetArray))
+				{
+					out << itr->arguments.front() << L"[" << itr->arguments[1] << L"] = " << itr->arguments[2];
+					isSpecial = true;
+				}
+				else
+				{
+					if (!itr->isExpression)
+					{
+						if (!itr->refobj.empty()) out << itr->refobj << L"->";
+
+						if (_useNamespace && itr->data)
+						{
+							auto nsPair = _pData->findNamespaceForFunction(itr->data->id);
+							if (!nsPair.first.empty())
+								out << nsPair.first << L"::" << nsPair.second;
+							else
+								out << itr->data->name;
+						}
+						else
+						{
+							out << itr->data->name;
+						}
+						if (isSpecial) out << L" "; else out << L"(";
+					}
+
+					if (itr->data && (itr->data->id == _pData->gosubCommand() || itr->data->id == _pData->gotoCommand()))
+					{
+						auto findItr = _labels.find(itr->arguments.front());
+						if (findItr == _labels.end())
+							throw std::exception("Missing label entry");
+
+						std::wstring labelName = findItr->second;
+						// Strip the "sub." prefix from gosub targets — the decompiler emits
+						// "sub.name:" as "sub name() { }" so the gosub must match: "gosub name;"
+						if (itr->data->id == _pData->gosubCommand() && labelName.substr(0, 4) == L"sub.")
+							labelName = labelName.substr(4);
+						out << labelName;
+					}
+					else
+					{
+						bool firstArg = true;
+						if (itr->data && itr->data->returnArgument > 0)
+						{
+							out << itr->retvar.substr(0, itr->retvar.length() - 3);
+							firstArg = false;
+						}
+						for (auto aItr = itr->arguments.begin(); aItr != itr->arguments.end(); aItr++)
+						{
+							if (!firstArg && !itr->isExpression) out << L", ";
+							firstArg = false;
+							out << *aItr;
+						}
+					}
+				}
+
+				if (isCondition && (itr->isExpression || isSpecial))
+					out << L")";
+				else if (isCondition)
+					out << L"))";
+				else if (isSpecial || itr->isExpression)
+					out << L";";
+				else
+					out << L");";
+				out << std::endl;
+
+				if (itr->isBlock && !isIndentNonBlock)
+				{
+					for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
+					out << L"{" << std::endl;
+				}
+			}
+		};
+
+	// ── Write function main(...) { ... } ────────────────────────────────────
 	out << L"function main(";
 	{
 		unsigned int i = 0;
@@ -204,10 +392,8 @@ bool ScriptRead::write(const std::wstring& outfile)
 		for (auto itr = _arguments.begin(); itr != _arguments.end(); itr++, i++)
 		{
 			auto data = _pData->getParDefData(itr->type);
-			if (!data)
-				continue;
-			if (!first)
-				out << L", ";
+			if (!data) continue;
+			if (!first) out << L", ";
 			first = false;
 			out << data->code << L" $" << _variables[i];
 		}
@@ -215,8 +401,6 @@ bool ScriptRead::write(const std::wstring& outfile)
 	out << L")" << std::endl;
 	out << L"{" << std::endl;
 
-	// Preserve argument descriptions (no longer expressible in the function
-	// header syntax itself) as comments directly under the opening brace.
 	{
 		unsigned int i = 0;
 		for (auto itr = _arguments.begin(); itr != _arguments.end(); itr++, i++)
@@ -226,177 +410,70 @@ bool ScriptRead::write(const std::wstring& outfile)
 		}
 	}
 
-	unsigned int indent = 1;
-	bool isIndentNonBlock = false;
-	int debug = 0;
-	for (auto itr = _commands.begin(); itr != _commands.end(); itr++, debug++)
+	writeCommands(0, mainEndIdx, 1);
+
+	out << L"}" << std::endl;
+
+	// ── Write sub blocks ─────────────────────────────────────────────────────
+	// From mainEndIdx onward: each defineLabelCommand starts a new sub block,
+	// closed by its matching endsub.
+	if (mainEndIdx < _commands.size())
 	{
-		if (itr->isBlankLine)
+		size_t i = mainEndIdx;
+		while (i < _commands.size())
 		{
-			out << std::endl;
-			continue;
-		}
-		if (!itr->comment.empty())
-		{
-			out << "// " << itr->comment << std::endl;
-			continue;
-		}
+			const FunctionData& fd = _commands[i];
 
-		bool isSpecial = itr->data ? (_pData->findSpecialKeyword(itr->data->name) == itr->data->id) : false;
+			// Skip blank lines and comments between subs
+			if (fd.isBlankLine) { out << std::endl; i++; continue; }
+			if (!fd.comment.empty()) { out << L"// " << fd.comment << std::endl; i++; continue; }
 
-		if (itr->data && itr->data->id == _pData->endCommand())
-		{
-			if (indent > 0)
-				--indent;
-			for (unsigned int i = 0; i < indent; i++)
-				out << "   ";
-			out << "}" << std::endl;
-			continue;
-		}
-		else if (itr->data && itr->data->id == _pData->elseCommand())
-		{
-			unsigned int doIndent = (indent > 0) ? (indent - 1) : 0;
-			for (unsigned int i = 0; i < (indent - 1); i++)
-				out << "   ";
-			out << "}" << std::endl;
-			for (unsigned int i = 0; i < (indent - 1); i++)
-				out << "   ";
-			out << "else" << std::endl;
-			for (unsigned int i = 0; i < (indent - 1); i++)
-				out << "   ";
-			out << "{" << std::endl;
-			continue;
-		}
-		else if (itr->data && itr->data->id == _pData->hiddenGotoCommand())
-			continue;
-
-		else if (itr->data && itr->data->id == _pData->defineLabelCommand())
-		{
-			out << itr->arguments.front() << ":" << std::endl;
-			continue;
-		}
-
-		if (itr->isElseCondition)
-		{
-			if (indent > 0)
-				--indent;
-			for (unsigned int i = 0; i < indent; i++)
-				out << "   ";
-			out << "}" << std::endl;
-		}
-
-		for (unsigned int i = 0; i < indent; i++)
-			out << "   ";
-
-		// remove indent if not a block
-		if (isIndentNonBlock)
-		{
-			isIndentNonBlock = false;
-			--indent;
-		}
-
-		bool isCondition = false;
-		if (!itr->condition.empty())
-		{
-			isCondition = true;
-			out << itr->condition;
-			++indent;
-			if (!itr->isBlock)
-				isIndentNonBlock = true;
-			out << "(";
-		}
-		else if (!itr->retvar.empty())
-		{
-			if (!itr->data || !itr->data->returnArgument)
-				out << itr->retvar;
-		}
-
-		// special function handling
-		if (itr->data && itr->data == _pData->getSpecialGlobalFunction(SpecialFunction::GetArray))
-		{
-			out << itr->arguments.front() << "[" << itr->arguments[1] << "]";
-			isSpecial = true;
-		}
-		else if (itr->data && itr->data == _pData->getSpecialGlobalFunction(SpecialFunction::SetArray))
-		{
-			out << itr->arguments.front() << "[" << itr->arguments[1] << "] = " << itr->arguments[2];
-			isSpecial = true;
-		}
-		else
-		{
-			if (!itr->isExpression)
+			if (fd.data && fd.data->id == _pData->defineLabelCommand())
 			{
-				if (!itr->refobj.empty())
-					out << itr->refobj << "->";
-
-				// Write function name — optionally as Namespace::alias
-				if (_useNamespace && itr->data)
+				// Found a sub label — find its matching endsub at depth 0
+				std::wstring subName = fd.arguments.front();
+				// By convention, sub labels are sometimes prefixed "sub." to
+				// distinguish them from plain goto targets — strip it for the
+				// block syntax since "sub myHelper()" reads better than
+				// "sub sub.myHelper()".
+				if (subName.substr(0, 4) == L"sub.")
+					subName = subName.substr(4);
+				size_t endIdx = _commands.size(); // index of the closing endsub
 				{
-					auto nsPair = _pData->findNamespaceForFunction(itr->data->id);
-					if (!nsPair.first.empty())
-						out << nsPair.first << L"::" << nsPair.second;
-					else
-						out << itr->data->name;
+					int d = 0;
+					for (size_t j = i + 1; j < _commands.size(); j++)
+					{
+						const FunctionData& f = _commands[j];
+						if (f.isBlock && !f.isElseCondition) d++;
+						else if (f.data && f.data->id == _pData->endCommand()) d--;
+						if (d == 0 && f.data && f.data->name == L"endsub")
+						{
+							endIdx = j;
+							break;
+						}
+					}
 				}
-				else
-				{
-					out << itr->data->name;
-				}
-				if (isSpecial)
-					out << L" ";
-				else
-					out << L"(";
-			}
 
-			if (itr->data && (itr->data->id == _pData->gosubCommand() || itr->data->id == _pData->gotoCommand()))
-			{
-				auto findItr = _labels.find(itr->arguments.front());
-				if (findItr == _labels.end())
-					throw std::exception("Missing label entry");
+				out << std::endl;
+				out << L"sub " << subName << L"()" << std::endl;
+				out << L"{" << std::endl;
 
-				out << findItr->second;
+				// Write the sub body (between label and endsub, exclusive)
+				writeCommands(i + 1, endIdx, 1);
+
+				out << L"}" << std::endl;
+
+				// Skip past the endsub
+				i = (endIdx < _commands.size()) ? endIdx + 1 : _commands.size();
 			}
 			else
 			{
-				// first argument
-				bool firstArg = true;
-				if (itr->data && itr->data->returnArgument > 0)
-				{
-					out << itr->retvar.substr(0, itr->retvar.length() - 3);
-					firstArg = false;
-				}
-
-				for (auto aItr = itr->arguments.begin(); aItr != itr->arguments.end(); aItr++)
-				{
-					if (!firstArg && !itr->isExpression)
-						out << ", ";
-					firstArg = false;
-
-					out << *aItr;
-				}
+				// Anything else between subs — emit as plain code at indent 0
+				// (shouldn't normally happen in well-formed scripts)
+				i++;
 			}
 		}
-
-		if (isCondition && (itr->isExpression || isSpecial))
-			out << L")";
-		else if (isCondition)
-			out << L"))";
-		else if (isSpecial || itr->isExpression)
-			out << L";";
-		else
-			out << ");";
-		out << std::endl;
-
-		if (itr->isBlock && !isIndentNonBlock)
-		{
-			for (unsigned int i = 0; i < (indent - 1); i++)
-				out << "   ";
-			out << "{" << std::endl;
-		}
 	}
-
-	// Close the function body
-	out << L"}" << std::endl;
 
 	return true;
 }

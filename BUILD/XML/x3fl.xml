@@ -1730,7 +1730,7 @@
 				<ObjectType name="mainType" datatype="DATATYPE_WARE"/>
 			</ObjectTypes>
 		</Function>
-		<Function id="658" name="getMaxSubTypes" namespace="ware" namespaceAlias="subType"  description="Returns the total amount of items for a main ware type">
+		<Function id="658" name="getMaxSubTypes" namespace="ware" namespaceAlias="maxTypes"  description="Returns the total amount of items for a main ware type">
 			<Example>$amt = getMaxSubTypes(MAINTYPE);</Example>
 			<Arguments>
 				<ReturnValue type="return">
@@ -1738,11 +1738,8 @@
 				</ReturnValue>
 				<Argument pardef="NUMBER" description="The main type"/>
 			</Arguments>
-			<ObjectTypes>
-				<ObjectType name="subType" datatype="DATATYPE_WARE"/>
-			</ObjectTypes>
 		</Function>
-		<Function id="700" name="getObjectClass" description="Gets the top level object class of the given object">
+		<Function id="700" name="getObjectClass" namespace="object" namespaceAlias="getClass" description="Gets the top level object class of the given object">
 			<Example>$variable = $object->getObjectClass();</Example>
 			<Arguments>
 				<RefObject>
@@ -1848,7 +1845,7 @@
 				<Argument pardef="NUMBER" description="The Loadout type" constantgroup="ShipLoadout"/>
 			</Arguments>
 		</Function>
-		<Function id="107" name="waitRandom" description="Waits a random amount of time between the specified minimum and maximum milliseconds.">
+		<Function id="107" name="waitRandom" alias="wait" description="Waits a random amount of time between the specified minimum and maximum milliseconds.">
 			<Arguments>
 				<ReturnValue type="no_if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
@@ -1857,14 +1854,14 @@
 				<Argument pardef="NUMBER" description="The maximum value"/>
 			</Arguments>
 		</Function>
-		<Function id="108" name="getPriority" description="Gets the priorioty of the currently running script">
+		<Function id="108" name="getScriptPriority" namespace="script" namespaceAlias="priority" description="Gets the priorioty of the currently running script">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="109" name="setPriority" description="Sets the priorioty of the currently running script">
+		<Function id="109" name="setScriptPriority" namespace="script" namespaceAlias="setPriority" description="Sets the priorioty of the currently running script">
 			<Arguments>
 				<Argument pardef="NUMBER" description="Priority level to set"/>
 			</Arguments>
@@ -1878,7 +1875,7 @@
 				<Argument pardef="NUMBER" description="The maximum value"/>
 			</Arguments>
 		</Function>
-		<Function id="111" name="interruptScript" description="Interrupt current script">
+		<Function id="111" name="interruptScript" namespace="script" namespaceAlias="interrupt" description="Interrupt current script">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
@@ -1893,7 +1890,7 @@
 				<Argument pardef="1" description="Label index to jump to"/>
 			</Arguments>
 		</Function>
-		<Function id="113" name="connectCommandScript" description="Connect a script to a specific ship command or signal">
+		<Function id="113" name="connectCommandScript" namespace="commands" namespaceAlias="connect" description="Connect a script to a specific ship command or signal">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
@@ -1904,7 +1901,7 @@
 				<Argument pardef="NUMBER" description="Priority"/>
 			</Arguments>
 		</Function>
-		<Function id="114" name="removeCommandScript" description="Resets the command script back to the default">
+		<Function id="114" name="removeCommandScript" namespace="commands" namespaceAlias="remove" description="Resets the command script back to the default">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
@@ -1913,7 +1910,7 @@
 				<Argument pardef="OBJCMDSIGNAL" description="The command or signal to reset"/>
 			</Arguments>
 		</Function>
-		<Function id="115" name="ignoreCommandScript" description="Ignores the set command/signal">
+		<Function id="115" name="ignoreCommandScript" namespace="commands" namespaceAlias="ignore" description="Ignores the set command/signal">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
@@ -1922,12 +1919,12 @@
 				<Argument pardef="OBJCMDSIGNAL" description="The command or signal to ignore"/>
 			</Arguments>
 		</Function>
-		<Function id="116" name="setSignalHandling" description="Enable/Disables signal handling for the current script">
+		<Function id="116" name="setSignalHandling" namespace="signals" namespaceAlias="setHandling" description="Enable/Disables signal handling for the current script">
 			<Arguments>
 				<Argument pardef="VARBOOLEAN" description="Enable/Disable"/>
 			</Arguments>
 		</Function>
-		<Function id="118" name="setGlobalCmdScript" description="Connects a script to a global command slot">
+		<Function id="118" name="setGlobalCmdScript" namespace="commands" namespaceAlias="setGlobal" description="Connects a script to a global command slot">
 			<Arguments>
 				<Argument pardef="OBJCMDSIGNAL" description="The ship/station command to link to"/>
 				<Argument pardef="CALLNAME" description="The script to assign"/>
@@ -1936,31 +1933,31 @@
 				<Argument pardef="RACE" description="The race filter"/>
 			</Arguments>
 		</Function>
-		<Function id="119" name="removeGlobalCmdScript" description="Disconnects a script from a global command slot">
+		<Function id="119" name="removeGlobalCmdScript" namespace="commands" namespaceAlias="removeGlobal" description="Disconnects a script from a global command slot">
 			<Arguments>
 				<Argument pardef="OBJCMDSIGNAL" description="The ship/station command to unlink"/>
 				<Argument pardef="OBJECTCLASS" description="The object class filter"/>
 				<Argument pardef="RACE" description="The race filter"/>
 			</Arguments>
 		</Function>
-		<Function id="120" name="setObjectCommand" description="sets the objects current command">
+		<Function id="120" name="setScriptCommand" namespace="script" namespaceAlias="setCommand" description="sets the objects current command">
 			<Arguments>
 				<Argument pardef="OBJCMDSIGNAL" description="The ship/station command to set for the currently script"/>
 			</Arguments>
 		</Function>
-		<Function id="121" name="getObjectCommand" description="Gets the objects current command">
+		<Function id="121" name="getScriptCommand" namespace="script" namespaceAlias="command" description="Gets the objects current command">
 			<Arguments>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_OBJCMD</ReturnValue>
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="122" name="setObjectCommandTarget" description="Sets the command target parameter for current script">
+		<Function id="122" name="setScriptCommandTarget" namespace="script" namespaceAlias="setTarget" description="Sets the command target parameter for current script">
 			<Arguments>
 				<Argument pardef="VALUE" description="The parameter value to set"/>
 			</Arguments>
 		</Function>
-		<Function id="123" name="getObjectCommandTarget" description="Gets the command target parameter for the current script">
+		<Function id="123" name="getObjectCommandTarget" namespace="script" namespaceAlias="target" description="Gets the command target parameter for the current script">
 			<Arguments>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_OBJECT</ReturnValue>
@@ -1984,7 +1981,7 @@
 				<Argument pardef="DATATYPE" description="The Datatype to compare against"/>
 			</Arguments>
 		</Function>
-		<Function id="126" name="readText" description="Reads a text entry from the TextDB">
+		<Function id="126" name="readText" namespace="text" namespaceAlias="read" description="Reads a text entry from the TextDB">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_STRING</ReturnValue>
@@ -1993,7 +1990,7 @@
 				<Argument pardef="NUMBER" description="The text id number"/>
 			</Arguments>
 		</Function>
-		<Function id="127" name="ignoreGlobalCommand" description="Sets the class/race to ignore for the command or signal">
+		<Function id="127" name="ignoreGlobalCommand" namespace="commands" namespaceAlias="ignoreGlobal" description="Sets the class/race to ignore for the command or signal">
 			<Arguments>
 				<Argument pardef="OBJCMDSIGNAL" description="The command/signal to set an ignore to"/>
 				<Argument pardef="OBJECTCLASS" description="The class to ignore"/>
@@ -2008,7 +2005,7 @@
 				<Argument pardef="NUMBER" description="The size of the array (can be null)"/>
 			</Arguments>
 		</Function>
-		<Function id="132" name="arrayCloneIdx" description="Clones an existing array">
+		<Function id="132" name="arrayCloneIdx" alias="arrayClone" namespace="array" namespaceAlias="clone" description="Clones an existing array">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_ARRAY</ReturnValue>
@@ -2021,7 +2018,7 @@
 				<ObjectType name="clone" datatype="DATATYPE_ARRAY"/>
 			</ObjectTypes>
 		</Function>
-		<Function id="133" name="arrayCopy" description="Copies an existing array into another">
+		<Function id="133" name="arrayCopy" namespace="array" namespaceAlias="copy" description="Copies an existing array into another">
 			<Arguments>
 				<Argument pardef="ARRAY" description="The array to copy to"/>
 				<Argument pardef="NUMBER" description="The start index to insert at"/>
@@ -2033,7 +2030,7 @@
 				<ObjectType name="copy" datatype="DATATYPE_ARRAY"/>
 			</ObjectTypes>
 		</Function>
-		<Function id="134" name="arrayInsert" description="Insert an item into an array at a given position">
+		<Function id="134" name="arrayInsert" namespace="array" namespaceAlias="insert" description="Insert an item into an array at a given position">
 			<Arguments>
 				<Argument pardef="ARRAY" description="The array to insert into"/>
 				<Argument pardef="NUMBER" description="The position to insert at"/>
@@ -2043,7 +2040,7 @@
 				<ObjectType name="insert" datatype="DATATYPE_ARRAY"/>
 			</ObjectTypes>
 		</Function>
-		<Function id="135" name="arrayAppend" description="Adds an item into the back of the array">
+		<Function id="135" name="arrayAppend" namespace="array" namespaceAlias="append" description="Adds an item into the back of the array">
 			<Arguments>
 				<Argument pardef="ARRAY" description="THe array to add to"/>
 				<Argument pardef="VALUE" description="The item to be added"/>
@@ -2053,7 +2050,7 @@
 				<ObjectType name="pushback" datatype="DATATYPE_ARRAY"/>
 			</ObjectTypes>
 		</Function>
-		<Function id="136" name="arrayRemove" description="Removes an item from an array at a given position">
+		<Function id="136" name="arrayRemove" namespace="array" namespaceAlias="remove" description="Removes an item from an array at a given position">
 			<Arguments>
 				<Argument pardef="ARRAY" description="The array to remove item from"/>
 				<Argument pardef="NUMBER" description="THe position of item to be removed"/>
@@ -2062,7 +2059,7 @@
 				<ObjectType name="remove" datatype="DATATYPE_ARRAY"/>
 			</ObjectTypes>
 		</Function>
-		<Function id="137" name="arrayResize" description="Resize an existing array">
+		<Function id="137" name="arrayResize" namespace="array" namespaceAlias="resize" description="Resize an existing array">
 			<Arguments>
 				<Argument pardef="ARRAY" description="The array the resize"/>
 				<Argument pardef="NUMBER" description="The new size of the array"/>
@@ -2080,20 +2077,20 @@
 				<Argument pardef="NUMBER" description="The day of the month"/>
 			</Arguments>
 		</Function>
-		<Function id="141" name="getPlayingTime" description="Returns the current game time in seconds">
+		<Function id="141" name="getPlayingTime" namespace="player" namespaceAlias="getTime" description="Returns the current game time in seconds">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="144" name="setCommandUpgrade" description="Sets the equipment needed for the ship command">
+		<Function id="144" name="setCommandUpgrade" namespace="commands" namespaceAlias="setUpgrade" description="Sets the equipment needed for the ship command">
 			<Arguments>
 				<Argument pardef="OBJCMD" description="The ship command to set equipment too"/>
 				<Argument pardef="WARETRUE" description="The equipment ware"/>
 			</Arguments>
 		</Function>
-		<Function id="145" name="getCommandUpgrade" description="Gets the currently set equipment for a ship command">
+		<Function id="145" name="getCommandUpgrade" namespace="commands" namespaceAlias="upgrade" description="Gets the currently set equipment for a ship command">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_WARE</ReturnValue>
@@ -2102,7 +2099,7 @@
 				<Argument pardef="OBJCMD" description="The ship command"/>
 			</Arguments>
 		</Function>
-		<Function id="146" name="isScriptPrioOnStack" description="Checks if a running script with a priority is on the current stack">
+		<Function id="146" name="isScriptPrioOnStack" namespace="script" namespaceAlias="isPrioOnStack" description="Checks if a running script with a priority is on the current stack">
 			<Arguments>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
@@ -2110,14 +2107,14 @@
 				<Argument pardef="NUMBER" description="The priority to check for"/>
 			</Arguments>
 		</Function>
-		<Function id="147" name="getTaskID" description="Gets the current script task id">
+		<Function id="147" name="getTaskID" namespace="script" namespaceAlias="taskID" description="Gets the current script task id">
 			<Arguments>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="148" name="getPID" description="Gets the current global script id">
+		<Function id="148" name="getPID" namespace="script" namespaceAlias="PID" description="Gets the current global script id">
 			<Arguments>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
@@ -2137,7 +2134,7 @@
 				<Argument pardef="VALUE" description="The fifth argument"/>
 			</Arguments>
 		</Function>
-		<Function id="150" name="sprintfReadtext" description="Formats a string from a Text DB entry">
+		<Function id="150" name="sprintfReadtext" alias="sprintf" description="Formats a string from a Text DB entry">
 			<Arguments allownull="trye">
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_STRING</ReturnValue>
@@ -2151,24 +2148,24 @@
 				<Argument pardef="VALUE" description="The fifth argument"/>
 			</Arguments>
 		</Function>
-		<Function id="151" name="loadText" description="Loads a text file into the TextDB">
+		<Function id="151" name="loadText" namespace="text" namespaceAlias="load" description="Loads a text file into the TextDB">
 			<Arguments>
 				<Argument pardef="NUMBER" description="The file number to load"/>
 			</Arguments>
 		</Function>
-		<Function id="152" name="getEngineVersion" description="Gets the current script engine version">
+		<Function id="152" name="getEngineVersion" namespace="script" namespaceAlias="engineVersion" description="Gets the current script engine version">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="153" name="enableInfinteLoopCheck" description="Enables/Disables the infinte loop check for testing">
+		<Function id="153" name="enableInfinteLoopCheck" namespace="script" namespaceAlias="setLoopCheck" description="Enables/Disables the infinte loop check for testing">
 			<Arguments>
 				<Argument pardef="VARBOOLEAN" description="To Enable"/>
 			</Arguments>
 		</Function>
-		<Function id="154" name="setCommandUpgradeScript" description="Sets the equipment needs for a ship command and sets a check script">
+		<Function id="154" name="setCommandUpgradeScript" namespace="commands" namespaceAlias="setUpgrade" alias="setCommandUpgrade" description="Sets the equipment needs for a ship command and sets a check script">
 			<Arguments>
 				<Argument pardef="OBJCMD" description="The ship command"/>
 				<Argument pardef="WARE" description="The equipment ware"/>
@@ -2187,7 +2184,7 @@
 				<Argument pardef="VALUE" description="The data"/>
 			</Arguments>
 		</Function>
-		<Function id="156" name="getData" description="Gets a value from local script data storage by key. Returns the stored value or 0 if not set.">
+		<Function id="156" name="getData"description="Gets a value from local script data storage by key. Returns the stored value or 0 if not set.">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
@@ -2200,20 +2197,20 @@
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="157" name="setGlobalData" description="Sets some global data">
+		<Function id="157" name="setGlobalData" namespace="data" namespaceAlias="set"  description="Sets some global data">
 			<Arguments>
 				<Argument pardef="VARSTRING" description="The id of the data"/>
 				<Argument pardef="VALUE" description="The data"/>
 			</Arguments>
 		</Function>
-		<Function id="158" name="getGlobalData" description="Gets some global data">
+		<Function id="158" name="getGlobalData" namespace="data" namespaceAlias="get"  description="Gets some global data">
 			<Arguments>
 				<Argument pardef="VARSTRING" description="The id of the data to get"/>
 				<ReturnValue type="if">
 				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="159" name="interruptScriptArgs" description="Interrupts the currently running script, with arguments">
+		<Function id="159" name="interruptScriptArgs" alias="interruptScript" namespace="script" namespaceAlias="interrupt" description="Interrupts the currently running script, with arguments">
 			<Arguments allownull="true">
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
@@ -2227,7 +2224,7 @@
 				<Argument pardef="VALUE" description="forth argument"/>
 			</Arguments>
 		</Function>
-		<Function id="200" name="playAudioSample" description="Plays an audio sample">
+		<Function id="200" name="playAudioSample" namespace="audio" namespaceAlias="play" alias="playAudio" description="Plays an audio sample">
 			<Arguments>
 				<Argument pardef="NUMBER" description="The id of the audio sample"/>
 			</Arguments>
@@ -2248,11 +2245,12 @@
 				<Argument pardef="NUMBER" description="The id of the audio message"/>
 			</Arguments>
 		</Function>
-		<Function id="203" name="incomingMessage" description="Sends an incomming message to the player">
+		<Function id="203" name="incomingMessage" namespace="message" namespaceAlias="send" description="Sends an incomming message to the player">
 			<Arguments>
 				<Argument pardef="VARSTRING" description="The message string"/>
 				<Argument pardef="NUMBER" description="The message type constant" constantgroup="PlayerLog"/>
 				<Argument pardef="VARBOOLEAN" description="Display it immeditatly"/>
+				<Argument pardef="VARBOOLEAN" description="Log it immeditatly"/>
 			</Arguments>
 		</Function>
 		<Function id="212" name="incomingQuestion" description="Sends an incomming question to the player to responed to">
@@ -6815,7 +6813,7 @@
 			</Arguments>
 			<Example>if $asteroid->hasCollectibleRocks() { ... }</Example>
 		</Function>
-		<Function id="1215" name="sendIncomingMessage" description="Sends an incoming communication message to the player from this object, with an optional flag to show as interactive menu.">
+		<Function id="1215" name="sendIncomingMessage" alias="incomingMessage" description="Sends an incoming communication message to the player from this object, with an optional flag to show as interactive menu.">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
@@ -17527,7 +17525,7 @@
 			</Arguments>
 			<Example>$station->removeSupplyStation($supplyStation)</Example>
 		</Function>
-		<Function id="2364" name="arrayClone" description="Creates a shallow clone of the array and returns it.">
+		<Function id="2364" name="arrayClone" namespace="array" namespaceAlias="clone" description="Creates a shallow clone of the array and returns it.">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_ARRAY</ReturnValue>
