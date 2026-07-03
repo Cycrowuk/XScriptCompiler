@@ -6160,6 +6160,25 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			}
 		}
 
+		// Same depth tracking for function main's body — _functionDefDepth must
+		// be incremented for every nested { and decremented for every } so the
+		// function-close check (which guards on _functionDefDepth > 0) doesn't
+		// fire prematurely on a } that closes a nested if/while block.
+		int funcDepthBeforeScan = _functionDefDepth;
+		if (_inFunctionDef && _functionDefDepth > 0 && !list.empty())
+		{
+			for (const BaseParse* p : list)
+			{
+				if (p->type() != ParseType::Symbol)
+					continue;
+				SymbolType sym = dynamic_cast<const ParseSymbol*>(p)->symbol();
+				if (sym == SymbolType::StartBlock)
+					_functionDefDepth++;
+				else if (sym == SymbolType::EndBlock && _functionDefDepth > 1)
+					_functionDefDepth--;
+			}
+		}
+
 		// Detect the sub's closing } — replaced with an automatic "endsub;" call.
 		// Must be checked before the function-closing check below, since a sub
 		// is nested inside the function body and its brace closes first.
@@ -6211,7 +6230,7 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 
 		// Detect the function's closing } — it's a lone EndBlock when no
 		// while/if blocks are open (_conditionStack is empty) and no sub is open.
-		if (_inFunctionDef && _functionDefDepth > 0 && !_inSubDef &&
+		if (_inFunctionDef && funcDepthBeforeScan == 1 && !_inSubDef &&
 			list.size() == 1 &&
 			list.front()->type() == ParseType::Symbol &&
 			dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::EndBlock &&
