@@ -42,6 +42,10 @@ v0.7
 v0.8
 	Fixed writing out labels to work with X-Studio
 	Fixed function overrides for object functions
+	Added main function (most code must be inside functions)
+	Added local-scoped functions
+	Added sub blocks
+	Updated decompiler to decompile to function blocks
 
 
 	

@@ -8226,10 +8226,6 @@
 			<Overload retVal="">
 			</Overload>
 		</KeyWord>
-		<KeyWord name="getObjectCommand" func="yes" descr="Gets the objects current command">
-			<Overload retVal="">
-			</Overload>
-		</KeyWord>
 		<KeyWord name="getObjectCommandTarget" func="yes" descr="Gets the command target parameter for the current script">
 			<Overload retVal="">
 			</Overload>
@@ -8423,10 +8419,6 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="getPrimaryResources" func="yes" descr="Gets an array of primary resource wares (main inputs) for the station.">
-			<Overload retVal="">
-			</Overload>
-		</KeyWord>
-		<KeyWord name="getPriority" func="yes" descr="Gets the priorioty of the currently running script">
 			<Overload retVal="">
 			</Overload>
 		</KeyWord>
@@ -8646,7 +8638,15 @@
 			<Overload retVal="">
 			</Overload>
 		</KeyWord>
+		<KeyWord name="getScriptCommand" func="yes" descr="Gets the objects current command">
+			<Overload retVal="">
+			</Overload>
+		</KeyWord>
 		<KeyWord name="getScriptName" func="yes" descr="Gets the name of the currently running script.">
+			<Overload retVal="">
+			</Overload>
+		</KeyWord>
+		<KeyWord name="getScriptPriority" func="yes" descr="Gets the priorioty of the currently running script">
 			<Overload retVal="">
 			</Overload>
 		</KeyWord>
@@ -10309,6 +10309,7 @@
 				<Param name="VARSTRING" descr="The message string"/>
 				<Param name="NUMBER" descr="The message type constant"/>
 				<Param name="VARBOOLEAN" descr="Display it immeditatly"/>
+				<Param name="VARBOOLEAN" descr="Log it immeditatly"/>
 			</Overload>
 		</KeyWord>
 		<KeyWord name="incomingQuestion" func="yes" descr="Sends an incomming question to the player to responed to">
@@ -15150,16 +15151,6 @@
 				<Param name="NUMBER" descr="Notoriety value to set"/>
 			</Overload>
 		</KeyWord>
-		<KeyWord name="setObjectCommand" func="yes" descr="sets the objects current command">
-			<Overload>
-				<Param name="OBJCMDSIGNAL" descr="The ship/station command to set for the currently script"/>
-			</Overload>
-		</KeyWord>
-		<KeyWord name="setObjectCommandTarget" func="yes" descr="Sets the command target parameter for current script">
-			<Overload>
-				<Param name="VALUE" descr="The parameter value to set"/>
-			</Overload>
-		</KeyWord>
 		<KeyWord name="setObjectRaceGroupRelation" func="yes" descr="Sets the relation of this object towards the specified race group.">
 			<Overload>
 				<Param name="RACE" descr="Race group to set the relation towards"/>
@@ -15270,11 +15261,6 @@
 				<Param name="NUMBER" descr="The price to set"/>
 			</Overload>
 		</KeyWord>
-		<KeyWord name="setPriority" func="yes" descr="Sets the priorioty of the currently running script">
-			<Overload>
-				<Param name="NUMBER" descr="Priority level to set"/>
-			</Overload>
-		</KeyWord>
 		<KeyWord name="setProfit" func="yes" descr="Sets the profit total for this pilot NPC.">
 			<Overload>
 				<Param name="NUMBER" descr="Profit amount to set"/>
@@ -15370,6 +15356,21 @@
 		<KeyWord name="setSafePos" func="yes" descr="Sets or clears the safe position flag on this object.">
 			<Overload>
 				<Param name="VARBOOLEAN" descr="True to mark as safe position, false to clear"/>
+			</Overload>
+		</KeyWord>
+		<KeyWord name="setScriptCommand" func="yes" descr="sets the objects current command">
+			<Overload>
+				<Param name="OBJCMDSIGNAL" descr="The ship/station command to set for the currently script"/>
+			</Overload>
+		</KeyWord>
+		<KeyWord name="setScriptCommandTarget" func="yes" descr="Sets the command target parameter for current script">
+			<Overload>
+				<Param name="VALUE" descr="The parameter value to set"/>
+			</Overload>
+		</KeyWord>
+		<KeyWord name="setScriptPriority" func="yes" descr="Sets the priorioty of the currently running script">
+			<Overload>
+				<Param name="NUMBER" descr="Priority level to set"/>
 			</Overload>
 		</KeyWord>
 		<KeyWord name="setScriptSelection" func="yes" descr="Sets the current value for the specified script selection option.">
