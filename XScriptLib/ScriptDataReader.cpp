@@ -6,6 +6,7 @@
 #include "../XLib/XLib.h"
 
 #include <sstream>
+#include <io.h>
 
 using namespace XScript;
 
@@ -130,8 +131,33 @@ bool ScriptDataReader::readData(const std::wstring& filename)
 			highestGame = *itr;
 	}
 
+	// Build language suffix — e.g. language=44 -> "L044", language=7 -> "L007"
+	std::wstring langSuffix = L"L";
+	{
+		std::wstring langStr = std::to_wstring(_pData->_gameData.language);
+		while (langStr.size() < 3) langStr = L"0" + langStr;
+		langSuffix += langStr;
+	}
+
+	// Load all text files from Data\t\ that match the configured language code.
+	// Files are named e.g. "0001-L044.xml", "0039-L044.xml" — we load every
+	// file in the directory whose name contains the language suffix, then let
+	// TextDB handle page-ID lookup and TextPrefix matching internally.
 	XLib::TextDB textdb;
-	textdb.loadTextFile(L"Data\\0001-L044.xml", highestGame);
+	{
+		std::wstring searchPath = L"Data\\t\\*-" + langSuffix + L".xml";
+		_wfinddata_t fileData;
+		intptr_t handle = _wfindfirst(searchPath.c_str(), &fileData);
+		if (handle != -1)
+		{
+			do
+			{
+				std::wstring filePath = L"Data\\t\\" + std::wstring(fileData.name);
+				textdb.loadTextFile(filePath, highestGame);
+			} while (_wfindnext(handle, &fileData) == 0);
+			_findclose(handle);
+		}
+	}
 	textdb.finalise();
 	textdb.setLanguage(_pData->_gameData.language);
 
