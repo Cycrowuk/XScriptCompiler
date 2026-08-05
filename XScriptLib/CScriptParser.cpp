@@ -5492,11 +5492,88 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 
 	// validation argument datatypes
 	std::map<int, const ParseInteger*> foldedNegatives; // index → folded negative integer
+	const CScriptData::ScriptDef* scriptDef = nullptr; // set when a scriptCheck arg is found
 	for (int i = 0; i < func->arguments.size(); ++i)
 	{
 		const FunctionArgument& a = func->arguments[i];
 		const BaseParse* arg = functionData->arguments()->get(i);
 		const ParDefData* d = _data->getParDefData(a.pardef);
+
+		// Script name argument — look up the script definition so we can
+		// type-check the subsequent arguments and set the return type.
+		if (a.scriptCheck)
+		{
+			if (arg->type() == ParseType::String)
+			{
+				// Strip leading/trailing quotes from the raw string data
+				std::wstring scriptName = arg->data();
+				if (scriptName.size() >= 2 && scriptName.front() == L'"' && scriptName.back() == L'"')
+					scriptName = scriptName.substr(1, scriptName.size() - 2);
+
+				scriptDef = _data->findScript(scriptName);
+				if (!scriptDef)
+				{
+					// Unknown script — warn but don't error (real pass only)
+					if (!_prePassMode)
+					{
+						Warnings& warn = _addWarning(ParseWarnings::NullVariable, arg);
+						warn.data.push_back(arg->data());
+					}
+				}
+				else if (!scriptDef->returnTypes.empty() &&
+					scriptDef->returnTypes.find(DataTypes::Unknown) == scriptDef->returnTypes.end())
+				{
+					// Override the return variable's type from the script definition.
+					// Update _pVariables AND _variables directly — _getActualDataTypes
+					// reads _variables directly, so both must be set for downstream
+					// type-checking to see the correct type.
+					if (functionData->returnVariable())
+					{
+						const_cast<ParseVariable*>(functionData->returnVariable())
+							->setDataTypes(scriptDef->returnTypes);
+						(*_pVariables)[functionData->returnVariable()->name()] = scriptDef->returnTypes;
+						_variables[functionData->returnVariable()->name()] = scriptDef->returnTypes;
+					}
+				}
+			}
+			continue; // the script name arg itself doesn't need further type-checking
+		}
+
+		// If we have a script definition, validate this positional argument
+		// against the script's declared parameter types.
+		// The script name arg itself is skipped (continue above), so subsequent
+		// args map sequentially to scriptDef->args starting at index 0.
+		if (scriptDef && !_prePassMode)
+		{
+			// Find the index of the scriptCheck arg to compute offset
+			int scriptCheckArgIdx = -1;
+			for (int j = 0; j < (int)func->arguments.size(); ++j)
+				if (func->arguments[j].scriptCheck) { scriptCheckArgIdx = j; break; }
+
+			int sIdx = i - scriptCheckArgIdx - 1; // 0-based index into script's args
+			if (sIdx >= 0 && sIdx < static_cast<int>(scriptDef->args.size()))
+			{
+				const CScriptData::ScriptArgDef& sArg = scriptDef->args[sIdx];
+				const ParDefData* sPd = _data->getParDefData(sArg.pardef);
+				if (sPd && !sPd->datatypes.empty() &&
+					sPd->datatypes.find(DataTypes::Unknown) == sPd->datatypes.end())
+				{
+					if (arg->type() == ParseType::Variable)
+					{
+						std::unordered_set<DataTypes> dt = _getActualDataTypes(arg);
+						if (!dt.empty() && dt.find(DataTypes::Unknown) == dt.end() &&
+							!_isValidDataType(dt, sPd->datatypes))
+						{
+							Warnings& warn = _addWarning(ParseWarnings::InvalidDataType, arg);
+							warn.data.push_back(_displayVarName(arg->data()));
+							warn.data.push_back(std::to_wstring(i));
+							warn.data.push_back(_getDataTypesString(dt));
+							warn.data.push_back(_getDataTypesString(sPd->datatypes));
+						}
+					}
+				}
+			}
+		}
 
 		//if the type is unknown, we will allow it
 		if (arg->type() == ParseType::Function)
@@ -5678,14 +5755,62 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 		}
 	}
 
+	// If this function uses undefinedCount (e.g. call()) and we found a
+	// script definition, validate the extra arguments beyond func->arguments
+	// against the script's declared parameter types.
+	if (scriptDef && !_prePassMode && func->undefinedCount)
+	{
+		int scriptCheckArgIdx = -1;
+		for (int j = 0; j < (int)func->arguments.size(); ++j)
+			if (func->arguments[j].scriptCheck) { scriptCheckArgIdx = j; break; }
+
+		int totalArgs = static_cast<int>(functionData->arguments()->count());
+		for (int i = static_cast<int>(func->arguments.size()); i < totalArgs; ++i)
+		{
+			const BaseParse* arg = functionData->arguments()->get(i);
+			int sIdx = i - scriptCheckArgIdx - 1;
+			if (sIdx < 0 || sIdx >= static_cast<int>(scriptDef->args.size()))
+				continue;
+
+			const CScriptData::ScriptArgDef& sArg = scriptDef->args[sIdx];
+			const ParDefData* sPd = _data->getParDefData(sArg.pardef);
+			if (!sPd || sPd->datatypes.empty() ||
+				sPd->datatypes.find(DataTypes::Unknown) != sPd->datatypes.end())
+				continue;
+
+			if (arg->type() == ParseType::Variable)
+			{
+				std::unordered_set<DataTypes> dt = _getActualDataTypes(arg);
+				if (!dt.empty() && dt.find(DataTypes::Unknown) == dt.end() &&
+					!_isValidDataType(dt, sPd->datatypes))
+				{
+					Warnings& warn = _addWarning(ParseWarnings::InvalidDataType, arg);
+					warn.data.push_back(_displayVarName(arg->data()));
+					warn.data.push_back(std::to_wstring(i));
+					warn.data.push_back(_getDataTypesString(dt));
+					warn.data.push_back(_getDataTypesString(sPd->datatypes));
+				}
+			}
+		}
+	}
+
 	// store datatype of return value
 	// if the command has an argument that counts as a return (ie Inc/Dec)
 	if (func->returnValueType != RetVarType::None)
 	{
 		if (functionData->returnVariable())
 		{
-			functionData->returnVariable()->setDataTypes(func->returnValue);
-			(*_pVariables)[functionData->returnVariable()->name()] = func->returnValue;
+			// Don't overwrite with the function's own (Unknown) return type if a
+			// scriptCheck argument already resolved the correct type from the script def.
+			bool scriptDefHasReturnType = scriptDef &&
+				!scriptDef->returnTypes.empty() &&
+				scriptDef->returnTypes.find(DataTypes::Unknown) == scriptDef->returnTypes.end();
+
+			if (!scriptDefHasReturnType)
+			{
+				functionData->returnVariable()->setDataTypes(func->returnValue);
+				(*_pVariables)[functionData->returnVariable()->name()] = func->returnValue;
+			}
 		}
 
 		if (func->returnArgument > 0)
@@ -5838,7 +5963,17 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 					(*_pVariables)[vari->name()].insert(DataTypes::Unknown);
 				}
 				else
-					(*_pVariables)[vari->name()] = func->returnValue;
+				{
+					// Only overwrite if _pVariables hasn't already been set to a more
+					// specific type by a scriptCheck in _doGlobalFunction.
+					auto existItr = _pVariables->find(vari->name());
+					bool alreadySpecific = existItr != _pVariables->end() &&
+						!existItr->second.empty() &&
+						existItr->second != func->returnValue &&
+						existItr->second.find(DataTypes::Unknown) == existItr->second.end();
+					if (!alreadySpecific)
+						(*_pVariables)[vari->name()] = func->returnValue;
+				}
 
 				_currentScript->addRetVar(functionData->returnVariable());
 			}

@@ -412,6 +412,14 @@ const ParDefData* CScriptData::findParDefForDataType(DataTypes dt) const
 	return nullptr; // no exact single-type match — caller should error
 }
 
+const CScriptData::ScriptDef* CScriptData::findScript(const std::wstring& name) const
+{
+	auto itr = _scripts.find(name);
+	if (itr != _scripts.end())
+		return &itr->second;
+	return nullptr;
+}
+
 const ConstantData* CScriptData::findConstant(const std::wstring& constant) const
 {
 	auto itr = _constData.find(constant);
@@ -737,7 +745,7 @@ bool CScriptData::saveData(const std::wstring& filename)
 		return false;
 
 	// write the header
-	unsigned int dataCount = 19;
+	unsigned int dataCount = 20;
 	if (!_writeHeader(outfile, "XSCRIPTDATA", DATAVERSION, dataCount))
 		return false;
 
@@ -1286,11 +1294,62 @@ bool CScriptData::saveData(const std::wstring& filename)
 		}
 	}
 
+	// ── SCRIPTS section ───────────────────────────────────────────────────────
+	// Format: count of scripts (in header), then for each script:
+	//   unsigned short nameLen + name chars + null
+	//   unsigned int returnType count, then each returnType as unsigned int
+	//   unsigned int arg count, then for each arg:
+	//     unsigned int pardef id
+	//     unsigned short nameLen + name chars + null
+	//     unsigned short descLen + desc chars + null
+	if (!_scripts.empty())
+	{
+		unsigned int scriptCount = static_cast<unsigned int>(_scripts.size());
+		if (!_writeHeader(outfile, "SCRIPTS", 1, scriptCount))
+			return false;
+
+		for (const auto& kvp : _scripts)
+		{
+			const ScriptDef& s = kvp.second;
+
+			// Write name with explicit size prefix
+			unsigned short nameLen = static_cast<unsigned short>(s.name.size());
+			outfile.write(reinterpret_cast<const char*>(&nameLen), sizeof(nameLen));
+			if (!WriteWideString(outfile, s.name)) return false;
+
+			unsigned int rtCount = static_cast<unsigned int>(s.returnTypes.size());
+			outfile.write(reinterpret_cast<const char*>(&rtCount), sizeof(rtCount));
+			for (DataTypes dt : s.returnTypes)
+			{
+				unsigned int dtVal = static_cast<unsigned int>(dt);
+				outfile.write(reinterpret_cast<const char*>(&dtVal), sizeof(dtVal));
+			}
+			if (outfile.bad()) return false;
+
+			unsigned int argCount = static_cast<unsigned int>(s.args.size());
+			outfile.write(reinterpret_cast<const char*>(&argCount), sizeof(argCount));
+			for (const auto& arg : s.args)
+			{
+				unsigned int pd = static_cast<unsigned int>(arg.pardef);
+				outfile.write(reinterpret_cast<const char*>(&pd), sizeof(pd));
+
+				unsigned short argNameLen = static_cast<unsigned short>(arg.name.size());
+				outfile.write(reinterpret_cast<const char*>(&argNameLen), sizeof(argNameLen));
+				if (!WriteWideString(outfile, arg.name)) return false;
+
+				unsigned short argDescLen = static_cast<unsigned short>(arg.desc.size());
+				outfile.write(reinterpret_cast<const char*>(&argDescLen), sizeof(argDescLen));
+				if (!WriteWideString(outfile, arg.desc)) return false;
+			}
+			if (outfile.bad()) return false;
+		}
+	}
+
 	outfile.close();
 	return true;
 }
 
-bool CScriptData::loadData(const std::wstring& filename)
+bool CScriptData::loadBinaryData(const std::wstring& filename)
 {
 	std::ifstream infile(filename, std::ios::binary);
 	if (!infile || !infile.is_open())
@@ -1822,6 +1881,56 @@ bool CScriptData::loadData(const std::wstring& filename)
 				if (!macro.name.empty())
 					_macros[macro.name] = macro;
 			}
+			else if (header.header == "SCRIPTS")
+			{
+				for (unsigned int si = 0; si < header.count; si++)
+				{
+					ScriptDef s;
+
+					unsigned short nameSize;
+					infile.read(reinterpret_cast<char*>(&nameSize), sizeof(nameSize));
+					if (infile.bad()) return false;
+					s.name = ReadWideString(infile, nameSize);
+
+					unsigned int rtCount;
+					infile.read(reinterpret_cast<char*>(&rtCount), sizeof(rtCount));
+					if (infile.bad()) return false;
+					for (unsigned int ri = 0; ri < rtCount; ri++)
+					{
+						unsigned int dtVal;
+						infile.read(reinterpret_cast<char*>(&dtVal), sizeof(dtVal));
+						if (infile.bad()) return false;
+						s.returnTypes.insert(static_cast<DataTypes>(dtVal));
+					}
+
+					unsigned int argCount;
+					infile.read(reinterpret_cast<char*>(&argCount), sizeof(argCount));
+					if (infile.bad()) return false;
+					for (unsigned int ai = 0; ai < argCount; ai++)
+					{
+						ScriptArgDef arg;
+						unsigned int pd;
+						infile.read(reinterpret_cast<char*>(&pd), sizeof(pd));
+						if (infile.bad()) return false;
+						arg.pardef = static_cast<ParDef>(pd);
+
+						unsigned short argNameSize;
+						infile.read(reinterpret_cast<char*>(&argNameSize), sizeof(argNameSize));
+						if (infile.bad()) return false;
+						arg.name = ReadWideString(infile, argNameSize);
+
+						unsigned short argDescSize;
+						infile.read(reinterpret_cast<char*>(&argDescSize), sizeof(argDescSize));
+						if (infile.bad()) return false;
+						arg.desc = ReadWideString(infile, argDescSize);
+
+						s.args.push_back(arg);
+					}
+
+					if (!s.name.empty())
+						_scripts[s.name] = s;
+				}
+			}
 		}
 	}
 
@@ -1918,6 +2027,7 @@ bool CScriptData::_writeFunction(std::ofstream& out, const std::wstring& name, u
 		aData.id = static_cast<unsigned long>(itr->pardef);
 		aData.descSize = static_cast<unsigned short>(itr->description.size());
 		aData.groupSize = static_cast<unsigned short>(itr->constGroup ? itr->constGroup->name.size() : 0);
+		aData.flags = itr->scriptCheck ? 1 : 0;
 		out.write(reinterpret_cast<char*>(&aData), sizeof(aData));
 		if (out.bad())
 			return false;
@@ -2025,8 +2135,12 @@ bool CScriptData::_readFunction(std::ifstream& in, std::map<const std::wstring, 
 				group = &findItr->second;
 		}
 
-		_functionData[data.id].arguments.push_back({ static_cast<ParDef>(aData.id), read, group });
+		_functionData[data.id].arguments.push_back({ static_cast<ParDef>(aData.id), read, group, (aData.flags & 1) != 0 });
 	}
 
 	return true;
+}
+bool CScriptData::loadData(const std::wstring& filename)
+{
+	return loadBinaryData(filename);
 }

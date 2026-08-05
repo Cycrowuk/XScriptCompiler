@@ -1,8 +1,12 @@
 // XScript.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
+//--compile testcall.xs --out testcall.xml --working d:/X --scan_scripts --load_data test.dat 
+//--builddata XML/x3fl.xml --out test.dat --scan_scripts --working d:/X
+
 #include <iostream>
 #include <sstream>
+#include <windows.h>
 
 #include "../XScriptLib/XScriptLib.h"
 #include <BaseParse.cpp>
@@ -66,6 +70,10 @@ int main(int argc, char *argv[])
         std::cout << "\t\t - Decompiles using namespace syntax (e.g. Utils::random instead of random)" << std::endl;
         std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat>" << std::endl;
         std::cout << "\t\t - Builds a game data file from an xml reference" << std::endl;
+        std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat> --scan_scripts" << std::endl;
+        std::cout << "\t\t - Builds data file and scans script files for argument/return type definitions" << std::endl;
+        std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat> --scan_scripts --working <dir>" << std::endl;
+        std::cout << "\t\t - Scans for scripts in the specified directory (default: current directory)" << std::endl;
         std::cout << "\t" << exe << " --load_data <datafile> --exportudl" << std::endl;
         std::cout << "\t\t - Exports notepad++ User Defined Language file" << std::endl;
         return 0;
@@ -89,6 +97,8 @@ int main(int argc, char *argv[])
         std::string output;
         std::string file;
         std::string data = "default_data.dat";
+        std::string workingDir; // --working: directory to scan for .xs files
+        bool scanScripts = false; // --scan_scripts: enable script file scanning in builddata
         CommandType type = CommandType::None;
         CommandType setType = CommandType::None;
         std::vector<std::string> defines;
@@ -100,6 +110,10 @@ int main(int argc, char *argv[])
                 data = itr->second;
             else if (itr->first == "out")
                 output = itr->second;
+            else if (itr->first == "working")
+                workingDir = itr->second;
+            else if (itr->first == "scan_scripts")
+                scanScripts = true;
             else if (itr->first.substr(0, 7) == "define:")
             {
                 // --define:NAME  — pre-define a symbol for #ifdef use
@@ -162,7 +176,7 @@ int main(int argc, char *argv[])
         }
 
 #ifdef _DEBUG
-        loadXmlData("XML/x3fl.xml", data);
+        //loadXmlData("XML/x3fl.xml", data);
 #endif
         if (type != CommandType::BuildData)
         {
@@ -175,6 +189,21 @@ int main(int argc, char *argv[])
                 return 1;
             }
             std::cout << "OK" << std::endl;
+
+            // For compile, scan scripts in the same directory as the source file
+            // (memory-only — no re-save of the .dat) so call() type-checking works.
+            if (type == CommandType::Compile && !file.empty())
+            {
+                std::string scriptDir = file;
+                size_t sep = scriptDir.find_last_of("/\\");
+                if (sep != std::string::npos)
+                    scriptDir = scriptDir.substr(0, sep + 1);
+                else
+                    scriptDir = "";
+
+                std::wstring wscanDir(scriptDir.begin(), scriptDir.end());
+                scanScriptFiles(wscanDir, L""); // empty output = memory-only, no re-save
+            }
         }
 
         switch (type)
@@ -220,6 +249,26 @@ int main(int argc, char *argv[])
             }
             std::cout << "OK" << std::endl;
             std::cout << "\tData file: " << output << " has been written" << std::endl;
+
+            // Scan script files for argument/return type information
+            // Only runs when --scan_scripts is specified
+            if (scanScripts)
+            {
+                std::wstring scanDir = workingDir.empty()
+                    ? L""
+                    : std::wstring(workingDir.begin(), workingDir.end());
+                std::wstring woutput(output.begin(), output.end());
+
+                std::cout << "Scanning script files";
+                if (!workingDir.empty())
+                    std::cout << " in: " << workingDir;
+                std::cout << "..." << std::endl;
+
+                if (!scanScriptFiles(scanDir, woutput))
+                    std::cout << "\tWarning: script scan failed or no scripts found." << std::endl;
+                else
+                    std::cout << "\tScript definitions written to: " << output << std::endl;
+            }
             break;
         case CommandType::ExportUDL:
             std::cout << "Building new notepad++ User Defined Language file: " << file << "...  ";

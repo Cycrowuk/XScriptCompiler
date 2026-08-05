@@ -15,6 +15,11 @@
 #include <codecvt>
 #include <sstream>
 #include <iomanip>
+#include <fstream>
+#include <set>
+#include <io.h>
+
+#include "rapidxml\rapidxml.hpp"
 
 #include "../XLib/XLib.h"
 
@@ -96,9 +101,6 @@ void displayWarning(const Warnings& warning)
 		break;
 	case ParseWarnings::InvalidConstantGroup:
 		std::cout << "- Invalid Constant '" << converter.to_bytes(warning.data[0]) << "' for argument " << std::stoi(warning.data[1]) << ", Expected Group: " << converter.to_bytes(warning.data[2]);
-		break;
-	case ParseWarnings::RecursiveFunctionCall:
-		std::cout << "- Function '" << converter.to_bytes(warning.data[0]) << "' calls itself recursively - shared/mangled arguments and return value will be overwritten on each call";
 		break;
 	}
 
@@ -221,16 +223,7 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 			std::cout << "- Invalid Expression, empty expression after assignment";
 			break;
 		case ParseErrors::InvalidLabel:
-			std::cout << "- Invalid label name '" << converter.to_bytes((*itr)->data(0)) << "'";
-			break;
-		case ParseErrors::DuplicateLabel:
-			std::cout << "- Duplicate label or sub name '" << converter.to_bytes((*itr)->data(0)) << "' - each label and sub must have a unique name";
-			break;
-		case ParseErrors::DuplicateUserFunctionName:
-			std::cout << "- Duplicate function name '" << converter.to_bytes((*itr)->data(0)) << "' - a label, sub, or function with this name already exists";
-			break;
-		case ParseErrors::UserFunctionNameConflict:
-			std::cout << "- Function name '" << converter.to_bytes((*itr)->data(0)) << "' conflicts with an existing script command or constant - choose a different name";
+			std::cout << "- Invalid label name '" << converter.to_bytes((*itr)->data(0)) << "' already exists";
 			break;
 		case ParseErrors::InvalidStartCondition:
 			std::cout << "- Invalid START condition, not compatible with function '" << converter.to_bytes((*itr)->data(0)) << "'";
@@ -334,65 +327,6 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 		case ParseErrors::AmbiguousObjectFunction:
 			std::cout << "- Ambiguous object function '" << converter.to_bytes((*itr)->data(0)) << "', unable to determine matching function: " << converter.to_bytes((*itr)->data(1));
 			break;
-		case ParseErrors::InvalidFunctionDefinition:
-			std::cout << "- Invalid function definition";
-			if (!(*itr)->data(0).empty())
-				std::cout << " '" << converter.to_bytes((*itr)->data(0)) << "'";
-			break;
-		case ParseErrors::CodeOutsideFunction:
-			std::cout << "- Code is not allowed outside of a function definition";
-			break;
-		case ParseErrors::NestedFunctionDefinition:
-			std::cout << "- Nested function definitions are not supported - close the current function with '}' before starting a new one";
-			break;
-		case ParseErrors::MissingFunctionBodyBrace:
-			std::cout << "- Expected '{' to start the function body";
-			break;
-		case ParseErrors::MissingFunctionName:
-			std::cout << "- Expected a function name after 'function'";
-			break;
-		case ParseErrors::MissingFunctionParameterList:
-			std::cout << "- Expected '(' to start the function's parameter list";
-			break;
-		case ParseErrors::InvalidFunctionParameterType:
-			std::cout << "- Invalid parameter type";
-			if (!(*itr)->data(0).empty())
-				std::cout << " '" << converter.to_bytes((*itr)->data(0)) << "'";
-			std::cout << " - expected a recognised datatype or pardef name";
-			break;
-		case ParseErrors::MissingFunctionParameterVariable:
-			std::cout << "- Expected a $variable name after the parameter type";
-			break;
-		case ParseErrors::DuplicateFunctionParameterName:
-			std::cout << "- Duplicate parameter name '" << converter.to_bytes((*itr)->data(0)) << "' - each parameter must have a unique name";
-			break;
-		case ParseErrors::EndsubWithoutLabel:
-			std::cout << "- 'endsub' cannot be used before any label/sub has been defined";
-			break;
-		case ParseErrors::MissingSubName:
-			std::cout << "- Expected a sub name after 'sub'";
-			break;
-		case ParseErrors::MissingSubParameterList:
-			std::cout << "- Expected '()' after the sub name";
-			break;
-		case ParseErrors::SubParametersNotAllowed:
-			std::cout << "- Subs cannot take parameters - use empty parentheses, e.g. 'sub name()'";
-			break;
-		case ParseErrors::NestedSubDefinition:
-			std::cout << "- Nested sub definitions are not supported - close the current sub with '}' before starting a new one";
-			break;
-		case ParseErrors::MissingSubBodyBrace:
-			std::cout << "- Expected '{' to start the sub body";
-			break;
-		case ParseErrors::UserFunctionCallNotStandalone:
-			std::cout << "- Calls to user-defined functions must be a standalone statement (e.g. 'test($arg);' or '$result = test($arg);'), not part of a larger expression";
-			break;
-		case ParseErrors::UserFunctionArgumentCountMismatch:
-			std::cout << "- Function '" << converter.to_bytes((*itr)->data(0)) << "' expects " << converter.to_bytes((*itr)->data(1)) << " argument(s), got " << converter.to_bytes((*itr)->data(2));
-			break;
-		case ParseErrors::ReturnValueNotAllowed:
-			std::cout << "- 'return' with a value is not valid here";
-			break;
 		}
 		std::cout << std::endl;
 		std::cout << "\t" + sLine << std::endl;
@@ -413,29 +347,7 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
 	// load the script parser
 	XScript::CScriptParser parser(g_scriptData);
 
-	// ── Pass 1 (pre-pass) ───────────────────────────────────────────────────
-	// Reads the file once to hoist subroutine/label variable types and other
-	// forward-reference information before the real compile runs.
-	parser.addCurrentFile(filename);
-	{
-		std::wifstream prefile(filename);
-		std::wstring preline;
-		int iPreLine = 0;
-		while (std::getline(prefile, preline))
-		{
-			++iPreLine;
-			if (!parser.prePassLine(iPreLine, preline))
-				break;
-		}
-		prefile.close();
-	}
-	parser.removeCurrentFile();
-
-	// Reset all per-pass state (errors, warnings, current data list, etc.)
-	// while preserving what pass 1 learned (e.g. _subVariables).
-	parser.resetForRealPass();
-
-	// ── Pass 2 (real compile) ───────────────────────────────────────────────
+	// read the script file using the parser
 	parser.addCurrentFile(filename);
 	std::wifstream infile(filename);
 	std::wstring line;
@@ -494,37 +406,20 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
 	return false;
 }
 
+bool compileScriptFile(const std::string& filename, const std::string& out)
+{
+	return compileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(out));
+}
+
 bool compileScriptFile(const std::wstring& filename, const std::wstring& out, const std::vector<std::wstring>& defines)
 {
 	if (!g_scriptData)
 		throw std::exception("Unable to Compile script, No game data loaded");
 
 	XScript::CScriptParser parser(g_scriptData);
-
-	// Pre-register command-line defines — these persist across resetForRealPass()
-	// so they remain active for both the pre-pass and the real compile pass.
 	for (const auto& d : defines)
 		parser.addDefine(d);
 
-	// ── Pass 1 (pre-pass) ───────────────────────────────────────────────────
-	parser.addCurrentFile(filename);
-	{
-		std::wifstream prefile(filename);
-		std::wstring preline;
-		int iPreLine = 0;
-		while (std::getline(prefile, preline))
-		{
-			++iPreLine;
-			if (!parser.prePassLine(iPreLine, preline))
-				break;
-		}
-		prefile.close();
-	}
-	parser.removeCurrentFile();
-
-	parser.resetForRealPass();
-
-	// ── Pass 2 (real compile) ───────────────────────────────────────────────
 	parser.addCurrentFile(filename);
 	std::wifstream infile(filename);
 	std::wstring line;
@@ -554,37 +449,7 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out, co
 		displayWarnings(parser);
 
 	XScript::CScript* script = parser.currentScript();
-	if (script->save(out, g_scriptData->functionData()))
-	{
-		XLib::FileIO f(out);
-		if (f.exists() && f.isFileExtension("pck"))
-		{
-			size_t size;
-			unsigned char* readData = (unsigned char*)f.readAll(&size);
-			if (readData)
-			{
-				size_t newSize;
-				unsigned char* data = XLib::PCKData(readData, size, &newSize, false);
-				if (data)
-				{
-					f.close();
-					XLib::FileIO fWrite(out, true);
-					fWrite.write((const char*)data, newSize);
-					fWrite.close();
-					delete[] data;
-				}
-				delete[] readData;
-			}
-		}
-		return true;
-	}
-
-	return false;
-}
-
-bool compileScriptFile(const std::string& filename, const std::string& out)
-{
-	return compileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(out));
+	return script->save(out, g_scriptData->functionData());
 }
 
 bool compileScriptFile(const std::string& filename, const std::string& out, const std::vector<std::string>& defines)
@@ -595,20 +460,6 @@ bool compileScriptFile(const std::string& filename, const std::string& out, cons
 	return compileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(out), wdefines);
 }
 
-
-bool decompileScriptFile(const std::wstring& filename, const std::wstring& output, bool useNamespace)
-{
-	if (!g_scriptData)
-		throw std::exception("Unable to Decompile script, No game data loaded");
-
-	XScript::ScriptRead reader(g_scriptData);
-	reader.setUseNamespace(useNamespace);
-
-	bool success = reader.read(filename);
-	if (success)
-		success = reader.write(output);
-	return success;
-}
 
 bool decompileScriptFile(const std::wstring& filename, const std::wstring& output)
 {
@@ -626,6 +477,20 @@ bool decompileScriptFile(const std::wstring& filename, const std::wstring& outpu
 bool decompileScriptFile(const std::string& filename, const std::string& output)
 {
 	return decompileScriptFile(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(output));
+}
+
+bool decompileScriptFile(const std::wstring& filename, const std::wstring& output, bool useNamespace)
+{
+	if (!g_scriptData)
+		throw std::exception("Unable to decompile script, No game data loaded");
+
+	XScript::ScriptRead reader(g_scriptData);
+	reader.setUseNamespace(useNamespace);
+
+	bool success = reader.read(filename);
+	if (success)
+		success = reader.write(output);
+	return success;
 }
 
 bool decompileScriptFile(const std::string& filename, const std::string& output, bool useNamespace)
@@ -658,6 +523,326 @@ bool loadXmlData(const std::wstring& filename, const std::wstring& output)
 bool loadXmlData(const std::string& filename, const std::string& output)
 {
 	return loadXmlData(XScript::Utils::s2ws(filename), XScript::Utils::s2ws(output));
+}
+
+// ── Script file scanner ───────────────────────────────────────────────────────
+// Parses .xs (v0.8) and .xml (legacy) script files in workingDir to extract
+// argument types and return types from function main() headers, registers them
+// in g_scriptData, then re-saves the .dat so the VS Code extension can use them.
+
+// Parse "function [ReturnType[|ReturnType2]] main(ParDef $var, ...)" from an
+// .xs source file. Returns false if no function main() header is found.
+static bool _parseXsHeader(const std::wstring& path, CScriptData::ScriptDef& def)
+{
+	std::wifstream f(path);
+	if (!f.is_open()) return false;
+	f.imbue(std::locale(std::locale(), new std::codecvt_utf8<wchar_t>));
+
+	std::wstring line;
+	while (std::getline(f, line))
+	{
+		// Strip leading whitespace
+		size_t start = line.find_first_not_of(L" \t\r\n");
+		if (start == std::wstring::npos) continue;
+		line = line.substr(start);
+
+		// Look for "function" keyword
+		if (line.substr(0, 8) != L"function") continue;
+		line = line.substr(8);
+
+		// Clear return types for this function — don't carry over from previous functions
+		def.returnTypes.clear();
+
+		// Skip whitespace
+		start = line.find_first_not_of(L" \t");
+		if (start == std::wstring::npos) continue;
+		line = line.substr(start);
+
+		// Skip optional return type(s) — keep consuming tokens until we find
+		// one that is immediately followed by '(' (i.e. the function name).
+		// If that name isn't "main", skip this whole line.
+		std::wstring funcName;
+		while (!line.empty())
+		{
+			size_t end = line.find_first_of(L" \t(");
+			if (end == std::wstring::npos) { funcName = line; line.clear(); break; }
+			std::wstring token = line.substr(0, end);
+			// Skip whitespace after token to find what follows
+			size_t next = line.find_first_not_of(L" \t", end);
+			if (next == std::wstring::npos) break;
+			if (line[next] == L'(')
+			{
+				// token is the function name
+				funcName = token;
+				line = line.substr(next + 1); // skip past '('
+				break;
+			}
+			// token is a return type — try to parse it
+			const ConstantData* dtConst = g_scriptData->findConstant(token);
+			if (dtConst && dtConst->type() == DataTypes::DataType)
+				def.returnTypes.insert(static_cast<DataTypes>(dtConst->id()));
+			// Advance past '|' separators and whitespace
+			line = line.substr(end);
+			start = line.find_first_not_of(L" \t|");
+			if (start == std::wstring::npos) { line.clear(); break; }
+			line = line.substr(start);
+		}
+
+		// Only process "main"
+		if (funcName != L"main") continue;
+
+		// If no return type was declared, default to Unknown (type not specified)
+		if (def.returnTypes.empty())
+			def.returnTypes.insert(DataTypes::Unknown);
+
+		// line is already positioned just after the opening '('
+		// Find closing ')'
+		size_t parenEnd = line.find(L')');
+		if (parenEnd == std::wstring::npos) continue;
+		std::wstring params = line.substr(0, parenEnd);
+
+		// Parse comma-separated parameters: "ParDef $name" or just "$name"
+		std::wstringstream ss(params);
+		std::wstring token;
+		while (std::getline(ss, token, L','))
+		{
+			// Trim
+			size_t s = token.find_first_not_of(L" \t");
+			size_t e = token.find_last_not_of(L" \t\r\n");
+			if (s == std::wstring::npos) continue;
+			token = token.substr(s, e - s + 1);
+			if (token.empty()) continue;
+
+			CScriptData::ScriptArgDef arg;
+			arg.pardef = ParDef::Unknown;
+
+			// Check if first character is '$' — no pardef type, default to VALUE (id=9)
+			if (token[0] == L'$')
+			{
+				arg.pardef = static_cast<ParDef>(9); // VALUE
+				arg.name   = token;
+			}
+			else
+			{
+				// Split into "ParDefType $name"
+				size_t sp = token.find(L' ');
+				if (sp == std::wstring::npos) continue;
+				std::wstring pardefCode = token.substr(0, sp);
+				std::wstring varName    = token.substr(sp + 1);
+				varName.erase(0, varName.find_first_not_of(L" \t"));
+
+				const ParDefData* pd = g_scriptData->findParDefData(pardefCode);
+				if (pd)
+				{
+					arg.pardef = pd->id;
+					arg.name   = varName;
+				}
+				else
+					continue; // unknown pardef — skip this arg
+			}
+
+			def.args.push_back(arg);
+		}
+
+		return true; // successfully parsed main header
+	}
+	return false;
+}
+
+// Parse SetArgument entries from the top of a compiled .xml script.
+// Format: each argument is an sval array of [int pardefId, string desc].
+static bool _parseXmlArguments(const std::wstring& path, CScriptData::ScriptDef& def)
+{
+	// Read file into buffer for rapidxml
+	std::ifstream f(path, std::ios::binary | std::ios::ate);
+	if (!f.is_open()) return false;
+
+	std::streamsize size = f.tellg();
+	f.seekg(0, std::ios::beg);
+	if (size <= 0) return false;
+
+	std::vector<char> buf(static_cast<size_t>(size) + 1, 0);
+	f.read(buf.data(), size);
+	f.close();
+
+	std::string narrow(buf.data(), static_cast<size_t>(size));
+	std::wstring wide(narrow.begin(), narrow.end());
+	std::vector<wchar_t> wbuf(wide.begin(), wide.end());
+	wbuf.push_back(0);
+
+	// Helper to get attribute value
+	auto attr = [](rapidxml::xml_node<wchar_t>* node, const wchar_t* name) -> std::wstring
+	{
+		if (!node) return L"";
+		auto* a = node->first_attribute(name);
+		return a ? std::wstring(a->value()) : L"";
+	};
+
+	// Helper: is this sval node an array?
+	auto isArray = [&](rapidxml::xml_node<wchar_t>* node) -> bool
+	{
+		return node && attr(node, L"type") == L"array";
+	};
+
+	try
+	{
+		rapidxml::xml_document<wchar_t> doc;
+		doc.parse<0>(wbuf.data());
+
+		// X3 XML format: <script><codearray><sval type="array" ...> is the root array
+		// Structure of root array children (in order):
+		//   [0] string  — script name
+		//   [1] int     — engine version
+		//   [2] string  — description
+		//   [3] int     — return type ID
+		//   [4] int     — unknown
+		//   [5] array   — variable names (string per entry)
+		//   [6] array   — commands (we skip this)
+		//   [7] array   — arguments: each child is [int pardefId, string desc]
+		//   [8] array   — return lines (we skip this)
+
+		rapidxml::xml_node<wchar_t>* scriptNode = doc.first_node(L"script");
+		if (!scriptNode) return false;
+		rapidxml::xml_node<wchar_t>* codearray = scriptNode->first_node(L"codearray");
+		if (!codearray) return false;
+
+		// Root element is the first sval of type array
+		rapidxml::xml_node<wchar_t>* root = codearray->first_node(L"sval");
+		if (!root || attr(root, L"type") != L"array") return false;
+
+		// Collect top-level children
+		std::vector<rapidxml::xml_node<wchar_t>*> children;
+		for (auto* c = root->first_node(L"sval"); c; c = c->next_sibling(L"sval"))
+			children.push_back(c);
+
+		// Need at least 8 children to have the arguments array at index 7
+		if (children.size() < 8) return false;
+
+		// [5] Variable names array
+		std::vector<std::wstring> varNames;
+		if (isArray(children[5]))
+		{
+			for (auto* v = children[5]->first_node(L"sval"); v; v = v->next_sibling(L"sval"))
+				varNames.push_back(attr(v, L"val"));
+		}
+
+		// [7] Arguments array — each child is [int pardefId, string desc]
+		if (!isArray(children[7])) return false;
+
+		int argIndex = 0;
+		for (auto* argNode = children[7]->first_node(L"sval"); argNode; argNode = argNode->next_sibling(L"sval"), argIndex++)
+		{
+			if (attr(argNode, L"type") != L"array") continue;
+
+			// First child: pardef id
+			auto* pdNode = argNode->first_node(L"sval");
+			if (!pdNode || attr(pdNode, L"type") != L"int") continue;
+			int pardefId = std::stoi(attr(pdNode, L"val"));
+
+			// Second child: description string
+			std::wstring desc;
+			auto* descNode = pdNode->next_sibling(L"sval");
+			if (descNode && attr(descNode, L"type") == L"string")
+				desc = attr(descNode, L"val");
+
+			const ParDefData* pd = g_scriptData->getParDefData(static_cast<ParDef>(pardefId));
+			if (!pd) continue;
+
+			CScriptData::ScriptArgDef arg;
+			arg.pardef = pd->id;
+			arg.desc   = desc;
+			// Match variable name by index from variables array
+			if (argIndex < static_cast<int>(varNames.size()))
+				arg.name = varNames[argIndex];
+			def.args.push_back(arg);
+		}
+
+		if (def.returnTypes.empty())
+			def.returnTypes.insert(DataTypes::Unknown);
+	}
+	catch (...) { return false; }
+
+	return true;
+}
+
+bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output)
+{
+	if (!g_scriptData)
+		return false;
+
+	std::wstring dir = workingDir.empty() ? L"." : workingDir;
+	// Ensure no trailing backslash issues
+	if (!dir.empty() && dir.back() != L'\\' && dir.back() != L'/')
+		dir += L'\\';
+
+	unsigned int found = 0;
+
+	// ── Step 1: scan .xs files ────────────────────────────────────────────────
+	std::set<std::wstring> xsNames; // base names of .xs files found (for dedup)
+	{
+		std::wstring pattern = dir + L"*.xs";
+		_wfinddata_t fd;
+		intptr_t h = _wfindfirst(pattern.c_str(), &fd);
+		if (h != -1)
+		{
+			do
+			{
+				std::wstring fname(fd.name);
+				// Strip .xs extension to get the base script name
+				std::wstring baseName = fname.substr(0, fname.size() - 3);
+				xsNames.insert(baseName);
+
+				CScriptData::ScriptDef def;
+				def.name = baseName;
+
+				if (_parseXsHeader(dir + fname, def))
+				{
+					g_scriptData->addScript(def);
+					found++;
+				}
+			}
+			while (_wfindnext(h, &fd) == 0);
+			_findclose(h);
+		}
+	}
+
+	// ── Step 2: scan .xml files where no .xs exists ───────────────────────────
+	{
+		std::wstring pattern = dir + L"*.xml";
+		_wfinddata_t fd;
+		intptr_t h = _wfindfirst(pattern.c_str(), &fd);
+		if (h != -1)
+		{
+			do
+			{
+				std::wstring fname(fd.name);
+				// Strip .xml extension
+				std::wstring baseName = fname.substr(0, fname.size() - 4);
+				// Skip if we already have a .xs version
+				if (xsNames.find(baseName) != xsNames.end()) continue;
+
+				CScriptData::ScriptDef def;
+				def.name = baseName;
+				// .xml-only: no return type available
+
+				if (_parseXmlArguments(dir + fname, def) && !def.args.empty())
+				{
+					g_scriptData->addScript(def);
+					found++;
+				}
+			}
+			while (_wfindnext(h, &fd) == 0);
+			_findclose(h);
+		}
+	}
+
+	std::cout << "\tRegistered " << found << " script definition(s)" << std::endl;
+
+	// Re-save the .dat with the new SCRIPTS section — skipped when output is
+	// empty, which signals memory-only mode (e.g. during compile).
+	if (output.empty())
+		return true;
+	return g_scriptData->saveData(output);
 }
 
 bool exportUDL(const std::wstring& udlFile, const std::wstring& autoFile)

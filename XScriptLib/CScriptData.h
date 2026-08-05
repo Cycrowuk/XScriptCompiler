@@ -1,4 +1,6 @@
 #pragma once
+#include <unordered_map>
+#include <unordered_set>
 
 #define MAINTYPE(typecode) (((typecode)>>16) & 0xFF)					/**< Get the maintype from a type code. */
 #define SUBTYPE(typecode) ((typecode) & 0xFFFF)							/**< Get the subtype of a type code. */
@@ -130,6 +132,21 @@ namespace XScript
 	{
 		friend class ScriptDataReader;
 
+	public:
+		// ── Script definitions — extracted from .xs/.xml files during --builddata ─
+		struct ScriptArgDef
+		{
+			ParDef pardef;
+			std::wstring name; // parameter name (from .xs); may be empty for .xml-sourced
+			std::wstring desc; // description (from .xml SetArgument); may be empty
+		};
+		struct ScriptDef
+		{
+			std::wstring name;                           // base filename, e.g. "plugin.myscript"
+			std::unordered_set<DataTypes> returnTypes;   // empty = unknown (xml-only source)
+			std::vector<ScriptArgDef> args;
+		};
+
 	private:
 		struct DataFileHeaderRaw
 		{
@@ -231,6 +248,7 @@ namespace XScript
 			unsigned long id;
 			unsigned short descSize;
 			unsigned short groupSize;
+			unsigned short flags; // bit 0 = scriptCheck
 		};
 		struct SpecialFuncFileData
 		{
@@ -292,6 +310,7 @@ namespace XScript
 		std::map<const std::wstring, unsigned int> _dataTypes;
 		std::map<SpecialFunction, unsigned int> _specialFunctions;
 		std::map<const std::wstring, unsigned int> _specialKeywords;
+		std::unordered_map<std::wstring, ScriptDef> _scripts; // base name -> script definition
 		std::map<unsigned int, std::wstring> _constants;
 		std::map<const std::wstring, ConstGroup> _constantGroups;
 		std::map<const std::wstring, std::map<const std::wstring, ConstantData>> _constantNamespaces;
@@ -345,6 +364,11 @@ namespace XScript
 		const Function* findObjectTypeFunction(DataTypes type, const std::wstring& function) const;
 		const ParDefData* findParDefData(const std::wstring& pardef) const;
 		const ParDefData* findParDefForDataType(DataTypes dt) const; // find narrowest pardef accepting this datatype
+
+		// Script definition registry — populated during --builddata from .xs/.xml files
+		void addScript(const ScriptDef& def) { _scripts[def.name] = def; }
+		const ScriptDef* findScript(const std::wstring& name) const;
+		const std::unordered_map<std::wstring, ScriptDef>& scripts() const { return _scripts; }
 		const ConstantData* findConstant(const std::wstring& constant) const;
 		const ConstantData* findConstant(const std::wstring& ns, const std::wstring& constant) const;
 		const DataTypeData* findDatatypeByPrefix(const std::wstring& name, unsigned int& outId) const;
@@ -382,6 +406,7 @@ namespace XScript
 
 		bool readXMLData(const std::wstring& filename);
 		bool saveData(const std::wstring& filename);
+		bool loadBinaryData(const std::wstring& filename);
 		bool loadData(const std::wstring& filename);
 		void resetData();
 

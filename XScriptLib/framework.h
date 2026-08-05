@@ -265,6 +265,10 @@ struct FunctionArgument
 	ParDef pardef;
 	std::wstring description;
 	ConstGroup *constGroup;
+	bool scriptCheck; // true if this argument is a script name to validate/look up
+	FunctionArgument() : constGroup(nullptr), scriptCheck(false) {}
+	FunctionArgument(ParDef pd, const std::wstring& desc, ConstGroup* group, bool sc = false)
+		: pardef(pd), description(desc), constGroup(group), scriptCheck(sc) {}
 };
 struct Function
 {

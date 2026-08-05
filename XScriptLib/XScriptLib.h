@@ -2,7 +2,7 @@
 
 #include "pch.h"
 
-#define XSCRIPT_VERSION		0.8f
+#define XSCRIPT_VERSION		0.9f
 #define XSCRIPT_BETA
 
 bool compileScriptFile(const std::string& filename, const std::string& out);
@@ -20,6 +20,11 @@ bool loadData(const std::string& dataFile);
 
 bool loadXmlData(const std::string& filename, const std::string& output);
 bool loadXmlData(const std::wstring& filename, const std::wstring& output);
+
+// Scan a directory for .xs and .xml script files, extract argument/return type
+// information from their function main() headers, and register the results in
+// the loaded data, then re-save the .dat file. Call AFTER loadXmlData.
+bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output);
 
 bool exportUDL(const std::wstring& udlFile, const std::wstring& autoFile);
 bool exportUDL(const std::string& udlFile, const std::string& autoFile);
