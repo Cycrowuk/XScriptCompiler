@@ -5433,8 +5433,21 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	// Function requires an object ($obj->func) but was called without one — error
 	if (!functionData->object() && !func->refObjType.empty())
 	{
-		_addError(ParseErrors::UnknownFunction, functionData);
-		return false;
+		if (func->allowNullObject)
+		{
+			// Auto-fill a NULL ref object — call(...) is valid and translates
+			// to NULL->call(...) in the compiled output.
+			// Note: ParseFunction owns and deletes its _object, so we must NOT
+			// push nullObj to _createdData — that would cause a double-free.
+			ParseNull* nullObj = new ParseNull(functionData->line());
+			nullObj->setFromParse(functionData);
+			functionData->setObject(nullObj);
+		}
+		else
+		{
+			_addError(ParseErrors::UnknownFunction, functionData);
+			return false;
+		}
 	}
 
 	if (functionData->object())

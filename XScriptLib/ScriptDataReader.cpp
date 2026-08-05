@@ -562,6 +562,8 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 						std::wstring name = attr->name();
 						if (name == L"allownull")
 							_pData->_functionData[iID].allowNull = _parseBoolean(attr->value());
+						else if (name == L"allownullobject")
+							_pData->_functionData[iID].allowNullObject = _parseBoolean(attr->value());
 						else if (name == L"undefinedcount")
 							_pData->_functionData[iID].undefinedCount = std::stoi(attr->value());
 					}

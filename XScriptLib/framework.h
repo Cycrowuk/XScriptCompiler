@@ -272,7 +272,7 @@ struct FunctionArgument
 };
 struct Function
 {
-	struct Function() : id(0), returnArgument(0), returnValueType(RetVarType::None), allowNull(false), undefinedCount(false) {}
+	struct Function() : id(0), returnArgument(0), returnValueType(RetVarType::None), allowNull(false), undefinedCount(false), allowNullObject(false) {}
 	std::wstring name;
 	std::wstring description;
 	std::wstring example;
@@ -285,6 +285,7 @@ struct Function
 	std::unordered_set<DataTypes> refObjType;
 	bool allowNull;
 	unsigned int undefinedCount;
+	bool allowNullObject; // when true, a missing ref object is auto-filled with NULL
 };
 
 

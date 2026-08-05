@@ -234,7 +234,7 @@ namespace XScript
 			unsigned short idSize;
 			unsigned short descSize;
 			unsigned short argCount;
-			unsigned char allowNull;
+			unsigned char flags;  // bit 0 = allowNull, bit 1 = allowNullObject
 			unsigned short refObj;
 			unsigned short orderCount;
 			unsigned short exampleSize;
