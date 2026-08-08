@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rapidxml\rapidxml.hpp"
+#include "rapidxml_include.h"
 
 namespace XScript
 {

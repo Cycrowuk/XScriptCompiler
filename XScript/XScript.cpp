@@ -1,9 +1,6 @@
 // XScript.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
-//--compile testcall.xs --out testcall.xml --working d:/X --scan_scripts --load_data test.dat 
-//--builddata XML/x3fl.xml --out test.dat --scan_scripts --working d:/X
-
 #include <iostream>
 #include <sstream>
 #include <windows.h>
@@ -70,6 +67,10 @@ int main(int argc, char *argv[])
         std::cout << "\t\t - Decompiles using namespace syntax (e.g. Utils::random instead of random)" << std::endl;
         std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat>" << std::endl;
         std::cout << "\t\t - Builds a game data file from an xml reference" << std::endl;
+        std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat> --gamedir <path>" << std::endl;
+        std::cout << "\t\t - Loads game data directly from the X3 installation directory" << std::endl;
+        std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat> --gamedir <path> --gamemod <mod>" << std::endl;
+        std::cout << "\t\t - Loads game data from the installation directory with a mod applied" << std::endl;
         std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat> --scan_scripts" << std::endl;
         std::cout << "\t\t - Builds data file and scans script files for argument/return type definitions" << std::endl;
         std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat> --scan_scripts --working <dir>" << std::endl;
@@ -98,6 +99,8 @@ int main(int argc, char *argv[])
         std::string file;
         std::string data = "default_data.dat";
         std::string workingDir; // --working: directory to scan for .xs files
+        std::string gameDir;    // --gamedir: X3 game installation directory
+        std::string gameMod;    // --gamemod: mod to load into the VFS
         bool scanScripts = false; // --scan_scripts: enable script file scanning in builddata
         CommandType type = CommandType::None;
         CommandType setType = CommandType::None;
@@ -112,6 +115,10 @@ int main(int argc, char *argv[])
                 output = itr->second;
             else if (itr->first == "working")
                 workingDir = itr->second;
+            else if (itr->first == "gamedir")
+                gameDir = itr->second;
+            else if (itr->first == "gamemod")
+                gameMod = itr->second;
             else if (itr->first == "scan_scripts")
                 scanScripts = true;
             else if (itr->first.substr(0, 7) == "define:")
@@ -176,7 +183,7 @@ int main(int argc, char *argv[])
         }
 
 #ifdef _DEBUG
-        //loadXmlData("XML/x3fl.xml", data);
+        loadXmlData("XML/x3fl.xml", data);
 #endif
         if (type != CommandType::BuildData)
         {
@@ -242,6 +249,19 @@ int main(int argc, char *argv[])
             break;
         case CommandType::BuildData:
             std::cout << "Building new data file: " << file << "...  ";
+
+            // If a game directory is provided, initialise the VirtualFileSystem
+            // so ScriptDataReader can extract game data files directly from it
+            if (!gameDir.empty())
+            {
+                std::wstring wgameDir(gameDir.begin(), gameDir.end());
+                std::wstring wgameMod(gameMod.begin(), gameMod.end());
+                setGameDir(wgameDir, wgameMod);
+                std::cout << std::endl << "\tGame directory: " << gameDir << std::endl;
+                if (!gameMod.empty())
+                    std::cout << "\tGame mod: " << gameMod << std::endl;
+            }
+
             if (!loadXmlData(file, output))
             {
                 std::cout << "FAILED" << std::endl;

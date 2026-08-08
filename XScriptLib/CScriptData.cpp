@@ -3,7 +3,6 @@
 #include "ParseArguments.h"
 
 #include "ScriptDataReader.h"
-#include "../XLib/XLib.h"
 
 using namespace XScript;
 
@@ -158,28 +157,28 @@ const Function* CScriptData::findBestGlobalFunction(const std::wstring& function
 	// Rule: CALLNAME pardef (id=7) prefers ParseString; non-CALLNAME prefers non-string.
 	static constexpr int PARDEF_CALLNAME = 7;
 	auto scoreFunction = [&](const Function* f) -> int
+	{
+		if (!args) return 0;
+		int score = 0;
+		int checkCount = min(static_cast<int>(args->count()), static_cast<int>(f->arguments.size()));
+		for (int ai = 0; ai < checkCount; ai++)
 		{
-			if (!args) return 0;
-			int score = 0;
-			int checkCount = min(static_cast<int>(args->count()), static_cast<int>(f->arguments.size()));
-			for (int ai = 0; ai < checkCount; ai++)
-			{
-				const BaseParse* arg = args->get(ai);
-				bool isCallName = (static_cast<int>(f->arguments[ai].pardef) == PARDEF_CALLNAME);
-				bool isString = (arg->type() == ParseType::String);
-				if (isCallName && isString)    score += 2;  // CALLNAME strongly prefers string literal
-				else if (isCallName && !isString) score -= 2; // penalise CALLNAME for non-string arg
-				else if (!isCallName && isString) score -= 1; // slight penalty for string into normal pardef
-			}
-			return score;
-		};
+			const BaseParse* arg = args->get(ai);
+			bool isCallName = (static_cast<int>(f->arguments[ai].pardef) == PARDEF_CALLNAME);
+			bool isString   = (arg->type() == ParseType::String);
+			if (isCallName && isString)    score += 2;  // CALLNAME strongly prefers string literal
+			else if (isCallName && !isString) score -= 2; // penalise CALLNAME for non-string arg
+			else if (!isCallName && isString) score -= 1; // slight penalty for string into normal pardef
+		}
+		return score;
+	};
 
 	auto countArgs = [](const Function* f) -> int {
 		int n = 0;
 		for (const auto& a : f->arguments)
 			if (a.pardef != ParDef::RetVar) n++;
 		return n;
-		};
+	};
 
 	// If there are aliases (overloads) for this name, pick the best match
 	auto aliasItr = _functionAliases.find(function);
@@ -205,7 +204,7 @@ const Function* CScriptData::findBestGlobalFunction(const std::wstring& function
 				bestScore = score;
 				best = f;
 			}
-			};
+		};
 
 		for (unsigned int id : aliasItr->second)
 			if (id < _functionData.size())
@@ -286,28 +285,28 @@ const Function* CScriptData::findBestObjectFunction(const std::wstring& function
 	// the opposite filter to the global lookup.
 	static constexpr int PARDEF_CALLNAME = 7;
 	auto scoreFunction = [&](const Function* f) -> int
+	{
+		if (!args) return 0;
+		int score = 0;
+		int checkCount = min(static_cast<int>(args->count()), static_cast<int>(f->arguments.size()));
+		for (int ai = 0; ai < checkCount; ai++)
 		{
-			if (!args) return 0;
-			int score = 0;
-			int checkCount = min(static_cast<int>(args->count()), static_cast<int>(f->arguments.size()));
-			for (int ai = 0; ai < checkCount; ai++)
-			{
-				const BaseParse* arg = args->get(ai);
-				bool isCallName = (static_cast<int>(f->arguments[ai].pardef) == PARDEF_CALLNAME);
-				bool isString = (arg->type() == ParseType::String);
-				if (isCallName && isString)    score += 2;
-				else if (isCallName && !isString) score -= 2;
-				else if (!isCallName && isString) score -= 1;
-			}
-			return score;
-		};
+			const BaseParse* arg = args->get(ai);
+			bool isCallName = (static_cast<int>(f->arguments[ai].pardef) == PARDEF_CALLNAME);
+			bool isString   = (arg->type() == ParseType::String);
+			if (isCallName && isString)    score += 2;
+			else if (isCallName && !isString) score -= 2;
+			else if (!isCallName && isString) score -= 1;
+		}
+		return score;
+	};
 
 	auto countArgs = [](const Function* f) -> int {
 		int n = 0;
 		for (const auto& a : f->arguments)
 			if (a.pardef != ParDef::RetVar) n++;
 		return n;
-		};
+	};
 
 	// If there are aliases (overloads) for this name, pick the best match
 	auto aliasItr = _functionAliases.find(function);
@@ -331,7 +330,7 @@ const Function* CScriptData::findBestObjectFunction(const std::wstring& function
 				bestScore = score;
 				best = f;
 			}
-			};
+		};
 
 		for (unsigned int id : aliasItr->second)
 			if (id < _functionData.size())
@@ -962,13 +961,15 @@ bool CScriptData::saveData(const std::wstring& filename)
 		}
 		else
 		{
-			XLib::String str(itr->second);
-			if (str.contains("::"))
+			std::wstring str = itr->second;
+			if (str.find(L"::") != std::wstring::npos)
 			{
-				auto findItr = _constantNamespaces.find(str.token("::", 1));
+				std::wstring ns   = str.substr(0, str.find(L"::"));
+				std::wstring name = str.substr(str.find(L"::") + 2);
+				auto findItr = _constantNamespaces.find(ns);
 				if (findItr != _constantNamespaces.end())
 				{
-					auto findItr2 = findItr->second.find(str.token("::", 2));
+					auto findItr2 = findItr->second.find(name);
 					if (findItr2 != findItr->second.end())
 					{
 						ConstantFileData data;
@@ -1089,10 +1090,10 @@ bool CScriptData::saveData(const std::wstring& filename)
 			for (const auto& fn : ns.second)
 			{
 				unsigned long funcId = static_cast<unsigned long>(fn.second);
-				unsigned short nsSize = static_cast<unsigned short>(ns.first.size());
+				unsigned short nsSize  = static_cast<unsigned short>(ns.first.size());
 				unsigned short aliSize = static_cast<unsigned short>(fn.first.size());
 				outfile.write(reinterpret_cast<char*>(&funcId), sizeof(funcId));
-				outfile.write(reinterpret_cast<char*>(&nsSize), sizeof(nsSize));
+				outfile.write(reinterpret_cast<char*>(&nsSize),  sizeof(nsSize));
 				if (outfile.bad()) return false;
 				for (wchar_t c : ns.first)  outfile.write(reinterpret_cast<char*>(&c), sizeof(wchar_t));
 				outfile.write(reinterpret_cast<char*>(&aliSize), sizeof(aliSize));
@@ -1255,16 +1256,16 @@ bool CScriptData::saveData(const std::wstring& filename)
 		for (const auto& m : _macros)
 		{
 			const MacroData& macro = m.second;
-			unsigned short nameSize = static_cast<unsigned short>(macro.name.size());
-			unsigned short argCount = static_cast<unsigned short>(macro.argNames.size());
+			unsigned short nameSize    = static_cast<unsigned short>(macro.name.size());
+			unsigned short argCount    = static_cast<unsigned short>(macro.argNames.size());
 			unsigned short routineCount = static_cast<unsigned short>(macro.routine.size());
-			unsigned char  hasBlock = macro.hasBlock ? 1 : 0;
+			unsigned char  hasBlock    = macro.hasBlock ? 1 : 0;
 
-			outfile.write(reinterpret_cast<const char*>(&nameSize), sizeof(nameSize));
+			outfile.write(reinterpret_cast<const char*>(&nameSize),     sizeof(nameSize));
 			if (!WriteWideString(outfile, macro.name)) return false;
-			outfile.write(reinterpret_cast<const char*>(&argCount), sizeof(argCount));
+			outfile.write(reinterpret_cast<const char*>(&argCount),     sizeof(argCount));
 			outfile.write(reinterpret_cast<const char*>(&routineCount), sizeof(routineCount));
-			outfile.write(reinterpret_cast<const char*>(&hasBlock), sizeof(hasBlock));
+			outfile.write(reinterpret_cast<const char*>(&hasBlock),     sizeof(hasBlock));
 			if (outfile.bad()) return false;
 
 			for (const auto& argName : macro.argNames)
@@ -1276,20 +1277,20 @@ bool CScriptData::saveData(const std::wstring& filename)
 
 			for (const auto& rline : macro.routine)
 			{
-				unsigned char  rtype = static_cast<unsigned char>(rline.type);
+				unsigned char  rtype    = static_cast<unsigned char>(rline.type);
 				unsigned short textSize = static_cast<unsigned short>(rline.text.size());
 				unsigned short funcArgCount = static_cast<unsigned short>(rline.funcArgs.size());
-				outfile.write(reinterpret_cast<const char*>(&rtype), sizeof(rtype));
-				outfile.write(reinterpret_cast<const char*>(&textSize), sizeof(textSize));
-				outfile.write(reinterpret_cast<const char*>(&funcArgCount), sizeof(funcArgCount));
+				outfile.write(reinterpret_cast<const char*>(&rtype),       sizeof(rtype));
+				outfile.write(reinterpret_cast<const char*>(&textSize),    sizeof(textSize));
+				outfile.write(reinterpret_cast<const char*>(&funcArgCount),sizeof(funcArgCount));
 				if (outfile.bad()) return false;
 				if (textSize > 0)
 					if (!WriteWideString(outfile, rline.text)) return false;
 				for (const auto& fa : rline.funcArgs)
 				{
-					unsigned long  fid = static_cast<unsigned long>(fa.funcId);
+					unsigned long  fid    = static_cast<unsigned long>(fa.funcId);
 					short          argPos = static_cast<short>(fa.argPos);
-					outfile.write(reinterpret_cast<const char*>(&fid), sizeof(fid));
+					outfile.write(reinterpret_cast<const char*>(&fid),    sizeof(fid));
 					outfile.write(reinterpret_cast<const char*>(&argPos), sizeof(argPos));
 					if (outfile.bad()) return false;
 				}
@@ -1870,7 +1871,7 @@ bool CScriptData::loadBinaryData(const std::wstring& filename)
 						MacroRoutineLine::FuncArg fa;
 						unsigned long fid;
 						short argPos;
-						infile.read(reinterpret_cast<char*>(&fid), sizeof(fid));
+						infile.read(reinterpret_cast<char*>(&fid),    sizeof(fid));
 						infile.read(reinterpret_cast<char*>(&argPos), sizeof(argPos));
 						if (infile.bad()) return false;
 						fa.funcId = static_cast<unsigned int>(fid);
@@ -2062,7 +2063,7 @@ bool CScriptData::_readFunction(std::ifstream& in, std::map<const std::wstring, 
 		_functionData.resize(data.id + 1);
 
 	_functionData[data.id].id = data.id;
-	_functionData[data.id].allowNull = (data.flags & 1) != 0;
+	_functionData[data.id].allowNull       = (data.flags & 1) != 0;
 	_functionData[data.id].allowNullObject = (data.flags & 2) != 0;
 	_functionData[data.id].undefinedCount = data.undefinedArgs;
 	_functionData[data.id].returnArgument = data.returnArg;

@@ -10,6 +10,7 @@
 #include "ScriptRead.h"
 #include "Utils.h"
 #include "XScriptUDL.h"
+#include "VFSHelper.h"
 
 #include <locale>
 #include <codecvt>
@@ -19,13 +20,34 @@
 #include <set>
 #include <io.h>
 
-#include "rapidxml\rapidxml.hpp"
-
-#include "../XLib/XLib.h"
+#include "rapidxml_include.h"
 
 using namespace XScript;
 
 CScriptData* g_scriptData;
+
+void setGameDir(const std::wstring& dir, const std::wstring& mod)
+{
+	VFSHelper_SetDir(dir.c_str(), mod.empty() ? nullptr : mod.c_str());
+	std::wcout << L"\tVirtualFileSystem loading from: " << dir << std::endl;
+	if (!mod.empty())
+		std::wcout << L"\tMod: " << mod << std::endl;
+}
+
+bool vfsIsLoaded()
+{
+	return VFSHelper_IsLoaded();
+}
+
+std::wstring vfsExtractFile(const std::wstring& vfsPath, const std::wstring& tempPath)
+{
+	return VFSHelper_ExtractFile(vfsPath.c_str(), tempPath.c_str());
+}
+
+std::wstring vfsFindText(int lang, int page, int id)
+{
+	return VFSHelper_FindText(lang, page, id);
+}
 
 std::string convertDataType(DataTypes dt)
 {
@@ -380,26 +402,8 @@ bool compileScriptFile(const std::wstring& filename, const std::wstring& out)
 	XScript::CScript* script = parser.currentScript();
 	if (script->save(out, g_scriptData->functionData()))
 	{
-		XLib::FileIO f(out);
-		if (f.exists() && f.isFileExtension("pck"))
-		{
-			size_t size;
-			unsigned char* readData = (unsigned char *)f.readAll(&size);
-			if (readData)
-			{
-				size_t newSize;
-				unsigned char* data = XLib::PCKData(readData, size, &newSize, false);
-				if (data)
-				{
-					f.close();
-					XLib::FileIO fWrite(out, true);
-					fWrite.write((const char*)data, newSize);
-					fWrite.close();
-					delete[]data;
-				}
-				delete[]readData;
-			}
-		}
+		// If the output file has a .pck extension, compress it in-place
+		VFSHelper_CompressPck(out.c_str());
 		return true;
 	}
 

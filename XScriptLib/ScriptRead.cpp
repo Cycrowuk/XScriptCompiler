@@ -6,16 +6,16 @@
 #include <sstream>
 #include "ParseOperator.h"
 
-#include "../XLib/XLib.h"
+#include "VFSHelper.h"
 
 using namespace XScript;
 
-ScriptRead::ScriptRead(CScriptData* data) : _pData(data),
-_version(0),
-_engine(0),
-_command(0),
-_inserted(0),
-_useNamespace(false)
+ScriptRead::ScriptRead(CScriptData *data) : _pData(data),
+	_version(0),
+	_engine(0),
+	_command(0),
+	_inserted(0),
+	_useNamespace(false)
 {
 
 }
@@ -27,61 +27,16 @@ ScriptRead::~ScriptRead()
 
 bool ScriptRead::read(const std::wstring& filename)
 {
-	// check for pck files
-	XLib::FileIO f(filename);
-	if (!f.exists())
+	std::vector<wchar_t> buffer;
+	if (!VFSHelper_ReadFile(filename.c_str(), buffer))
 		throw std::exception("Unable to open file for reading");
 
-	XLib::String unpackedData;
-	std::vector<wchar_t>* buffer = NULL;
-
-	if (f.isFileExtension("pck"))
-	{
-		size_t fileSize;
-		char* fileData = f.readAll(&fileSize);
-		if (!fileData || !fileSize)
-		{
-			if (fileData)
-				delete[]fileData;
-			throw std::exception("Unable to open file for reading");
-		}
-
-		size_t unpackedSize;
-		unsigned char* unpacked = XLib::UnPCKData((unsigned char*)fileData, fileSize, &unpackedSize);
-		if (!unpackedSize || !unpacked)
-		{
-			delete[]fileData;
-			if (unpacked)
-				delete[]unpacked;
-			throw std::exception("Unable to unpack file");
-		}
-
-		unpackedData = unpacked;
-		delete[]unpacked;
-		delete[]fileData;
-	}
-	f.close();
-
-
 	rapidxml::xml_document<wchar_t>* doc = new rapidxml::xml_document<wchar_t>();
-	if (!unpackedData.empty())
-		doc->parse<0>(&unpackedData[0]);
-	else
-	{
-		std::wifstream in(filename);
-		if (in.bad())
-			throw std::exception("Unable to open file for reading");
-
-		buffer = new std::vector<wchar_t>((std::istreambuf_iterator<wchar_t>(in)), std::istreambuf_iterator<wchar_t>());
-		buffer->push_back('\0');
-		doc->parse<0>(&(*buffer)[0]);
-	}
+	doc->parse<0>(buffer.data());
 
 	rapidxml::xml_node<wchar_t>* root_node = doc->first_node(L"script");
 	if (!root_node)
 	{
-		if (buffer)
-			delete buffer;
 		delete doc;
 		throw std::exception("No <script> node found in file");
 	}
@@ -89,8 +44,6 @@ bool ScriptRead::read(const std::wstring& filename)
 	rapidxml::xml_node<wchar_t>* code_node = root_node->first_node(L"codearray");
 	if (!code_node)
 	{
-		if (buffer)
-			delete buffer;
 		delete doc;
 		throw std::exception("No <codearray> node found in file");
 	}
@@ -98,8 +51,6 @@ bool ScriptRead::read(const std::wstring& filename)
 	rapidxml::xml_node<wchar_t>* main_node = code_node->first_node(L"sval");
 	if (!main_node)
 	{
-		if (buffer)
-			delete buffer;
 		delete doc;
 		throw std::exception("Invalid codearray found in file");
 	}
@@ -117,10 +68,8 @@ bool ScriptRead::read(const std::wstring& filename)
 			arraySize = std::stoi(val);
 	}
 
-	if (!isArray || arraySize != 10)
+	if(!isArray || arraySize != 10)
 	{
-		if (buffer)
-			delete buffer;
 		delete doc;
 		throw std::exception("Invalid codearray found in file");
 	}
@@ -167,10 +116,8 @@ bool ScriptRead::read(const std::wstring& filename)
 		}
 	}
 
-	//	in.close();
+//	in.close();
 
-	if (buffer)
-		delete buffer;
 	delete doc;
 	return true;
 }
@@ -230,159 +177,159 @@ bool ScriptRead::write(const std::wstring& outfile)
 				}
 			}
 		}
-	foundFirstSub:;
+		foundFirstSub:;
 	}
 
 	// ── Helper lambda: write a range of commands ─────────────────────────────
 	auto writeCommands = [&](size_t from, size_t to, unsigned int indent)
+	{
+		bool isIndentNonBlock = false;
+		for (size_t idx = from; idx < to; idx++)
 		{
-			bool isIndentNonBlock = false;
-			for (size_t idx = from; idx < to; idx++)
+			auto itr = _commands.begin() + static_cast<ptrdiff_t>(idx);
+
+			if (itr->isBlankLine) { out << std::endl; continue; }
+			if (!itr->comment.empty()) { out << L"// " << itr->comment << std::endl; continue; }
+
+			bool isSpecial = itr->data ? (_pData->findSpecialKeyword(itr->data->name) == itr->data->id) : false;
+
+			if (itr->data && itr->data->id == _pData->endCommand())
 			{
-				auto itr = _commands.begin() + static_cast<ptrdiff_t>(idx);
-
-				if (itr->isBlankLine) { out << std::endl; continue; }
-				if (!itr->comment.empty()) { out << L"// " << itr->comment << std::endl; continue; }
-
-				bool isSpecial = itr->data ? (_pData->findSpecialKeyword(itr->data->name) == itr->data->id) : false;
-
-				if (itr->data && itr->data->id == _pData->endCommand())
-				{
-					if (indent > 0) --indent;
-					for (unsigned int i = 0; i < indent; i++) out << L"   ";
-					out << L"}" << std::endl;
-					continue;
-				}
-				else if (itr->data && itr->data->id == _pData->elseCommand())
-				{
-					for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
-					out << L"}" << std::endl;
-					for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
-					out << L"else" << std::endl;
-					for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
-					out << L"{" << std::endl;
-					continue;
-				}
-				else if (itr->data && itr->data->id == _pData->hiddenGotoCommand())
-					continue;
-				else if (itr->data && itr->data->id == _pData->defineLabelCommand())
-				{
-					// Inside a sub body — plain label, emit as-is
-					out << itr->arguments.front() << L":" << std::endl;
-					continue;
-				}
-				else if (itr->data && itr->data->name == L"endsub")
-				{
-					// Inside a sub body — early endsub (not the closing one)
-					for (unsigned int i = 0; i < indent; i++) out << L"   ";
-					out << L"endsub;" << std::endl;
-					continue;
-				}
-
-				if (itr->isElseCondition)
-				{
-					if (indent > 0) --indent;
-					for (unsigned int i = 0; i < indent; i++) out << L"   ";
-					out << L"}" << std::endl;
-				}
-
+				if (indent > 0) --indent;
 				for (unsigned int i = 0; i < indent; i++) out << L"   ";
+				out << L"}" << std::endl;
+				continue;
+			}
+			else if (itr->data && itr->data->id == _pData->elseCommand())
+			{
+				for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
+				out << L"}" << std::endl;
+				for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
+				out << L"else" << std::endl;
+				for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
+				out << L"{" << std::endl;
+				continue;
+			}
+			else if (itr->data && itr->data->id == _pData->hiddenGotoCommand())
+				continue;
+			else if (itr->data && itr->data->id == _pData->defineLabelCommand())
+			{
+				// Inside a sub body — plain label, emit as-is
+				out << itr->arguments.front() << L":" << std::endl;
+				continue;
+			}
+			else if (itr->data && itr->data->name == L"endsub")
+			{
+				// Inside a sub body — early endsub (not the closing one)
+				for (unsigned int i = 0; i < indent; i++) out << L"   ";
+				out << L"endsub;" << std::endl;
+				continue;
+			}
 
-				if (isIndentNonBlock) { isIndentNonBlock = false; --indent; }
+			if (itr->isElseCondition)
+			{
+				if (indent > 0) --indent;
+				for (unsigned int i = 0; i < indent; i++) out << L"   ";
+				out << L"}" << std::endl;
+			}
 
-				bool isCondition = false;
-				if (!itr->condition.empty())
-				{
-					isCondition = true;
-					out << itr->condition;
-					++indent;
-					if (!itr->isBlock) isIndentNonBlock = true;
-					out << L"(";
-				}
-				else if (!itr->retvar.empty())
-				{
-					if (!itr->data || !itr->data->returnArgument)
-						out << itr->retvar;
-				}
+			for (unsigned int i = 0; i < indent; i++) out << L"   ";
 
-				if (itr->data && itr->data == _pData->getSpecialGlobalFunction(SpecialFunction::GetArray))
+			if (isIndentNonBlock) { isIndentNonBlock = false; --indent; }
+
+			bool isCondition = false;
+			if (!itr->condition.empty())
+			{
+				isCondition = true;
+				out << itr->condition;
+				++indent;
+				if (!itr->isBlock) isIndentNonBlock = true;
+				out << L"(";
+			}
+			else if (!itr->retvar.empty())
+			{
+				if (!itr->data || !itr->data->returnArgument)
+					out << itr->retvar;
+			}
+
+			if (itr->data && itr->data == _pData->getSpecialGlobalFunction(SpecialFunction::GetArray))
+			{
+				out << itr->arguments.front() << L"[" << itr->arguments[1] << L"]";
+				isSpecial = true;
+			}
+			else if (itr->data && itr->data == _pData->getSpecialGlobalFunction(SpecialFunction::SetArray))
+			{
+				out << itr->arguments.front() << L"[" << itr->arguments[1] << L"] = " << itr->arguments[2];
+				isSpecial = true;
+			}
+			else
+			{
+				if (!itr->isExpression)
 				{
-					out << itr->arguments.front() << L"[" << itr->arguments[1] << L"]";
-					isSpecial = true;
-				}
-				else if (itr->data && itr->data == _pData->getSpecialGlobalFunction(SpecialFunction::SetArray))
-				{
-					out << itr->arguments.front() << L"[" << itr->arguments[1] << L"] = " << itr->arguments[2];
-					isSpecial = true;
-				}
-				else
-				{
-					if (!itr->isExpression)
+					if (!itr->refobj.empty()) out << itr->refobj << L"->";
+
+					if (_useNamespace && itr->data)
 					{
-						if (!itr->refobj.empty()) out << itr->refobj << L"->";
-
-						if (_useNamespace && itr->data)
-						{
-							auto nsPair = _pData->findNamespaceForFunction(itr->data->id);
-							if (!nsPair.first.empty())
-								out << nsPair.first << L"::" << nsPair.second;
-							else
-								out << itr->data->name;
-						}
+						auto nsPair = _pData->findNamespaceForFunction(itr->data->id);
+						if (!nsPair.first.empty())
+							out << nsPair.first << L"::" << nsPair.second;
 						else
-						{
 							out << itr->data->name;
-						}
-						if (isSpecial) out << L" "; else out << L"(";
-					}
-
-					if (itr->data && (itr->data->id == _pData->gosubCommand() || itr->data->id == _pData->gotoCommand()))
-					{
-						auto findItr = _labels.find(itr->arguments.front());
-						if (findItr == _labels.end())
-							throw std::exception("Missing label entry");
-
-						std::wstring labelName = findItr->second;
-						// Strip the "sub." prefix from gosub targets — the decompiler emits
-						// "sub.name:" as "sub name() { }" so the gosub must match: "gosub name;"
-						if (itr->data->id == _pData->gosubCommand() && labelName.substr(0, 4) == L"sub.")
-							labelName = labelName.substr(4);
-						out << labelName;
 					}
 					else
 					{
-						bool firstArg = true;
-						if (itr->data && itr->data->returnArgument > 0)
-						{
-							out << itr->retvar.substr(0, itr->retvar.length() - 3);
-							firstArg = false;
-						}
-						for (auto aItr = itr->arguments.begin(); aItr != itr->arguments.end(); aItr++)
-						{
-							if (!firstArg && !itr->isExpression) out << L", ";
-							firstArg = false;
-							out << *aItr;
-						}
+						out << itr->data->name;
+					}
+					if (isSpecial) out << L" "; else out << L"(";
+				}
+
+				if (itr->data && (itr->data->id == _pData->gosubCommand() || itr->data->id == _pData->gotoCommand()))
+				{
+					auto findItr = _labels.find(itr->arguments.front());
+					if (findItr == _labels.end())
+						throw std::exception("Missing label entry");
+
+					std::wstring labelName = findItr->second;
+					// Strip the "sub." prefix from gosub targets — the decompiler emits
+					// "sub.name:" as "sub name() { }" so the gosub must match: "gosub name;"
+					if (itr->data->id == _pData->gosubCommand() && labelName.substr(0, 4) == L"sub.")
+						labelName = labelName.substr(4);
+					out << labelName;
+				}
+				else
+				{
+					bool firstArg = true;
+					if (itr->data && itr->data->returnArgument > 0)
+					{
+						out << itr->retvar.substr(0, itr->retvar.length() - 3);
+						firstArg = false;
+					}
+					for (auto aItr = itr->arguments.begin(); aItr != itr->arguments.end(); aItr++)
+					{
+						if (!firstArg && !itr->isExpression) out << L", ";
+						firstArg = false;
+						out << *aItr;
 					}
 				}
-
-				if (isCondition && (itr->isExpression || isSpecial))
-					out << L")";
-				else if (isCondition)
-					out << L"))";
-				else if (isSpecial || itr->isExpression)
-					out << L";";
-				else
-					out << L");";
-				out << std::endl;
-
-				if (itr->isBlock && !isIndentNonBlock)
-				{
-					for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
-					out << L"{" << std::endl;
-				}
 			}
-		};
+
+			if (isCondition && (itr->isExpression || isSpecial))
+				out << L")";
+			else if (isCondition)
+				out << L"))";
+			else if (isSpecial || itr->isExpression)
+				out << L";";
+			else
+				out << L");";
+			out << std::endl;
+
+			if (itr->isBlock && !isIndentNonBlock)
+			{
+				for (unsigned int i = 0; i < (indent - 1); i++) out << L"   ";
+				out << L"{" << std::endl;
+			}
+		}
+	};
 
 	// ── Write function main(...) { ... } ────────────────────────────────────
 	out << L"function main(";
@@ -581,8 +528,8 @@ bool ScriptRead::_readCode(rapidxml::xml_node<wchar_t>* node)
 	}
 
 	// find all label references
-	for (unsigned int i = 0; i < _commands.size(); i++)
-	{
+	for(unsigned int i = 0; i < _commands.size(); i++)
+	{		
 		if (_commands[i].data && _commands[i].data->id == _pData->defineLabelCommand())
 			_labels[std::to_wstring(i)] = _commands[i].arguments.front();
 	}
@@ -780,7 +727,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 					ParDef pd = currentFunction->data->arguments[a].pardef;
 					if (pd == ParDef::CallName)
 					{
-						if (type != L"string")
+						if(type != L"string")
 							throw std::exception(Utils::ws2s(Utils::CombineStrings(L"Invalid sval '", type, L"' for callname pardef, Expected 'string'")).c_str());
 
 						if (currentFunction->arguments.size() <= a)
@@ -824,7 +771,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 					currentFunction->condition = _parseCondition(value, currentFunction->isBlock, currentFunction->isElseCondition);
 					++currentArg;
 				}
-				else if (strArg == L"RefObj")
+				else if(strArg == L"RefObj")
 					argType = std::stoi(value);
 			}
 			else if (argType >= 0)
@@ -865,7 +812,7 @@ bool ScriptRead::_readCommand(rapidxml::xml_node<wchar_t>* node)
 			}
 		}
 	}
-
+	
 	return true;
 }
 
@@ -883,7 +830,7 @@ bool ScriptRead::_readArguments(rapidxml::xml_node<wchar_t>* node)
 				return false;
 		}
 	}
-
+	
 	return true;
 }
 

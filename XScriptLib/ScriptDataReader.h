@@ -1,11 +1,8 @@
 #pragma once
 
-#include "rapidxml\rapidxml.hpp"
+#include "rapidxml_include.h"
 
-namespace XLib
-{
-	class TextDB;
-}
+
 namespace XScript
 {
 	struct CustomData;
@@ -27,8 +24,8 @@ namespace XScript
 		void _readConstants(rapidxml::xml_node<wchar_t>* root_node);
 		void _readConstant(rapidxml::xml_node<wchar_t>* root_node, ConstGroup *group);
 		void _readFunctions(rapidxml::xml_node<wchar_t>* root_node);
-		void _readCommands(rapidxml::xml_node<wchar_t>* root_node, XLib::TextDB* textDB);
-		void _readWareTypes(rapidxml::xml_node<wchar_t>* root_node, XLib::TextDB* textDB);
+		void _readCommands(rapidxml::xml_node<wchar_t>* root_node, int language, void* textDB);
+		void _readWareTypes(rapidxml::xml_node<wchar_t>* root_node, int language, void* textDB);
 		void _readRaces(rapidxml::xml_node<wchar_t>* root_node);
 		void _readProperties(rapidxml::xml_node<wchar_t>* root_node);
 		void _readCustomEntries(rapidxml::xml_node<wchar_t>* root_node);

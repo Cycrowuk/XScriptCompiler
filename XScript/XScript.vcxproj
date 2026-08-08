@@ -118,7 +118,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)XScriptLib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)packages\rapidxml.1.13\build\native\include;$(SolutionDir)XScriptLib;../libspk/include</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp14</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -150,9 +151,6 @@ XCopy /Y "$(ProjectDir)XML\*.*" "$(SolutionDir)BUILD\XML"</Command>
     <ClCompile Include="XScript.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\XLib\XLib.vcxproj">
-      <Project>{fe5e32d7-77b1-4d81-99cd-678143564930}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\XScriptLib\XScriptLib.vcxproj">
       <Project>{d0238e27-a539-48fc-9a06-50181a6c7ffb}</Project>
     </ProjectReference>

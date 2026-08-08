@@ -125,7 +125,8 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>C:\Users\cycro\OneDrive\Documents\Programming\Plugin Manager\libspk\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\libspk\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp14</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -169,6 +170,42 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\libspk\include\BaseFile.h" />
+    <ClInclude Include="..\libspk\include\CatFile.h" />
+    <ClInclude Include="..\libspk\include\DirIO.h" />
+    <ClInclude Include="..\libspk\include\emp.h" />
+    <ClInclude Include="..\libspk\include\enums.h" />
+    <ClInclude Include="..\libspk\include\File.h" />
+    <ClInclude Include="..\libspk\include\File_IO.h" />
+    <ClInclude Include="..\libspk\include\GameExe.h" />
+    <ClInclude Include="..\libspk\include\hash.h" />
+    <ClInclude Include="..\libspk\include\Languages.h" />
+    <ClInclude Include="..\libspk\include\lists.h" />
+    <ClInclude Include="..\libspk\include\logging\Log.h" />
+    <ClInclude Include="..\libspk\include\ModDiff.h" />
+    <ClInclude Include="..\libspk\include\MultiSpkFile.h" />
+    <ClInclude Include="..\libspk\include\OriginalFiles.h" />
+    <ClInclude Include="..\libspk\include\Packages.h" />
+    <ClInclude Include="..\libspk\include\Package\CorePackage.h" />
+    <ClInclude Include="..\libspk\include\Package\InstallText.h" />
+    <ClInclude Include="..\libspk\include\secure.h" />
+    <ClInclude Include="..\libspk\include\ShipData.h" />
+    <ClInclude Include="..\libspk\include\spk.h" />
+    <ClInclude Include="..\libspk\include\spkdef.h" />
+    <ClInclude Include="..\libspk\include\spkdefines.h" />
+    <ClInclude Include="..\libspk\include\spkdll.h" />
+    <ClInclude Include="..\libspk\include\SpkFile.h" />
+    <ClInclude Include="..\libspk\include\StringList.h" />
+    <ClInclude Include="..\libspk\include\TextDB.h" />
+    <ClInclude Include="..\libspk\include\Utils\CommandLine.h" />
+    <ClInclude Include="..\libspk\include\Utils\List.h" />
+    <ClInclude Include="..\libspk\include\Utils\String.h" />
+    <ClInclude Include="..\libspk\include\Utils\StringList.h" />
+    <ClInclude Include="..\libspk\include\Utils\WString.h" />
+    <ClInclude Include="..\libspk\include\Utils\WStringList.h" />
+    <ClInclude Include="..\libspk\include\VirtualFileSystem.h" />
+    <ClInclude Include="..\libspk\include\XBod.h" />
+    <ClInclude Include="..\libspk\include\XspFile.h" />
     <ClInclude Include="BaseParse.h" />
     <ClInclude Include="CScript.h" />
     <ClInclude Include="CScriptData.h" />
@@ -230,19 +267,16 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="RARStubs.cpp" />
     <ClCompile Include="ScriptDataReader.cpp" />
     <ClCompile Include="ScriptRead.cpp" />
     <ClCompile Include="Utils.cpp" />
+    <ClCompile Include="VFSHelper.cpp" />
     <ClCompile Include="XScriptLib.cpp" />
     <ClCompile Include="XScriptUDL.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\XLib\XLib.vcxproj">
-      <Project>{fe5e32d7-77b1-4d81-99cd-678143564930}</Project>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

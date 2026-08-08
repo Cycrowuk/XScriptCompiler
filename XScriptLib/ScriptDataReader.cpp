@@ -3,7 +3,8 @@
 #include "CScriptData.h"
 #include "Utils.h"
 
-#include "../XLib/XLib.h"
+#include "XScriptLib.h"
+#include "VFSHelper.h"
 
 #include <sstream>
 #include <io.h>
@@ -85,14 +86,7 @@ bool ScriptDataReader::readData(const std::wstring& filename)
 	// read the game data
 	_readGameData(root_node);
 
-	unsigned int highestGame = 0;
-	for (auto itr = _pData->_gameData.textPrefixes.begin(); itr != _pData->_gameData.textPrefixes.end(); itr++)
-	{
-		if (*itr > highestGame)
-			highestGame = *itr;
-	}
-
-	// Build language suffix — e.g. language=44 -> "L044", language=7 -> "L007"
+	// Build language suffix for local fallback — e.g. language=44 -> "L044"
 	std::wstring langSuffix = L"L";
 	{
 		std::wstring langStr = std::to_wstring(_pData->_gameData.language);
@@ -100,27 +94,13 @@ bool ScriptDataReader::readData(const std::wstring& filename)
 		langSuffix += langStr;
 	}
 
-	// Scan Data\t\ for all text files matching the configured language and load
-	// them all into TextDB before finalising. TextDB handles TextPrefix matching
-	// internally — we just need to feed it every relevant file.
-	XLib::TextDB textdb;
-	{
-		std::wstring searchPath = L"Data\\t\\*-" + langSuffix + L".xml";
-		_wfinddata_t fileData;
-		intptr_t handle = _wfindfirst(searchPath.c_str(), &fileData);
-		if (handle != -1)
-		{
-			do
-			{
-				std::wstring filePath = L"Data\\t\\" + std::wstring(fileData.name);
-				textdb.loadTextFile(filePath, highestGame);
-			}
-			while (_wfindnext(handle, &fileData) == 0);
-			_findclose(handle);
-		}
-	}
-	textdb.finalise();
-	textdb.setLanguage(_pData->_gameData.language);
+	int language = static_cast<int>(_pData->_gameData.language);
+
+	// When VFS is loaded, text lookups go through vfsFindText() — the VFS
+	// already loaded all text files when LoadFilesystem() was called, so no
+	// manual text file scanning is needed. When VFS is not loaded, fall back
+	// to loading local Data\t\ files into an XLib::TextDB as before.
+	// Text lookup uses VFS when loaded; empty strings in local mode (no TextDB)
 
 	// read all the data types
 	_readDataTypes(root_node);
@@ -135,10 +115,10 @@ bool ScriptDataReader::readData(const std::wstring& filename)
 	_readFunctions(root_node);
 
 	// read all object commands
-	_readCommands(root_node, &textdb);
+	_readCommands(root_node, language, nullptr);
 
 	// read all the ware types (wares, ships, stations, etc)
-	_readWareTypes(root_node, &textdb);
+	_readWareTypes(root_node, language, nullptr);
 
 	// read all the races
 	_readRaces(root_node);
@@ -148,6 +128,9 @@ bool ScriptDataReader::readData(const std::wstring& filename)
 
 	// read any of the custom entries
 	_readCustomEntries(root_node);
+
+	// read macro definitions
+	_readMacros(root_node);
 
 	// finished, clear the data
 	delete buffer;
@@ -231,9 +214,9 @@ void ScriptDataReader::_readDataTypes(rapidxml::xml_node<wchar_t>* root_node)
 					else if (name == L"prefix")
 						data.prefix = value;
 				}
-				catch(std::exception)
+				catch (std::exception)
 				{
-					if(name == L"id")
+					if (name == L"id")
 						throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, DataTypes, Invalid datatype id value, '", value, L"'")).c_str());
 					else
 						throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, DataTypes, Invalid datatype value for: ", name, L" = '", value, L"'")).c_str());
@@ -292,7 +275,7 @@ void ScriptDataReader::_readParDefs(rapidxml::xml_node<wchar_t>* root_node)
 			}
 			if (data.id == ParDef::Unknown)
 				throw std::exception(Utils::ws2s(L"XML Read Error, ParDefs, Invalid ParDef id").c_str());
-			else if(data.code.empty())
+			else if (data.code.empty())
 				throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, ParDefs, Code entry missing, id=", std::to_wstring(static_cast<int>(data.id)))).c_str());
 			else
 			{
@@ -374,10 +357,10 @@ void ScriptDataReader::_readConstants(rapidxml::xml_node<wchar_t>* root_node)
 						ns = _parseBoolean(attr->value());
 				}
 
-				if(code.empty())
+				if (code.empty())
 					throw std::exception(Utils::ws2s(L"XML Read Error, Constants, missing code entry for constant group").c_str());
 
-				if(_pData->_constantGroups.find(code) != _pData->_constantGroups.end())
+				if (_pData->_constantGroups.find(code) != _pData->_constantGroups.end())
 					throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, Constants, Duplicate constant group found '", code, L"'")).c_str());
 
 				_pData->_constantGroups[code] = { code, desc, ns };
@@ -389,7 +372,7 @@ void ScriptDataReader::_readConstants(rapidxml::xml_node<wchar_t>* root_node)
 	}
 }
 
-void ScriptDataReader::_readConstant(rapidxml::xml_node<wchar_t>* root_node, ConstGroup *group)
+void ScriptDataReader::_readConstant(rapidxml::xml_node<wchar_t>* root_node, ConstGroup* group)
 {
 	if (std::wstring(root_node->name()) != L"Constant")
 		return;
@@ -431,8 +414,8 @@ void ScriptDataReader::_readConstant(rapidxml::xml_node<wchar_t>* root_node, Con
 				_pData->_constData[global] = { DataTypes::Constant, global, static_cast<unsigned int>(stoi(id)), group, _convertDataType(type, Utils::CombineStrings(L"Constant: ", id)) };
 			}
 
-			_pData->_constants[static_cast<unsigned int>(stoi(id))] = XLib::String(group->name) + "::" + code;
- 		}
+			_pData->_constants[static_cast<unsigned int>(stoi(id))] = std::wstring(group->name) + L"::" + code;
+		}
 		else
 		{
 			_checkConstant(code, L"Constants");
@@ -630,7 +613,7 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 								}
 
 								ParDef pd = _convertParDef(pardef);
-								if(pd == ParDef::Unknown)
+								if (pd == ParDef::Unknown)
 									throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, Functions, invalid pardef '", pardef, L"' for argument ", std::to_wstring(_pData->_functionData[iID].arguments.size()), L" - Function: ", _pData->_functionData[iID].name)).c_str());
 
 								_pData->_functionData[iID].arguments.push_back({ pd, pardefDesc, constGroup, scriptCheck });
@@ -658,7 +641,7 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 
 				if (object == L"true" || hasRefObj)
 				{
-					if(_pData->_objectFunctions.find(code) != _pData->_objectFunctions.end())
+					if (_pData->_objectFunctions.find(code) != _pData->_objectFunctions.end())
 						throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, Functions, duplicate object function name '", code, L"'")).c_str());
 
 					_pData->_objectFunctions[code] = iID;
@@ -681,8 +664,13 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 	}
 }
 
-void ScriptDataReader::_readCommands(rapidxml::xml_node<wchar_t>* root_node, XLib::TextDB* textDB)
+void ScriptDataReader::_readCommands(rapidxml::xml_node<wchar_t>* root_node, int language, void* textDB)
 {
+	// Unified text lookup — uses VFS when loaded, otherwise falls back to TextDB
+	auto getText = [&](int page, int id) -> std::wstring {
+		if (vfsIsLoaded()) return vfsFindText(language, page, id);
+		return L""; // fallback without VFS: text not available
+		};
 	rapidxml::xml_node<wchar_t>* mainNode = root_node->first_node(L"Commands");
 	if (mainNode)
 	{
@@ -739,10 +727,10 @@ void ScriptDataReader::_readCommands(rapidxml::xml_node<wchar_t>* root_node, XLi
 
 						for (unsigned int i = iStart; i <= iEnd; i++)
 						{
-							std::wstring str = textDB->exists(iCode, i);
+							std::wstring str = getText(iCode, i);
 							if (!str.empty())
 							{
-								_pData->_commands[dt].data[i] = { str, textDB->exists(iText, i), textDB->exists(iDesc, i), textDB->exists(iShort, i), i };
+								_pData->_commands[dt].data[i] = { str, getText(iText, i), getText(iDesc, i), getText(iShort, i), i };
 								_pData->_commands[dt].list[str] = i;
 								_pData->_constData[str] = ConstantData(dt, str, i);
 							}
@@ -758,8 +746,12 @@ void ScriptDataReader::_readCommands(rapidxml::xml_node<wchar_t>* root_node, XLi
 	}
 }
 
-void ScriptDataReader::_readWareTypes(rapidxml::xml_node<wchar_t>* root_node, XLib::TextDB* textDB)
+void ScriptDataReader::_readWareTypes(rapidxml::xml_node<wchar_t>* root_node, int language, void* textDB)
 {
+	auto getText = [&](int page, int id) -> std::wstring {
+		if (vfsIsLoaded()) return vfsFindText(language, page, id);
+		return L""; // fallback without VFS: text not available
+		};
 	rapidxml::xml_node<wchar_t>* mainNode = root_node->first_node(L"WareTypes");
 	if (mainNode)
 	{
@@ -777,7 +769,7 @@ void ScriptDataReader::_readWareTypes(rapidxml::xml_node<wchar_t>* root_node, XL
 				else if (name == L"textpos")
 					textpos = std::stoi(attr->value());
 				else if (name == L"file")
-					file = attr->value();					
+					file = attr->value();
 			}
 
 			if (!text.empty() && !file.empty() && id)
@@ -797,8 +789,8 @@ void ScriptDataReader::_readWareTypes(rapidxml::xml_node<wchar_t>* root_node, XL
 
 						if (textpos)
 						{
-							text = textDB->exists(17, textlist[i]);
-							desc = textDB->exists(17, textlist[i] + 1);
+							text = getText(17, textlist[i]);
+							desc = getText(17, textlist[i] + 1);
 						}
 
 						_pData->_wareTypesData[wareid] = { list[i], text, desc, wareid, id, static_cast<unsigned int>(i) };
@@ -835,7 +827,7 @@ void ScriptDataReader::_readRaces(rapidxml::xml_node<wchar_t>* root_node)
 
 			if (id.empty())
 				throw std::exception(Utils::ws2s(L"XML Read Error, Races, Missing id entry").c_str());
-			else if(code.empty())
+			else if (code.empty())
 				throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, Races, Missing code entry, id=", id)).c_str());
 
 			_checkConstant(code, L"Races");
@@ -870,7 +862,7 @@ void ScriptDataReader::_readProperties(rapidxml::xml_node<wchar_t>* root_node)
 					desc = attr->value();
 				else if (attName == L"getter")
 				{
-					try 
+					try
 					{
 						getter = std::stoi(attr->value());
 					}
@@ -923,7 +915,7 @@ void ScriptDataReader::_readCustomEntries(rapidxml::xml_node<wchar_t>* root_node
 				else if (name == L"isstring")
 					data.isStringData = _parseBoolean(attr->value());
 			}
-			if(!dt.empty())
+			if (!dt.empty())
 				data.datatype = _convertDataType(dt, Utils::CombineStrings(L"CustomEntry: ", data.name));
 			_pData->_customData[data.datatype] = data;
 			_readCustomEntry(node, &_pData->_customData[data.datatype]);
@@ -1023,7 +1015,7 @@ DataTypes ScriptDataReader::_convertDataType(const std::wstring& type, const std
 	if (findItr != _pData->_dataTypes.end())
 		return static_cast<DataTypes>(findItr->second);
 
-	if(extraData.empty())
+	if (extraData.empty())
 		throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, Invalid datatype '", type, L"'")).c_str());
 	throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, Invalid datatype '", type, L"' (", extraData, L")")).c_str());
 }
@@ -1061,9 +1053,35 @@ ParDef ScriptDataReader::_convertParDef(const std::wstring& type)
 
 bool ScriptDataReader::_extractTypesFile(const std::wstring& file, std::vector<std::wstring>& list, unsigned int textpos, std::vector<unsigned int>& textList)
 {
-	std::wifstream inFile(file);
+	// When VFS is loaded, extract the types file directly from the game archives.
+	// Game types files live at types\<name>.txt in the VFS.
+	// The local path passed in is Data\<name>.txt — extract the filename part.
+	std::wstring actualPath = file;
+	std::wstring tempFile;
+
+	if (vfsIsLoaded())
+	{
+		// Extract the base filename from the local path (e.g. "Data\TShips.txt" -> "TShips.txt")
+		std::wstring baseName = file;
+		size_t slash = file.find_last_of(L"\\/");
+		if (slash != std::wstring::npos)
+			baseName = file.substr(slash + 1);
+
+		std::wstring vfsPath = L"types\\" + baseName;
+		tempFile = L"_temp_types_" + baseName;
+		std::wstring extracted = vfsExtractFile(vfsPath, tempFile);
+		if (!extracted.empty())
+			actualPath = extracted;
+		else
+			return false; // file not in VFS
+	}
+
+	std::wifstream inFile(actualPath);
 	if (!inFile.good())
+	{
+		if (!tempFile.empty()) _wremove(tempFile.c_str());
 		return false;
+	}
 
 	size_t count = 0;
 	bool firstLine = true;
@@ -1095,7 +1113,7 @@ bool ScriptDataReader::_extractTypesFile(const std::wstring& file, std::vector<s
 					if (count)
 					{
 						list.resize(count);
-						if(textpos)
+						if (textpos)
 							textList.resize(count);
 					}
 				}
@@ -1133,6 +1151,10 @@ bool ScriptDataReader::_extractTypesFile(const std::wstring& file, std::vector<s
 		}
 	}
 
+	inFile.close();
+	if (!tempFile.empty())
+		_wremove(tempFile.c_str());
+
 	return true;
 }
 
@@ -1145,15 +1167,143 @@ bool ScriptDataReader::_parseBoolean(const std::wstring& str) const
 	return false;
 }
 
-void ScriptDataReader::_checkConstant(const std::wstring& str, const std::wstring &section, bool checkList) const
+void ScriptDataReader::_checkConstant(const std::wstring& str, const std::wstring& section, bool checkList) const
 {
 	// check for invalid 
-	if(str.find_first_not_of(L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_.") != std::string::npos)
+	if (str.find_first_not_of(L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_.") != std::string::npos)
 		throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, ", section, L", Invalid characters found in constant '", str, L"'")).c_str());
 
 	if (checkList)
 	{
 		if (_pData->_constData.find(str) != _pData->_constData.end())
 			throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, ", section, L", Duplicate constant found '", str, L"'")).c_str());
+	}
+}
+
+void ScriptDataReader::_readMacros(rapidxml::xml_node<wchar_t>* root_node)
+{
+	rapidxml::xml_node<wchar_t>* macrosNode = root_node->first_node(L"Macros");
+	if (!macrosNode)
+		return;
+
+	for (rapidxml::xml_node<wchar_t>* macroNode = macrosNode->first_node(L"Macro");
+		macroNode; macroNode = macroNode->next_sibling(L"Macro"))
+	{
+		MacroData macro;
+		macro.hasBlock = false;
+
+		// Read name attribute
+		rapidxml::xml_attribute<wchar_t>* nameAttr = macroNode->first_attribute(L"name");
+		if (!nameAttr)
+			continue;
+		macro.name = nameAttr->value();
+
+		// Read arguments
+		rapidxml::xml_node<wchar_t>* argsNode = macroNode->first_node(L"Arguments");
+		if (argsNode)
+		{
+			for (rapidxml::xml_node<wchar_t>* argNode = argsNode->first_node(L"Argument");
+				argNode; argNode = argNode->next_sibling(L"Argument"))
+			{
+				rapidxml::xml_attribute<wchar_t>* nameA = argNode->first_attribute(L"name");
+				macro.argNames.push_back(nameA ? std::wstring(nameA->value()) : L"");
+			}
+		}
+
+		// Read routine
+		rapidxml::xml_node<wchar_t>* routineNode = macroNode->first_node(L"Routine");
+		if (routineNode)
+		{
+			for (rapidxml::xml_node<wchar_t>* child = routineNode->first_node();
+				child; child = child->next_sibling())
+			{
+				std::wstring nodeName = child->name();
+				MacroRoutineLine line;
+
+				if (nodeName == L"Expression")
+				{
+					line.type = MacroRoutineLine::Type::Expression;
+					rapidxml::xml_attribute<wchar_t>* valAttr = child->first_attribute(L"value");
+					line.text = valAttr ? std::wstring(valAttr->value()) : L"";
+
+					for (rapidxml::xml_node<wchar_t>* fa = child->first_node(L"FunctionArgument");
+						fa; fa = fa->next_sibling(L"FunctionArgument"))
+					{
+						MacroRoutineLine::FuncArg funcArg;
+						funcArg.funcId = 0;
+						funcArg.argPos = -1;
+						rapidxml::xml_attribute<wchar_t>* idAttr = fa->first_attribute(L"id");
+						if (idAttr)
+							funcArg.funcId = static_cast<unsigned int>(std::stoi(std::wstring(idAttr->value())));
+						rapidxml::xml_node<wchar_t>* passedNode = fa->first_node(L"PassedArgument");
+						if (passedNode)
+						{
+							rapidxml::xml_attribute<wchar_t>* posAttr = passedNode->first_attribute(L"pos");
+							if (posAttr)
+								funcArg.argPos = std::stoi(std::wstring(posAttr->value()));
+						}
+						line.funcArgs.push_back(funcArg);
+					}
+					macro.routine.push_back(line);
+				}
+				else if (nodeName == L"Block")
+				{
+					MacroRoutineLine startLine;
+					startLine.type = MacroRoutineLine::Type::StartBlock;
+					macro.routine.push_back(startLine);
+
+					for (rapidxml::xml_node<wchar_t>* blockChild = child->first_node();
+						blockChild; blockChild = blockChild->next_sibling())
+					{
+						std::wstring blockNodeName = blockChild->name();
+						MacroRoutineLine bline;
+						if (blockNodeName == L"Expression")
+						{
+							bline.type = MacroRoutineLine::Type::Expression;
+							rapidxml::xml_attribute<wchar_t>* valAttr = blockChild->first_attribute(L"value");
+							bline.text = valAttr ? std::wstring(valAttr->value()) : L"";
+
+							for (rapidxml::xml_node<wchar_t>* fa = blockChild->first_node(L"FunctionArgument");
+								fa; fa = fa->next_sibling(L"FunctionArgument"))
+							{
+								MacroRoutineLine::FuncArg funcArg;
+								funcArg.funcId = 0;
+								funcArg.argPos = -1;
+								rapidxml::xml_attribute<wchar_t>* idAttr = fa->first_attribute(L"id");
+								if (idAttr)
+									funcArg.funcId = static_cast<unsigned int>(std::stoi(std::wstring(idAttr->value())));
+								rapidxml::xml_node<wchar_t>* passedNode = fa->first_node(L"PassedArgument");
+								if (passedNode)
+								{
+									rapidxml::xml_attribute<wchar_t>* posAttr = passedNode->first_attribute(L"pos");
+									if (posAttr)
+										funcArg.argPos = std::stoi(std::wstring(posAttr->value()));
+								}
+								bline.funcArgs.push_back(funcArg);
+							}
+							macro.routine.push_back(bline);
+						}
+						else if (blockNodeName == L"BlockCommands")
+						{
+							bline.type = MacroRoutineLine::Type::BlockCommands;
+							macro.routine.push_back(bline);
+							macro.hasBlock = true;
+						}
+					}
+
+					MacroRoutineLine endLine;
+					endLine.type = MacroRoutineLine::Type::EndBlock;
+					macro.routine.push_back(endLine);
+				}
+				else if (nodeName == L"BlockCommands")
+				{
+					line.type = MacroRoutineLine::Type::BlockCommands;
+					macro.routine.push_back(line);
+					macro.hasBlock = true;
+				}
+			}
+		}
+
+		_pData->_macros[macro.name] = macro;
 	}
 }

@@ -12,12 +12,12 @@ namespace Utils {
 	class CList
 	{
 	public:
-		typedef typename std::vector<T *>::iterator iterator ;
+		typedef typename std::vector<T*>::iterator iterator;
 
 	private:
-		std::vector<T *> *_lItems;
+		std::vector<T*>* _lItems;
 		bool			 _bDontClear;
-		typename std::vector<T *>::iterator _pItr;
+		typename std::vector<T*>::iterator _pItr;
 
 	public:
 		CList(bool bDontClear = false);
@@ -26,17 +26,17 @@ namespace Utils {
 		void clear();
 		void deleteItems();
 
-		T *push_back(T *pItem);
-		T *push_front(T *pItem);
+		T* push_back(T* pItem);
+		T* push_front(T* pItem);
 		void pop_back();
 
-		iterator insert(iterator itr, T *pItem);
+		iterator insert(iterator itr, T* pItem);
 		iterator insertAt(size_t idx, T* pItem);
 
 		iterator begin() const;
 		iterator end() const;
-		T *first();
-		T *next();
+		T* first();
+		T* next();
 
 		T* front() const;
 		T* back() const;
@@ -44,7 +44,7 @@ namespace Utils {
 		bool empty() const;
 		size_t size() const;
 
-		T *get(size_t i) const;
+		T* get(size_t i) const;
 
 		iterator remove(iterator itr);
 		iterator removeAt(size_t idx);
@@ -58,7 +58,7 @@ namespace Utils {
 	template<class T>
 	CList<T>::CList(bool bDontClear) : _bDontClear(bDontClear)
 	{
-		_lItems = new std::vector<T *>();
+		_lItems = new std::vector<T*>();
 		_pItr = _lItems->end();
 	}
 
@@ -72,9 +72,9 @@ namespace Utils {
 	template <class T>
 	void CList<T>::clear()
 	{
-		if ( !_bDontClear ) {
-			for(std::vector<T *>::iterator itr = _lItems->begin(); itr != _lItems->end(); itr++) {
-				T *data = (*itr);
+		if (!_bDontClear) {
+			for (typename std::vector<T*>::iterator itr = _lItems->begin(); itr != _lItems->end(); itr++) {
+				T* data = (*itr);
 				delete (*itr);
 			}
 		}
@@ -85,7 +85,7 @@ namespace Utils {
 	template <class T>
 	void CList<T>::deleteItems()
 	{
-		for (std::vector<T*>::iterator itr = _lItems->begin(); itr != _lItems->end(); itr++) {
+		for (typename std::vector<T*>::iterator itr = _lItems->begin(); itr != _lItems->end(); itr++) {
 			T* data = (*itr);
 			delete (*itr);
 		}
@@ -106,19 +106,19 @@ namespace Utils {
 	}
 
 	template <class T>
-	typename CList<T>::iterator CList<T>::insert(CList<T>::iterator itr, T *pItem)
+	typename CList<T>::iterator CList<T>::insert(CList<T>::iterator itr, T* pItem)
 	{
 		return _lItems->insert(itr, pItem);
 	}
 
 	template <class T>
-	typename CList<T>::iterator CList<T>::insertAt(size_t idx, T *pItem)
+	typename CList<T>::iterator CList<T>::insertAt(size_t idx, T* pItem)
 	{
 		return _lItems->insert(_lItems->begin() + idx, pItem);
 	}
 
 	template <class T>
-	T *CList<T>::push_front(T *pItem)
+	T* CList<T>::push_front(T* pItem)
 	{
 		_lItems->insert(_lItems->begin(), pItem);
 		return pItem;
@@ -159,12 +159,12 @@ namespace Utils {
 	}
 
 	template <class T>
-	T *CList<T>::next()
+	T* CList<T>::next()
 	{
-		if ( _lItems->empty() ) return NULL;
-		if ( _pItr == _lItems->end() ) return NULL;
+		if (_lItems->empty()) return NULL;
+		if (_pItr == _lItems->end()) return NULL;
 		++_pItr;
-		if ( _pItr == _lItems->end() ) return NULL;
+		if (_pItr == _lItems->end()) return NULL;
 		return *_pItr;
 	}
 
@@ -181,7 +181,7 @@ namespace Utils {
 	}
 
 	template <class T>
-	T *CList<T>::get(size_t i) const
+	T* CList<T>::get(size_t i) const
 	{
 		return (*_lItems)[i];
 	}
@@ -201,7 +201,7 @@ namespace Utils {
 	template <class T>
 	T* CList<T>::operator[](size_t idx)
 	{
-		if(idx < _lItems->size())	
+		if (idx < _lItems->size())
 			return _lItems[idx];
 		return nullptr;
 	}

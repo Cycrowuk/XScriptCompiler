@@ -17,9 +17,8 @@
 #include "GameDirectories.h"
 #include "Languages.h"
 #include "Utils/List.h"
-#include "spkdef.h"
 
-#include "StringList.h"
+//#include "StringList.h"
 
 typedef int s_int;
 

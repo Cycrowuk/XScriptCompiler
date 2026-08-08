@@ -3,17 +3,12 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32014.148
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XScript", "XScript\XScript.vcxproj", "{BEA9D1A0-FFDA-423C-83B8-315ED209CE74}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XScriptCompiler", "XScript\XScript.vcxproj", "{BEA9D1A0-FFDA-423C-83B8-315ED209CE74}"
 	ProjectSection(ProjectDependencies) = postProject
 		{D0238E27-A539-48FC-9A06-50181A6C7FFB} = {D0238E27-A539-48FC-9A06-50181A6C7FFB}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XScriptLib", "XScriptLib\XScriptLib.vcxproj", "{D0238E27-A539-48FC-9A06-50181A6C7FFB}"
-	ProjectSection(ProjectDependencies) = postProject
-		{FE5E32D7-77B1-4D81-99CD-678143564930} = {FE5E32D7-77B1-4D81-99CD-678143564930}
-	EndProjectSection
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XLib", "XLib\XLib.vcxproj", "{FE5E32D7-77B1-4D81-99CD-678143564930}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,22 +34,6 @@ Global
 		{D0238E27-A539-48FC-9A06-50181A6C7FFB}.Release|x64.Build.0 = Release|x64
 		{D0238E27-A539-48FC-9A06-50181A6C7FFB}.Release|x86.ActiveCfg = Release|Win32
 		{D0238E27-A539-48FC-9A06-50181A6C7FFB}.Release|x86.Build.0 = Release|Win32
-		{B7D36705-45BC-4F51-826A-8A760529766A}.Debug|x64.ActiveCfg = Debug|x64
-		{B7D36705-45BC-4F51-826A-8A760529766A}.Debug|x64.Build.0 = Debug|x64
-		{B7D36705-45BC-4F51-826A-8A760529766A}.Debug|x86.ActiveCfg = Debug|Win32
-		{B7D36705-45BC-4F51-826A-8A760529766A}.Debug|x86.Build.0 = Debug|Win32
-		{B7D36705-45BC-4F51-826A-8A760529766A}.Release|x64.ActiveCfg = Release|x64
-		{B7D36705-45BC-4F51-826A-8A760529766A}.Release|x64.Build.0 = Release|x64
-		{B7D36705-45BC-4F51-826A-8A760529766A}.Release|x86.ActiveCfg = Release|Win32
-		{B7D36705-45BC-4F51-826A-8A760529766A}.Release|x86.Build.0 = Release|Win32
-		{FE5E32D7-77B1-4D81-99CD-678143564930}.Debug|x64.ActiveCfg = Debug|x64
-		{FE5E32D7-77B1-4D81-99CD-678143564930}.Debug|x64.Build.0 = Debug|x64
-		{FE5E32D7-77B1-4D81-99CD-678143564930}.Debug|x86.ActiveCfg = Debug|Win32
-		{FE5E32D7-77B1-4D81-99CD-678143564930}.Debug|x86.Build.0 = Debug|Win32
-		{FE5E32D7-77B1-4D81-99CD-678143564930}.Release|x64.ActiveCfg = Release|x64
-		{FE5E32D7-77B1-4D81-99CD-678143564930}.Release|x64.Build.0 = Release|x64
-		{FE5E32D7-77B1-4D81-99CD-678143564930}.Release|x86.ActiveCfg = Release|Win32
-		{FE5E32D7-77B1-4D81-99CD-678143564930}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

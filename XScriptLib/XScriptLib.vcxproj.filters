@@ -19,6 +19,18 @@
     <Filter Include="Source Files\ParseTypes">
       <UniqueIdentifier>{eb0ff29f-8254-462e-ad15-98c967e13201}</UniqueIdentifier>
     </Filter>
+    <Filter Include="libspk">
+      <UniqueIdentifier>{99561b82-16cb-4dab-8460-7c9157393a2c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libspk\logging">
+      <UniqueIdentifier>{3fa4e502-d4ee-4457-b71a-5d8255d67bf6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libspk\Package">
+      <UniqueIdentifier>{dec0fd73-e742-425b-a6b3-8f4a670a13f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libspk\Utils">
+      <UniqueIdentifier>{4a705908-8c3d-47c0-a8b5-cb37473bb838}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -111,6 +123,114 @@
     <ClInclude Include="ParseDefine.h">
       <Filter>Header Files\ParseTypes</Filter>
     </ClInclude>
+    <ClInclude Include="..\libspk\include\BaseFile.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\CatFile.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\DirIO.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\emp.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\enums.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\File.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\File_IO.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\GameExe.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\hash.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Languages.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\lists.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\ModDiff.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\MultiSpkFile.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\OriginalFiles.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Packages.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\secure.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\ShipData.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\spk.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\spkdef.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\spkdefines.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\spkdll.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\SpkFile.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\StringList.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\TextDB.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\VirtualFileSystem.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\XBod.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\XspFile.h">
+      <Filter>libspk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\logging\Log.h">
+      <Filter>libspk\logging</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Package\CorePackage.h">
+      <Filter>libspk\Package</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Package\InstallText.h">
+      <Filter>libspk\Package</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Utils\CommandLine.h">
+      <Filter>libspk\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Utils\List.h">
+      <Filter>libspk\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Utils\String.h">
+      <Filter>libspk\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Utils\StringList.h">
+      <Filter>libspk\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Utils\WString.h">
+      <Filter>libspk\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libspk\include\Utils\WStringList.h">
+      <Filter>libspk\Utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="XScriptLib.cpp">
@@ -199,6 +319,12 @@
     </ClCompile>
     <ClCompile Include="ParseDefine.cpp">
       <Filter>Source Files\ParseTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="VFSHelper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RARStubs.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
