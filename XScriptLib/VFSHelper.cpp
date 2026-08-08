@@ -8,8 +8,10 @@
 #include "CatFile.h"
 #include "VirtualFileSystem.h"
 #include "VFSHelper.h"
+#include <set>
 
 static SPK::CVirtualFileSystem* s_vfs = nullptr;
+static std::set<int> s_loadedTextPages; // track which text pages have been loaded
 
 void VFSHelper_SetDir(const wchar_t* dir, const wchar_t* mod)
 {
@@ -18,6 +20,7 @@ void VFSHelper_SetDir(const wchar_t* dir, const wchar_t* mod)
 
 	if (s_vfs->LoadFilesystem(Utils::WString(dir)))
 	{
+		s_loadedTextPages.clear(); // reset page cache for new filesystem
 		if (mod && mod[0])
 			s_vfs->loadMod(Utils::WString(mod));
 	}
@@ -44,11 +47,31 @@ std::wstring VFSHelper_ExtractFile(const wchar_t* vfsPath, const wchar_t* tempPa
 	return result.toStdWString();
 }
 
+// Ensure the text page is loaded into the VFS TextDB before lookup.
+// updateTexts() is expensive so we only call it once per page.
+static void _ensureTextPage(int page)
+{
+	if (!s_vfs) return;
+	if (s_loadedTextPages.find(page) == s_loadedTextPages.end())
+	{
+		s_vfs->updateTexts(page);
+		s_loadedTextPages.insert(page);
+	}
+}
+
 std::wstring VFSHelper_FindText(int lang, int page, int id)
 {
 	if (!s_vfs) return L"";
+	_ensureTextPage(page);
 	Utils::WString result = s_vfs->findText(lang, page, id);
 	return result.empty() ? L"" : result.toStdWString();
+}
+
+bool VFSHelper_TextExists(int lang, int page, int id)
+{
+	if (!s_vfs) return false;
+	_ensureTextPage(page);
+	return s_vfs->textExists(lang, page, id);
 }
 
 bool VFSHelper_ReadFile(const wchar_t* path, std::vector<wchar_t>& outBuffer)

@@ -438,7 +438,7 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 	{
 		for (rapidxml::xml_node<wchar_t>* childNode = node->first_node(L"Function"); childNode; childNode = childNode->next_sibling(L"Function"))
 		{
-			std::wstring id, desc, code, object, specialType;
+			std::wstring id, desc, code, object, specialType, alias, nsName, nsAlias;
 			bool allowKeyword = false;
 			for (rapidxml::xml_attribute<wchar_t>* attr = childNode->first_attribute(); attr; attr = attr->next_attribute())
 			{
@@ -455,6 +455,12 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 					specialType = attr->value();
 				else if (name == L"allowkeyword")
 					allowKeyword = _parseBoolean(attr->value());
+				else if (name == L"alias")
+					alias = attr->value();
+				else if (name == L"namespace")
+					nsName = attr->value();
+				else if (name == L"namespaceAlias")
+					nsAlias = attr->value();
 			}
 
 			if (id.empty())
@@ -664,6 +670,18 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 						throw std::exception(Utils::ws2s(Utils::CombineStrings(L"XML Read Error, Functions, duplicate global function name '", code, L"'")).c_str());
 					_pData->_globalFunctions[code] = iID;
 				}
+
+				// If this function has an alias, register it as an overload under that alias name
+				if (!alias.empty())
+					_pData->_functionAliases[alias].push_back(iID);
+
+				// If this function belongs to a namespace, register it there
+				// Use namespaceAlias if provided, otherwise fall back to the function's own name
+				if (!nsName.empty())
+				{
+					std::wstring nsKey = nsAlias.empty() ? code : nsAlias;
+					_pData->_namespaceFunctions[nsName][nsKey] = iID;
+				}
 			}
 		}
 	}
@@ -671,9 +689,11 @@ void ScriptDataReader::_readFunctions(rapidxml::xml_node<wchar_t>* root_node)
 
 void ScriptDataReader::_readCommands(rapidxml::xml_node<wchar_t>* root_node, int language, void* textDB)
 {
-	// Unified text lookup — uses VFS when loaded, otherwise falls back to TextDB
+	// Unified text lookup — uses VFS when loaded, checking existence first
+	// to avoid returning placeholder strings like "ReadText2008_10".
 	auto getText = [&](int page, int id) -> std::wstring {
-		if (vfsIsLoaded()) return vfsFindText(language, page, id);
+		if (vfsIsLoaded())
+			return VFSHelper_TextExists(language, page, id) ? VFSHelper_FindText(language, page, id) : L"";
 		return L""; // fallback without VFS: text not available
 	};
 	rapidxml::xml_node<wchar_t>* mainNode = root_node->first_node(L"Commands");
@@ -754,7 +774,8 @@ void ScriptDataReader::_readCommands(rapidxml::xml_node<wchar_t>* root_node, int
 void ScriptDataReader::_readWareTypes(rapidxml::xml_node<wchar_t>* root_node, int language, void* textDB)
 {
 	auto getText = [&](int page, int id) -> std::wstring {
-		if (vfsIsLoaded()) return vfsFindText(language, page, id);
+		if (vfsIsLoaded())
+			return VFSHelper_TextExists(language, page, id) ? VFSHelper_FindText(language, page, id) : L"";
 		return L""; // fallback without VFS: text not available
 	};
 	rapidxml::xml_node<wchar_t>* mainNode = root_node->first_node(L"WareTypes");

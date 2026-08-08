@@ -1878,55 +1878,57 @@ bool CScriptData::loadBinaryData(const std::wstring& filename)
 				if (!macro.name.empty())
 					_macros[macro.name] = macro;
 			}
-			else if (header.header == "SCRIPTS")
+		}
+
+		// SCRIPTS is handled outside the j loop since it manages its own iteration
+		if (header.header == "SCRIPTS")
+		{
+			for (unsigned int si = 0; si < header.count; si++)
 			{
-				for (unsigned int si = 0; si < header.count; si++)
+				ScriptDef s;
+
+				unsigned short nameSize;
+				infile.read(reinterpret_cast<char*>(&nameSize), sizeof(nameSize));
+				if (infile.bad()) return false;
+				s.name = ReadWideString(infile, nameSize);
+
+				unsigned int rtCount;
+				infile.read(reinterpret_cast<char*>(&rtCount), sizeof(rtCount));
+				if (infile.bad()) return false;
+				for (unsigned int ri = 0; ri < rtCount; ri++)
 				{
-					ScriptDef s;
-
-					unsigned short nameSize;
-					infile.read(reinterpret_cast<char*>(&nameSize), sizeof(nameSize));
+					unsigned int dtVal;
+					infile.read(reinterpret_cast<char*>(&dtVal), sizeof(dtVal));
 					if (infile.bad()) return false;
-					s.name = ReadWideString(infile, nameSize);
-
-					unsigned int rtCount;
-					infile.read(reinterpret_cast<char*>(&rtCount), sizeof(rtCount));
-					if (infile.bad()) return false;
-					for (unsigned int ri = 0; ri < rtCount; ri++)
-					{
-						unsigned int dtVal;
-						infile.read(reinterpret_cast<char*>(&dtVal), sizeof(dtVal));
-						if (infile.bad()) return false;
-						s.returnTypes.insert(static_cast<DataTypes>(dtVal));
-					}
-
-					unsigned int argCount;
-					infile.read(reinterpret_cast<char*>(&argCount), sizeof(argCount));
-					if (infile.bad()) return false;
-					for (unsigned int ai = 0; ai < argCount; ai++)
-					{
-						ScriptArgDef arg;
-						unsigned int pd;
-						infile.read(reinterpret_cast<char*>(&pd), sizeof(pd));
-						if (infile.bad()) return false;
-						arg.pardef = static_cast<ParDef>(pd);
-
-						unsigned short argNameSize;
-						infile.read(reinterpret_cast<char*>(&argNameSize), sizeof(argNameSize));
-						if (infile.bad()) return false;
-						arg.name = ReadWideString(infile, argNameSize);
-
-						unsigned short argDescSize;
-						infile.read(reinterpret_cast<char*>(&argDescSize), sizeof(argDescSize));
-						if (infile.bad()) return false;
-						arg.desc = ReadWideString(infile, argDescSize);
-
-						s.args.push_back(arg);
-					}
-
-					if (!s.name.empty())
-						_scripts[s.name] = s;
+					s.returnTypes.insert(static_cast<DataTypes>(dtVal));
 				}
+
+				unsigned int argCount;
+				infile.read(reinterpret_cast<char*>(&argCount), sizeof(argCount));
+				if (infile.bad()) return false;
+				for (unsigned int ai = 0; ai < argCount; ai++)
+				{
+					ScriptArgDef arg;
+					unsigned int pd;
+					infile.read(reinterpret_cast<char*>(&pd), sizeof(pd));
+					if (infile.bad()) return false;
+					arg.pardef = static_cast<ParDef>(pd);
+
+					unsigned short argNameSize;
+					infile.read(reinterpret_cast<char*>(&argNameSize), sizeof(argNameSize));
+					if (infile.bad()) return false;
+					arg.name = ReadWideString(infile, argNameSize);
+
+					unsigned short argDescSize;
+					infile.read(reinterpret_cast<char*>(&argDescSize), sizeof(argDescSize));
+					if (infile.bad()) return false;
+					arg.desc = ReadWideString(infile, argDescSize);
+
+					s.args.push_back(arg);
+				}
+
+				if (!s.name.empty())
+					_scripts[s.name] = s;
 			}
 		}
 	}

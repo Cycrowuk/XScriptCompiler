@@ -1,10 +1,10 @@
 // ============================================================
-//  XScript Compiler v0.8 Feature Test
-//  Tests all language features including v0.8 additions:
-//  function main() wrapper, sub blocks, local-scoped functions
+//  XScript Compiler v0.9 Feature Test
+//  Tests: script call type checking, allowNullObject (bare call),
+//         foreach macro, script return type inference
 // ============================================================
 
-#DESCRIPTION "XScript v0.8 Feature Test Script"
+#DESCRIPTION "XScript v0.9 Feature Test Script"
 #VERSION 1
 #COMMAND 0
 
@@ -262,6 +262,42 @@ function main(VARSECTOR $sector, SHIP $ship)
     #ifdef FEATURE_ENABLED
     $count += PLATFORM_VALUE;
     #endif
+
+    // ── v0.9: Script calls (call command) ────────────────────
+    // Standard object call — $ship->call("script.name", args...)
+    $result = $ship->call("plugin.test.script", $count, $sector);
+
+    // allowNullObject — bare call() without an object, auto-inserts NULL
+    // compiles identically to NULL->call("script.name", ...)
+    $result = call("plugin.test.script", $count, $sector);
+
+    // Return type inference — if the script is known, $scriptResult
+    // gets the script's declared return datatype automatically
+    $scriptResult = call("plugin.test.script", $count, $sector);
+
+    // Call on explicit NULL object
+    $result = NULL->call("plugin.test.script", $count);
+
+    // ── v0.9: Foreach macro ───────────────────────────────────
+    $shipList[0] = PLAYERSHIP;
+    $shipList[1] = PLAYERSHIP;
+    $shipList[2] = PLAYERSHIP;
+
+    foreach($currentShip, $shipList)
+    {
+        $count += 1;
+    }
+
+    // Nested foreach loops
+    $itemList[0] = 1;
+    $itemList[1] = 2;
+    foreach($currentItem, $itemList)
+    {
+        foreach($currentShip, $shipList)
+        {
+            $result = $currentItem + $count;
+        }
+    }
 
     return($count);
 }

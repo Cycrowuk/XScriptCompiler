@@ -9,6 +9,7 @@ void         VFSHelper_SetAddon(const wchar_t* addon); // set the addon subdirec
 bool         VFSHelper_IsLoaded();
 std::wstring VFSHelper_ExtractFile(const wchar_t* vfsPath, const wchar_t* tempPath);
 std::wstring VFSHelper_FindText(int lang, int page, int id);
+bool         VFSHelper_TextExists(int lang, int page, int id);
 // Read a file into a wchar_t buffer, unpacking .pck format if needed.
 // Returns false on failure. Buffer is null-terminated on success.
 bool         VFSHelper_ReadFile(const wchar_t* path, std::vector<wchar_t>& outBuffer);

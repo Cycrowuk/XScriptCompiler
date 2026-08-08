@@ -1629,8 +1629,8 @@
 		</Function>
 		<Function id="102" name="call" description="call a another script">
 			<Example>$return = $object->call("script.name", ...)</Example>
-			<Arguments undefinedcount="3">
-				<Argument pardef="CALLNAME" description="The script to call"/>
+			<Arguments undefinedcount="3" allownullobject="true">
+				<Argument pardef="CALLNAME" description="The script to call" scriptcheck="true"/>
 				<ReturnValue type="start">
 					<ReturnValue>1</ReturnValue>
 				</ReturnValue>
