@@ -5,6 +5,7 @@
 // Plain C++ interface to the VirtualFileSystem — no spk.h dependency.
 
 void         VFSHelper_SetDir(const wchar_t* dir, const wchar_t* mod = nullptr);
+void         VFSHelper_SetAddon(const wchar_t* addon); // set the addon subdirectory (e.g. "addon2")
 bool         VFSHelper_IsLoaded();
 std::wstring VFSHelper_ExtractFile(const wchar_t* vfsPath, const wchar_t* tempPath);
 std::wstring VFSHelper_FindText(int lang, int page, int id);

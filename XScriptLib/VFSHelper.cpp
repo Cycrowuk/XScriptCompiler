@@ -23,6 +23,12 @@ void VFSHelper_SetDir(const wchar_t* dir, const wchar_t* mod)
 	}
 }
 
+void VFSHelper_SetAddon(const wchar_t* addon)
+{
+	if (s_vfs && addon && addon[0])
+		s_vfs->setAddon(Utils::WString(addon));
+}
+
 bool VFSHelper_IsLoaded()
 {
 	return s_vfs != nullptr;
