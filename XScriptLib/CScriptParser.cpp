@@ -1568,6 +1568,7 @@ bool CScriptParser::_parseCompoundAssignment(std::vector<const BaseParse*>& list
 		assignSym->setLinePosition(parse->linePos());
 		assignSym->setFile(_currentFile.back());
 		assignSym->setPosition(sym->startingPos(), sym->startingPos() + 1);
+		assignSym->setData(L"="); // fix: data() must return the symbol, not the source line
 		list.push_back(assignSym);
 
 		BaseParse* varCopy = CopyParse(parse);
@@ -1583,6 +1584,7 @@ bool CScriptParser::_parseCompoundAssignment(std::vector<const BaseParse*>& list
 		opNode->setLinePosition(parse->linePos());
 		opNode->setFile(_currentFile.back());
 		opNode->setPosition(sym->startingPos(), sym->endingPos());
+		opNode->setData(expandedOp); // fix: same issue for the operator node
 		list.push_back(opNode);
 
 		delete sym;
@@ -3945,6 +3947,7 @@ BaseParse* CScriptParser::checkStatus(ParseStatus oldStatus, ParseStatus newStat
 				parse = new ParseOperator(line, str);
 			else
 				parse = new ParseSymbol(line, str);
+			parse->setData(str); // data() must return the symbol, not the source line
 			break;
 		case ParseStatus::Integer:
 			parse = new ParseInteger(line, std::stoi(str));
@@ -4493,6 +4496,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 			addParse(parse, parseList, pos, len, linePos, movePosition, _currentFile.back());
 
 			ParseSymbol* symbol = new ParseSymbol(sLine, str);
+			symbol->setData(str); // data() must return the symbol, not the source line
 			addParse(symbol, parseList, pos + 1, str.length(), linePos, movePosition, _currentFile.back());
 			str.clear();
 
@@ -4646,7 +4650,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 					bool isLoneBlock = (_currentDataList.size() == 1 &&
 						_currentDataList.front()->type() == ParseType::Symbol &&
 						(dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::StartBlock ||
-							dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::EndBlock));
+						 dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::EndBlock));
 
 					if (!_prePassMode && _inSubDef && !_mainCompleted && !_currentDataList.empty() && !isLoneBlock)
 					{
@@ -6497,8 +6501,10 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 	{
 		ParseSymbol* start = new ParseSymbol(list.back()->line(), L"{");
 		start->setFromParse(list.back());
+		start->setData(L"{");
 		ParseSymbol* end = new ParseSymbol(list.back()->line(), L"}");
 		end->setFromParse(list.back());
+		end->setData(L"}");
 		list.push_back(start);
 		list.push_back(end);
 	}
@@ -8013,7 +8019,7 @@ bool CScriptParser::_parseUserFunctionDefinition(const std::vector<const BasePar
 			pd = _data->getParDefData(static_cast<ParDef>(9)); // VALUE
 			if (pd)
 			{
-				pardef = pd->id;
+				pardef        = pd->id;
 				paramTypeName = pd->code;
 			}
 			// Don't increment pi — fall through to the variable-reading block below
@@ -8035,7 +8041,7 @@ bool CScriptParser::_parseUserFunctionDefinition(const std::vector<const BasePar
 				pd = _data->findParDefForDataType(dt);
 				if (pd)
 				{
-					pardef = pd->id;
+					pardef        = pd->id;
 					paramTypeName = pd->code;
 				}
 				else
