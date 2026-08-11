@@ -182,7 +182,7 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 		str << std::setw(12) << strm.str() << " ";
 
 		std::cout << "Compile Error [#" << static_cast<unsigned int>((*itr)->error()) << "]: " << str.str();
-	
+
 		switch ((*itr)->error())
 		{
 		case ParseErrors::InternalFunctionError:
@@ -348,6 +348,96 @@ int displayError(XScript::CScriptParser& parser, const std::wstring& line)
 			break;
 		case ParseErrors::AmbiguousObjectFunction:
 			std::cout << "- Ambiguous object function '" << converter.to_bytes((*itr)->data(0)) << "', unable to determine matching function: " << converter.to_bytes((*itr)->data(1));
+			break;
+		case ParseErrors::IncompleteLine:
+			std::cout << "- Incomplete line, expression or statement is not complete";
+			break;
+		case ParseErrors::InvalidFunctionDefinition:
+			std::cout << "- Invalid function definition";
+			break;
+		case ParseErrors::CodeOutsideFunction:
+			std::cout << "- Code found outside a function definition block";
+			break;
+		case ParseErrors::NestedFunctionDefinition:
+			std::cout << "- Nested function definition, 'function' keyword found inside an existing function";
+			break;
+		case ParseErrors::MissingFunctionBodyBrace:
+			std::cout << "- Missing opening '{' for function body";
+			break;
+		case ParseErrors::MissingFunctionName:
+			std::cout << "- Missing function name after 'function' keyword";
+			break;
+		case ParseErrors::MissingFunctionParameterList:
+			std::cout << "- Missing parameter list '(...)' after function name '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::InvalidFunctionParameterType:
+			std::cout << "- Invalid parameter type '" << converter.to_bytes((*itr)->data(0)) << "' in function definition";
+			break;
+		case ParseErrors::MissingFunctionParameterVariable:
+			std::cout << "- Missing parameter variable after type '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::DuplicateFunctionParameterName:
+			std::cout << "- Duplicate parameter name '" << converter.to_bytes((*itr)->data(0)) << "' in function definition";
+			break;
+		case ParseErrors::EndsubWithoutLabel:
+			std::cout << "- 'endsub' used before any label or sub has been defined";
+			break;
+		case ParseErrors::DuplicateLabel:
+			std::cout << "- Duplicate label or sub name '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::MissingSubName:
+			std::cout << "- Missing sub name after 'sub' keyword";
+			break;
+		case ParseErrors::MissingSubParameterList:
+			std::cout << "- Missing '()' after sub name '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::SubParametersNotAllowed:
+			std::cout << "- Sub '" << converter.to_bytes((*itr)->data(0)) << "' cannot take parameters";
+			break;
+		case ParseErrors::NestedSubDefinition:
+			std::cout << "- Nested sub definition, 'sub' keyword found inside an existing sub block";
+			break;
+		case ParseErrors::MissingSubBodyBrace:
+			std::cout << "- Missing opening '{' for sub body '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::UserFunctionCallNotStandalone:
+			std::cout << "- User function '" << converter.to_bytes((*itr)->data(0)) << "' must be called as a standalone statement, not inside an expression";
+			break;
+		case ParseErrors::UserFunctionArgumentCountMismatch:
+			std::cout << "- User function '" << converter.to_bytes((*itr)->data(0)) << "' argument count mismatch (expected " << converter.to_bytes((*itr)->data(1)) << ", got " << converter.to_bytes((*itr)->data(2)) << ")";
+			break;
+		case ParseErrors::ReturnValueNotAllowed:
+			std::cout << "- 'return' with a value is not allowed here";
+			break;
+		case ParseErrors::DuplicateUserFunctionName:
+			std::cout << "- Duplicate user function name '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::UserFunctionNameConflict:
+			std::cout << "- User function name '" << converter.to_bytes((*itr)->data(0)) << "' conflicts with an existing script command or constant";
+			break;
+		case ParseErrors::MissingObjectFunction:
+			std::cout << "- Missing object function name";
+			break;
+		case ParseErrors::MissingSpecialArgument:
+			std::cout << "- Missing special argument for function '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::InvalidObject:
+			std::cout << "- Invalid object '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::InvalidObjectDataType:
+			std::cout << "- Invalid object datatype for function '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::InvalidSpecialArgument:
+			std::cout << "- Invalid special argument for function '" << converter.to_bytes((*itr)->data(0)) << "'";
+			break;
+		case ParseErrors::DataAfterFunction:
+			std::cout << "- Unexpected data after function call";
+			break;
+		case ParseErrors::InvalidString:
+			std::cout << "- Invalid string";
+			break;
+		case ParseErrors::InvalidDoubleCondition:
+			std::cout << "- Invalid double condition";
 			break;
 		}
 		std::cout << std::endl;
@@ -624,7 +714,7 @@ static bool _parseXsHeader(const std::wstring& path, CScriptData::ScriptDef& def
 			if (token[0] == L'$')
 			{
 				arg.pardef = static_cast<ParDef>(9); // VALUE
-				arg.name   = token;
+				arg.name = token;
 			}
 			else
 			{
@@ -632,14 +722,14 @@ static bool _parseXsHeader(const std::wstring& path, CScriptData::ScriptDef& def
 				size_t sp = token.find(L' ');
 				if (sp == std::wstring::npos) continue;
 				std::wstring pardefCode = token.substr(0, sp);
-				std::wstring varName    = token.substr(sp + 1);
+				std::wstring varName = token.substr(sp + 1);
 				varName.erase(0, varName.find_first_not_of(L" \t"));
 
 				const ParDefData* pd = g_scriptData->findParDefData(pardefCode);
 				if (pd)
 				{
 					arg.pardef = pd->id;
-					arg.name   = varName;
+					arg.name = varName;
 				}
 				else
 					continue; // unknown pardef — skip this arg
@@ -676,17 +766,17 @@ static bool _parseXmlArguments(const std::wstring& path, CScriptData::ScriptDef&
 
 	// Helper to get attribute value
 	auto attr = [](rapidxml::xml_node<wchar_t>* node, const wchar_t* name) -> std::wstring
-	{
-		if (!node) return L"";
-		auto* a = node->first_attribute(name);
-		return a ? std::wstring(a->value()) : L"";
-	};
+		{
+			if (!node) return L"";
+			auto* a = node->first_attribute(name);
+			return a ? std::wstring(a->value()) : L"";
+		};
 
 	// Helper: is this sval node an array?
 	auto isArray = [&](rapidxml::xml_node<wchar_t>* node) -> bool
-	{
-		return node && attr(node, L"type") == L"array";
-	};
+		{
+			return node && attr(node, L"type") == L"array";
+		};
 
 	try
 	{
@@ -754,7 +844,7 @@ static bool _parseXmlArguments(const std::wstring& path, CScriptData::ScriptDef&
 
 			CScriptData::ScriptArgDef arg;
 			arg.pardef = pd->id;
-			arg.desc   = desc;
+			arg.desc = desc;
 			// Match variable name by index from variables array
 			if (argIndex < static_cast<int>(varNames.size()))
 				arg.name = varNames[argIndex];
@@ -804,8 +894,7 @@ bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output)
 					g_scriptData->addScript(def);
 					found++;
 				}
-			}
-			while (_wfindnext(h, &fd) == 0);
+			} while (_wfindnext(h, &fd) == 0);
 			_findclose(h);
 		}
 	}
@@ -834,8 +923,7 @@ bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output)
 					g_scriptData->addScript(def);
 					found++;
 				}
-			}
-			while (_wfindnext(h, &fd) == 0);
+			} while (_wfindnext(h, &fd) == 0);
 			_findclose(h);
 		}
 	}
