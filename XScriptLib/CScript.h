@@ -117,6 +117,7 @@ namespace XScript
 		void addFunctionArgument(const BaseParse* arg, ParDef pardef);
 		void addFunctionCondition(const ParseCondition *c);
 		bool addEndBlock(bool forceBlock);
+		void forceLastConditionBlock(); // mark most recent unblocked condition as a block (for macro expansion)
 		bool addLabel(const ParseKeyword *label);
 		void setFunctionUndefinedCount(unsigned int count);
 		void flushPostRun();

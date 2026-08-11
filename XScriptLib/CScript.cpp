@@ -369,6 +369,38 @@ bool CScript::addEndBlock(bool forceBlock)
     return false;
 }
 
+void CScript::forceLastConditionBlock()
+{
+    for (auto itr = _functions.rbegin(); itr != _functions.rend(); itr++)
+    {
+        if (itr->endBlock == -1)
+        {
+            if (itr->id == _pScriptData->elseCommand())
+            {
+                const ParseCondition* cond = dynamic_cast<const ParseCondition*>(itr->firstArg());
+                if (cond && cond->condition() != Conditions::None && !cond->isBlock())
+                {
+                    const_cast<ParseCondition*>(cond)->setBlock(true);
+                    return;
+                }
+            }
+            else if (itr->retvarID >= 0)
+            {
+                const BaseParse* parse = itr->retvarArgument();
+                if (parse && parse->type() == ParseType::Condition)
+                {
+                    const ParseCondition* cond = dynamic_cast<const ParseCondition*>(parse);
+                    if (cond && cond->condition() != Conditions::None && !cond->isBlock())
+                    {
+                        const_cast<ParseCondition*>(cond)->setBlock(true);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+}
+
 bool CScript::addLabel(const ParseKeyword* parse)
 {
     if (_pendingEnd)

@@ -2588,6 +2588,9 @@ bool CScriptParser::parseConstants(const std::vector<const BaseParse*>& list, st
 			{
 				condition->setFromParse(keyword);
 				newList.push_back(condition);
+				delete* itr; // keyword replaced by condition — don't fall through
+				previous = condition;
+				continue;
 			}
 			// "function"/"sub" keywords — pass through for _parseFunctionDefinition/
 			// _parseSubDefinition to handle
@@ -4650,7 +4653,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 					bool isLoneBlock = (_currentDataList.size() == 1 &&
 						_currentDataList.front()->type() == ParseType::Symbol &&
 						(dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::StartBlock ||
-						 dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::EndBlock));
+							dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::EndBlock));
 
 					if (!_prePassMode && _inSubDef && !_mainCompleted && !_currentDataList.empty() && !isLoneBlock)
 					{
@@ -6142,6 +6145,10 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		_currentUserFunction.clear();
 
 	// ── Function definition / outside-function enforcement ────────────────────
+	// Capture depth before any brace scanning so we can restore if a macro consumes the {
+	int subDepthBeforeScan = _subDefDepth;
+	int funcDepthBeforeScan = _functionDefDepth;
+
 	// By here: brackets are grouped, $variables are ParseVariable, constants resolved.
 	if (!list.empty())
 	{
@@ -6297,7 +6304,7 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		// sub/function body. Must run AFTER header detection so _subDefDepth
 		// is already set to 1 (body level). Captures depth before updating
 		// so the sub-close check can distinguish a nested } from the real one.
-		int subDepthBeforeScan = _subDefDepth;
+		subDepthBeforeScan = _subDefDepth;
 		if (_inSubDef && _subDefDepth > 0 && !list.empty())
 		{
 			for (const BaseParse* p : list)
@@ -6312,11 +6319,8 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			}
 		}
 
-		// Same depth tracking for function main's body — _functionDefDepth must
-		// be incremented for every nested { and decremented for every } so the
-		// function-close check (which guards on _functionDefDepth > 0) doesn't
-		// fire prematurely on a } that closes a nested if/while block.
-		int funcDepthBeforeScan = _functionDefDepth;
+		// Same depth tracking for function main's body
+		funcDepthBeforeScan = _functionDefDepth;
 		if (_inFunctionDef && _functionDefDepth > 0 && !list.empty())
 		{
 			for (const BaseParse* p : list)
@@ -6473,6 +6477,19 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		list.clear();
 		if (!parseFunctions(originalList, list))
 			return false;
+
+		// If parseFunctions detected a block macro, the { that was in the
+		// accumulated list has been consumed by the macro. Undo the depth
+		// increment that the scan above applied for that {, so the depth
+		// counters stay consistent — the macro manages its own { } via
+		// _expandMacro's parseLine calls.
+		if (!_macroStack.empty() && _macroStack.back().inBody)
+		{
+			if (_functionDefDepth > funcDepthBeforeScan)
+				_functionDefDepth = funcDepthBeforeScan;
+			if (_subDefDepth > subDepthBeforeScan)
+				_subDefDepth = subDepthBeforeScan;
+		}
 	}
 
 	// find all arrays
@@ -8019,7 +8036,7 @@ bool CScriptParser::_parseUserFunctionDefinition(const std::vector<const BasePar
 			pd = _data->getParDefData(static_cast<ParDef>(9)); // VALUE
 			if (pd)
 			{
-				pardef        = pd->id;
+				pardef = pd->id;
 				paramTypeName = pd->code;
 			}
 			// Don't increment pi — fall through to the variable-reading block below
@@ -8041,7 +8058,7 @@ bool CScriptParser::_parseUserFunctionDefinition(const std::vector<const BasePar
 				pd = _data->findParDefForDataType(dt);
 				if (pd)
 				{
-					pardef        = pd->id;
+					pardef = pd->id;
 					paramTypeName = pd->code;
 				}
 				else
