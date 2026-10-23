@@ -13,6 +13,7 @@
 */
 
 #include "BaseParse.h"
+#include "ParseMacro.h"
 #include <unordered_map>
 
 // Forward declarations for types used by pointer only in this header
@@ -125,7 +126,8 @@ namespace XScript {
 			size_t                    linePos; // original source line number for error reporting
 			std::wstring              sourceLine; // original source text for error reporting
 		};
-		std::vector<MacroCallState> _macroStack; // supports nested macros
+		std::vector<MacroCallState> _macroStack; // legacy — kept for non-block macros
+		std::vector<ParseMacro*>    _macroParseStack;   // block macro body capture stack
 
 		// Function definition state
 		// When parsing a function definition body, _inFunctionDef is true.
@@ -259,7 +261,7 @@ namespace XScript {
 		void removeCurrentFile();
 		void addDefine(const std::wstring& name); // add a pre-defined symbol (e.g. from command line)
 		bool includeFile(const std::wstring& filename); // process an #include file inline
-		bool _expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine);
+		bool _expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine, const ParseMacro* macroNode = nullptr);
 		const BaseParse* _resolveMacroReportNode(const BaseParse* parse) const;
 		bool _parseFunctionDefinition(const std::vector<const BaseParse*>& list, size_t linePos);
 		bool _parseSubDefinition(const std::vector<const BaseParse*>& list, size_t linePos);
@@ -322,6 +324,7 @@ namespace XScript {
 		void _checkWarnings(const std::vector<const BaseParse*>& list);
 		bool _runExpressionList(const ParseExpression* expression, bool topLevel, const ParseExpression* previous, bool isInCondition);
 		bool _runParse(const BaseParse* parse, const BaseParse* previous, const ParseCondition* condition, bool topLevel, InlineState inlineState);
+		bool _parseMacro(std::vector<const BaseParse*>& list);
 		bool _parseDataList(std::vector<const BaseParse*>& list);
 		void _addExpressionItem(const BaseParse* parse);
 		bool _addLabel(const ParseKeyword* keyword);

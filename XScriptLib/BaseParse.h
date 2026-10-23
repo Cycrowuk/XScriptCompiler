@@ -36,6 +36,7 @@ namespace XScript
 		Define,
 		Include,
 		Unknown,
+		Macro,		// ParseMacro — a macro call awaiting body capture and expansion
 	};
 	enum class ParseErrors
 	{

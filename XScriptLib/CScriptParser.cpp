@@ -13,6 +13,7 @@
 #include "ParseExpression.h"
 #include "ParseOperator.h"
 #include "ParseArguments.h"
+#include "ParseMacro.h"
 #include "ParseFail.h"
 #include "ParseArray.h"
 #include "ParseInteger.h"
@@ -139,6 +140,7 @@ void CScriptParser::_clearData()
 	_inLineContinuation = false;
 	_continuationText.clear();
 	_macroStack.clear();
+	_macroParseStack.clear();
 	_prePassDepth = 0;
 	_pVariables = &_variables;
 	_conditionStack.clear();
@@ -236,7 +238,7 @@ bool CScriptParser::includeFile(const std::wstring& filename)
 	return ok;
 }
 
-bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine)
+bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine, const ParseMacro* macroNode)
 {
 	// Helper: substitute %ARG0%, %ARG1% etc. with the actual argument strings
 	auto substitute = [&](const std::wstring& tmpl) -> std::wstring
@@ -344,22 +346,41 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 			break;
 		}
 		case MacroRoutineLine::Type::StartBlock:
-			ok = parseLine(linePos, L"{");
+		{
+			// Add { directly to _currentDataList rather than via parseLine.
+			// The foreach { was already decremented in parseFunctions when the
+			// macro was detected — this re-adds it so the depth scan counts it.
+			// The matching } comes from the user's source falling through after
+			// _expandMacro returns, so no EndBlock parseLine call is needed.
+			ParseSymbol* startBrace = new ParseSymbol(sourceLine, L"{");
+			startBrace->setData(L"{");
+			startBrace->setLinePosition(linePos);
+			startBrace->setFile(_currentFile.empty() ? L"" : _currentFile.back());
+			_currentDataList.push_back(startBrace);
+			ok = true;
 			break;
+		}
 		case MacroRoutineLine::Type::EndBlock:
-			ok = parseLine(linePos, L"}");
+		{
+			// Emit the closing } to close the while loop.
+			// The } goes straight into _currentDataList and is never run through
+			// the parser, so _runParse won't decrement the depth counters for it.
+			// Decrement them here to keep the depth balanced.
+			ParseSymbol* endBrace = new ParseSymbol(sourceLine, L"}");
+			endBrace->setData(L"}");
+			endBrace->setLinePosition(linePos);
+			endBrace->setFile(_currentFile.empty() ? L"" : _currentFile.back());
+			_currentDataList.push_back(endBrace);
+			if (_functionDefDepth > 1) _functionDefDepth--;
+			if (_subDefDepth > 1)      _subDefDepth--;
+			ok = true;
 			break;
+		}
 		case MacroRoutineLine::Type::BlockCommands:
-			// Replay the captured body lines
-			for (const std::wstring& bodyLine : body)
-			{
-				// Skip empty/whitespace-only lines
-				if (bodyLine.find_first_not_of(L" \t\r\n") == std::wstring::npos)
-					continue;
-				bool bodyOk = parseLine(linePos, bodyLine);
-				if (!bodyOk)
-					anyError = true;
-			}
+			// Push the ParseMacro node itself — _runDataList will run its body items here
+			if (macroNode)
+				_currentDataList.push_back(macroNode);
+			ok = true;
 			break;
 		}
 		if (!ok) anyError = true;
@@ -1381,7 +1402,10 @@ bool CScriptParser::_parseAllConditions(std::vector<const BaseParse*>& list)
 	}
 
 	// finally, check if else comes without an if
-	if (!_prePassMode)
+	// Skip this check while inside a macro body — the matching 'if' is in the
+	// accumulated body items and hasn't been run yet, so isIfOpen() would be
+	// false even though the if/else pairing is valid.
+	if (!_prePassMode && _macroParseStack.empty())
 	{
 		for (auto itr = list.begin(); itr != list.end(); itr++)
 		{
@@ -2984,148 +3008,10 @@ bool CScriptParser::parseFunctions(const std::vector<const BaseParse*>& original
 			{
 				ParseBrackets* brackets = const_cast<ParseBrackets*>(dynamic_cast<const ParseBrackets*>(previous));
 
-				// ── Check for macro call ──────────────────────────────────────
-				const MacroData* macro = _data->findMacro(keyword->keyword());
-				if (macro)
+				// ── Macro calls are handled by _parseMacro, not here ─────────
+				if (_data->findMacro(keyword->keyword()))
 				{
-					// Extract argument strings from brackets (comma-separated items)
-					// Also track single-token arguments (e.g. "$myArr") so warnings
-					// about them can point to their exact position at the call site.
-					std::vector<std::wstring> macroArgs;
-					std::vector<const BaseParse*> macroArgNodes; // cloned single-token nodes, or nullptr
-					std::wstring currentArg;
-					std::vector<const BaseParse*> currentArgTokens;
-					int depth = 0;
-					for (const BaseParse* item : brackets->constList())
-					{
-						if (item->type() == ParseType::Symbol)
-						{
-							const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(item);
-							if (sym->symbol() == SymbolType::Comma && depth == 0)
-							{
-								// Trim whitespace
-								size_t s = currentArg.find_first_not_of(L" \t");
-								size_t e = currentArg.find_last_not_of(L" \t");
-								if (s != std::wstring::npos)
-									macroArgs.push_back(currentArg.substr(s, e - s + 1));
-								else
-									macroArgs.push_back(L"");
-
-								// If exactly one token made up this argument, clone it
-								if (currentArgTokens.size() == 1)
-									macroArgNodes.push_back(CopyParse(currentArgTokens[0]));
-								else
-									macroArgNodes.push_back(nullptr);
-
-								currentArg.clear();
-								currentArgTokens.clear();
-								continue;
-							}
-							else if (sym->symbol() == SymbolType::OpenBracket) depth++;
-							else if (sym->symbol() == SymbolType::CloseBracket) depth--;
-						}
-						currentArg += item->data();
-						currentArgTokens.push_back(item);
-					}
-					// Last arg
-					{
-						size_t s = currentArg.find_first_not_of(L" \t");
-						size_t e = currentArg.find_last_not_of(L" \t");
-						if (s != std::wstring::npos)
-							macroArgs.push_back(currentArg.substr(s, e - s + 1));
-
-						if (currentArgTokens.size() == 1)
-							macroArgNodes.push_back(CopyParse(currentArgTokens[0]));
-						else
-							macroArgNodes.push_back(nullptr);
-					}
-
-					// Capture original line info before keyword is deleted — used for
-					// error reporting back to the macro call site
-					size_t macroLinePos = keyword->linePos();
-					std::wstring macroSourceLine = keyword->line();
-
-					delete keyword;
-					// Remove the brackets from parseList
-					if (!parseList.empty()) parseList.erase(parseList.begin());
-					delete brackets;
-
-					if (macro->hasBlock)
-					{
-						// Push state — body lines will be captured in parseLine
-						MacroCallState state;
-						state.macro = macro;
-						state.args = macroArgs;
-						state.argNodes = macroArgNodes;
-						state.depth = 0;
-						state.inBody = false;
-						state.linePos = macroLinePos;
-						state.sourceLine = macroSourceLine;
-						_macroStack.push_back(state);
-
-						// Check if '{' or a single-statement body follows on the same line
-						bool foundBlock = false;
-						std::wstring singleBody;
-
-						for (auto rem = parseList.begin(); rem != parseList.end(); ++rem)
-						{
-							if ((*rem)->type() == ParseType::Symbol &&
-								dynamic_cast<const ParseSymbol*>(*rem)->symbol() == SymbolType::StartBlock)
-							{
-								// Consume the { — start body capture immediately
-								_macroStack.back().inBody = true;
-								_macroStack.back().depth = 1;
-								delete* rem;
-								++rem;
-								// Any remaining items after { are the first statement
-								if (rem != parseList.end())
-								{
-									std::wstring firstBodyLine;
-									for (auto rest = rem; rest != parseList.end(); ++rest)
-									{
-										firstBodyLine += (*rest)->data();
-										auto next = rest; ++next;
-										if (next != parseList.end())
-											firstBodyLine += L" ";
-										delete* rest;
-									}
-									if (!firstBodyLine.empty())
-										_macroStack.back().body.push_back(firstBodyLine + L";");
-								}
-								foundBlock = true;
-								parseList.clear();
-								break;
-							}
-							// Accumulate non-brace items as potential single-statement body
-							if (!singleBody.empty()) singleBody += L" ";
-							singleBody += (*rem)->data();
-							delete* rem;
-						}
-						parseList.clear();
-
-						// If no { was found but there are items, it's a single-statement body
-						// — expand immediately without waiting for parseLine
-						if (!foundBlock && !singleBody.empty())
-						{
-							std::vector<std::wstring> body = { singleBody + L";" };
-							std::vector<std::wstring> args = _macroStack.back().args;
-							std::vector<const BaseParse*> argNodes = _macroStack.back().argNodes;
-							const MacroData* m = _macroStack.back().macro;
-							size_t mLinePos = _macroStack.back().linePos;
-							std::wstring mSourceLine = _macroStack.back().sourceLine;
-							_macroStack.pop_back();
-							if (!_expandMacro(m, args, argNodes, body, mLinePos, mSourceLine))
-								error = true;
-						}
-						break;
-					}
-					else
-					{
-						// No block — expand immediately
-						if (!_expandMacro(macro, macroArgs, macroArgNodes, {}, macroLinePos, macroSourceLine))
-							error = true;
-					}
-
+					parseList.insert(parseList.begin(), parse);
 					previous = parse;
 					continue;
 				}
@@ -3591,6 +3477,33 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 							parse = NULL;
 						}
 					}
+					else if (prevFn && prevFn->condition())
+					{
+						// else/elseif function: { opens the block — set isBlock on its condition.
+						// The current empty expression is a placeholder; discard it.
+						if (expression->size() == 0 && !parseList.empty() && parseList.back() == expression)
+						{
+							parseList.pop_back();
+							delete expression;
+							expression = NULL;
+						}
+						const_cast<ParseCondition*>(prevFn->condition())->setBlock(true);
+						// Find the expression that holds this function and finalise it.
+						for (int pi = static_cast<int>(parseList.size()) - 1; pi >= 0; pi--)
+						{
+							if (parseList[pi]->type() == ParseType::Expression)
+							{
+								ParseExpression* prevExpr = const_cast<ParseExpression*>(dynamic_cast<const ParseExpression*>(parseList[pi]));
+								if (prevExpr)
+								{
+									finalise(prevExpr);
+									break;
+								}
+							}
+						}
+						delete parse;
+						parse = NULL;
+					}
 					else
 					{
 						if (expression->size() == 0 && !parseList.empty() && parseList.back() == expression)
@@ -3637,6 +3550,23 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 					parseList.pop_back();
 					delete expression;
 				}
+				else
+				{
+					// Expression already has content — finalise it before the }.
+					finalise(expression);
+				}
+				if (!_macroParseStack.empty() && _macroParseStack.back()->isBlock())
+				{
+					// Inside a macro body: keep } as a raw ParseSymbol in parseList
+					// so _runDataList → _runParse handles it as EndBlock
+					// (calls addEndBlock / _emitWhileReEval). Do NOT wrap in an expression.
+					parseList.push_back(parse);
+					parse = NULL;
+					expression = NULL;
+					previous = sym;
+					continue;
+				}
+				// Outside macro: create a fresh empty expression as before.
 				expression = new ParseExpression(parse->line());
 				parseList.push_back(expression);
 			}
@@ -3912,6 +3842,7 @@ bool CScriptParser::_parseExpressions(const std::vector<const BaseParse*>& origi
 			const_cast<BaseParse*>(*itr)->simplify();
 	}
 
+
 	return !error;
 }
 
@@ -3943,6 +3874,7 @@ BaseParse* CScriptParser::checkStatus(ParseStatus oldStatus, ParseStatus newStat
 		{
 		case ParseStatus::KeyWord:
 			parse = new ParseKeyword(line, str);
+			parse->setData(str); // data() must return the keyword, not the source line
 			break;
 		case ParseStatus::End: // end should be a single symbol, ie ;
 		case ParseStatus::Symbol:
@@ -4219,92 +4151,6 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 	if (_isInComment)
 		status = ParseStatus::Comment;
 
-	// ── Macro body capture ────────────────────────────────────────────────────
-	if (!_macroStack.empty())
-	{
-		MacroCallState& state = _macroStack.back();
-
-		if (!state.inBody)
-		{
-			// Waiting for the opening brace
-			std::wstring trimmed = line;
-			size_t first = trimmed.find_first_not_of(L" \t");
-			if (first != std::wstring::npos && trimmed[first] == L'{')
-			{
-				state.inBody = true;
-				state.depth = 1;
-				// If there's content after the { on the same line, buffer it
-				std::wstring rest = trimmed.substr(first + 1);
-				size_t rFirst = rest.find_first_not_of(L" \t");
-				if (rFirst != std::wstring::npos)
-				{
-					// Check if this single line also closes the block
-					for (wchar_t c : rest)
-					{
-						if (c == L'{') state.depth++;
-						else if (c == L'}') state.depth--;
-					}
-					if (state.depth <= 0)
-					{
-						// Single-line body
-						std::wstring bodyLine = rest.substr(0, rest.find_last_not_of(L" \t}") + 1);
-						if (!bodyLine.empty())
-							state.body.push_back(bodyLine);
-						const MacroData* macro = state.macro;
-						std::vector<std::wstring> args = state.args;
-						std::vector<const BaseParse*> argNodes = state.argNodes;
-						std::vector<std::wstring> body = state.body;
-						size_t mLinePos = state.linePos;
-						std::wstring mSourceLine = state.sourceLine;
-						_macroStack.pop_back();
-						return _expandMacro(macro, args, argNodes, body, mLinePos, mSourceLine);
-					}
-					state.body.push_back(rest);
-				}
-				return true;
-			}
-			else if (first != std::wstring::npos)
-			{
-				// No brace — treat the whole line as a single-statement body
-				const MacroData* macro = state.macro;
-				std::vector<std::wstring> args = state.args;
-				std::vector<const BaseParse*> argNodes = state.argNodes;
-				std::vector<std::wstring> body = { trimmed };
-				size_t mLinePos = state.linePos;
-				std::wstring mSourceLine = state.sourceLine;
-				_macroStack.pop_back();
-				return _expandMacro(macro, args, argNodes, body, mLinePos, mSourceLine);
-			}
-			// Empty line — keep waiting
-		}
-		else
-		{
-			// Counting braces to track nesting depth
-			for (wchar_t c : line)
-			{
-				if (c == L'{') state.depth++;
-				else if (c == L'}') state.depth--;
-			}
-
-			if (state.depth <= 0)
-			{
-				// Closing brace reached — expand
-				const MacroData* macro = state.macro;
-				std::vector<std::wstring> args = state.args;
-				std::vector<const BaseParse*> argNodes = state.argNodes;
-				std::vector<std::wstring> body = state.body;
-				size_t mLinePos = state.linePos;
-				std::wstring mSourceLine = state.sourceLine;
-				_macroStack.pop_back();
-				return _expandMacro(macro, args, argNodes, body, mLinePos, mSourceLine);
-			}
-			else
-			{
-				state.body.push_back(line);
-				return true;
-			}
-		}
-	}
 	// with '#' so we can correctly track nested #ifdef / #endif depth.
 	bool inSkippedBlock = !_ifDefStack.empty() && !_ifDefStack.back().active;
 	if (inSkippedBlock)
@@ -4653,7 +4499,7 @@ bool CScriptParser::parseLine(size_t linePos, const std::wstring& line)
 					bool isLoneBlock = (_currentDataList.size() == 1 &&
 						_currentDataList.front()->type() == ParseType::Symbol &&
 						(dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::StartBlock ||
-							dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::EndBlock));
+						 dynamic_cast<const ParseSymbol*>(_currentDataList.front())->symbol() == SymbolType::EndBlock));
 
 					if (!_prePassMode && _inSubDef && !_mainCompleted && !_currentDataList.empty() && !isLoneBlock)
 					{
@@ -4736,6 +4582,7 @@ void CScriptParser::resetForRealPass()
 	_inLineContinuation = false;
 	_continuationText.clear();
 	_macroStack.clear();
+	_macroParseStack.clear();
 	_prePassDepth = 0;
 	_prePassMode = false;
 	_isInComment = false;
@@ -6068,8 +5915,210 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 	return true;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// _parseMacro — runs after parseFunctions in _parseDataList.
+//
+// Two responsibilities, in order:
+//
+//  1) DETECTION (stack empty, or top macro body already open):
+//     Scan `list` for a keyword immediately followed by a Brackets node that
+//     matches a known macro.  If found: extract args, create ParseMacro, push
+//     to stack, then fall through into phase 2 to consume the opening {.
+//     Non-block macros are expanded immediately (no stack push).
+//
+//  2) OPEN BRACE CONSUMPTION (top macro on stack has isBlock()==false):
+//     Scan `list` for the opening {, consume it, set depth=1, move any
+//     trailing items into the macro node, and return true.
+//     If { is not on this list yet, return true (wait for next call).
+//
+// Body accumulation (isBlock()==true) is handled at the TOP of _parseDataList,
+// not here.
+//
+// Returns true  → all items consumed; _parseDataList should return true.
+// Returns false → nothing matched / nothing to do; caller continues normally.
+// ─────────────────────────────────────────────────────────────────────────────
+bool CScriptParser::_parseMacro(std::vector<const BaseParse*>& list)
+{
+	// ── Phase 1: detect macro keyword + brackets in the list ─────────────────
+	// Only run detection when the stack is empty, or the top macro's body is
+	// already open (i.e. we are not just waiting for { from a previous push).
+	if (_macroParseStack.empty() || _macroParseStack.back()->isBlock())
+	{
+		// Walk forward looking for keyword immediately followed by brackets
+		for (size_t i = 0; i + 1 < list.size(); ++i)
+		{
+			if (list[i]->type() != ParseType::Keyword)  continue;
+			if (list[i + 1]->type() != ParseType::Brackets) continue;
+
+			const ParseKeyword* keyword = dynamic_cast<const ParseKeyword*>(list[i]);
+			const MacroData* macro = _data->findMacro(keyword->keyword());
+			if (!macro) continue;
+
+			const ParseBrackets* brackets = dynamic_cast<const ParseBrackets*>(list[i + 1]);
+
+			// ── Extract arguments from brackets ───────────────────────────────
+			std::vector<std::wstring> macroArgs;
+			std::vector<const BaseParse*> macroArgNodes;
+			std::wstring currentArg;
+			std::vector<const BaseParse*> currentArgTokens;
+			int depth = 0;
+			for (const BaseParse* item : brackets->constList())
+			{
+				if (item->type() == ParseType::Symbol)
+				{
+					const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(item);
+					if (sym->symbol() == SymbolType::Comma && depth == 0)
+					{
+						size_t s = currentArg.find_first_not_of(L" \t");
+						size_t e = currentArg.find_last_not_of(L" \t");
+						macroArgs.push_back(s != std::wstring::npos ? currentArg.substr(s, e - s + 1) : L"");
+						macroArgNodes.push_back(currentArgTokens.size() == 1 ? CopyParse(currentArgTokens[0]) : nullptr);
+						currentArg.clear();
+						currentArgTokens.clear();
+						continue;
+					}
+					else if (sym->symbol() == SymbolType::OpenBracket)  depth++;
+					else if (sym->symbol() == SymbolType::CloseBracket) depth--;
+				}
+				currentArg += item->data();
+				currentArgTokens.push_back(item);
+			}
+			// Last arg
+			{
+				size_t s = currentArg.find_first_not_of(L" \t");
+				size_t e = currentArg.find_last_not_of(L" \t");
+				if (s != std::wstring::npos)
+					macroArgs.push_back(currentArg.substr(s, e - s + 1));
+				macroArgNodes.push_back(currentArgTokens.size() == 1 ? CopyParse(currentArgTokens[0]) : nullptr);
+			}
+
+			size_t macroLinePos          = keyword->linePos();
+			std::wstring macroSourceLine = keyword->line();
+
+			// Remove keyword + brackets from list; collect everything after them
+			std::vector<const BaseParse*> remainder(list.begin() + i + 2, list.end());
+			list.erase(list.begin() + i, list.end());
+			delete keyword;
+			delete brackets;
+
+			if (!macro->hasBlock)
+			{
+				// Inline (non-block) macro — expand immediately
+				if (!_expandMacro(macro, macroArgs, macroArgNodes, {}, macroLinePos, macroSourceLine))
+					return false;
+				// Put remainder back and let _parseDataList continue
+				list.insert(list.end(), remainder.begin(), remainder.end());
+				return false;
+			}
+
+			// Block macro — create node and push to stack
+			ParseMacro* macroNode = new ParseMacro(
+				macroSourceLine, macro,
+				std::move(macroArgs), std::move(macroArgNodes),
+				macroLinePos);
+
+			_macroParseStack.push_back(macroNode);
+
+			// remainder is the list we now search for {
+			list = std::move(remainder);
+			break; // fall through to phase 2
+		}
+	}
+
+	// ── Phase 2: consume the opening { for the top macro (isBlock()==false) ──
+	if (_macroParseStack.empty() || _macroParseStack.back()->isBlock())
+		return false; // nothing pushed, or body already open
+
+	ParseMacro* macroNode = _macroParseStack.back();
+
+	for (auto it = list.begin(); it != list.end(); )
+	{
+		const BaseParse* p = *it;
+		if (p->type() == ParseType::Symbol &&
+			dynamic_cast<const ParseSymbol*>(p)->symbol() == SymbolType::StartBlock)
+		{
+			// Consume the { — body opener, not a body item.
+			// The depth scan in _parseDataList already incremented _functionDefDepth
+			// and _subDefDepth for this {; undo that since _expandMacro's StartBlock
+			// case will emit its own { which _runParse will count.
+			delete p;
+			it = list.erase(it);
+			macroNode->setBlock(true);
+			macroNode->setDepth(1);
+			if (_functionDefDepth > 1) _functionDefDepth--;
+			if (_subDefDepth > 1)      _subDefDepth--;
+			// Leave remaining items in list so the caller (_parseDataList) can
+			// process them through the normal pipeline then append to the macro node.
+			list = std::vector<const BaseParse*>(it, list.end());
+			return false; // signal caller: { consumed, remainder still in list
+		}
+		// Items before { go into the node
+		macroNode->addItem(p);
+		it = list.erase(it);
+	}
+
+	// { not on this list — will arrive on the next _parseDataList call
+	return true;
+}
+
 bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 {
+	// Track whether the depth-drain ran for this call (it runs when isBlock() is true
+	// at the drain site — line ~6039).  Used below to avoid double-counting {/}.
+	bool macroDepthDrainRan = false;
+
+	// If a macro is waiting for its opening {, try to consume it now.
+	// This handles the case where { arrives on its own line after the macro keyword.
+	if (!_macroParseStack.empty() && !_macroParseStack.back()->isBlock())
+	{
+		if (_parseMacro(list))
+			return true; // still waiting for { (e.g. empty line)
+		// _parseMacro found { and set isBlock()==true; list now contains any
+		// same-line remainder — fall through to the body drain below.
+	}
+
+	// If we are already inside an open macro body, strip depth-tracking symbols
+	// from the list so the normal pipeline below sees only real statement items.
+	// We track depth here; when depth hits 0 the body is complete.
+	bool _macroDone = false;
+	if (!_macroParseStack.empty() && _macroParseStack.back()->isBlock())
+	{
+		macroDepthDrainRan = true;
+		ParseMacro* macroNode = _macroParseStack.back();
+		for (auto it = list.begin(); it != list.end(); )
+		{
+			const BaseParse* p = *it;
+			if (p->type() == ParseType::Symbol)
+			{
+				const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(p);
+				if (sym->symbol() == SymbolType::StartBlock)
+				{
+					macroNode->setDepth(macroNode->depth() + 1);
+					// Keep { in list so inner blocks parse correctly
+					++it;
+					continue;
+				}
+				else if (sym->symbol() == SymbolType::EndBlock)
+				{
+					macroNode->setDepth(macroNode->depth() - 1);
+					if (macroNode->depth() <= 0)
+					{
+						it = list.erase(it); // consume the closing }
+						_macroDone = true;
+						break;
+					}
+					// Inner } — keep it in list
+					++it;
+					continue;
+				}
+			}
+			++it;
+		}
+		// If body not yet complete and nothing left, return — more lines to come.
+		if (!_macroDone && list.empty())
+			return true;
+	}
+
 	// replace the entries with brackets
 	if (!parseListBrackets(list))
 		return false;
@@ -6145,10 +6194,6 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		_currentUserFunction.clear();
 
 	// ── Function definition / outside-function enforcement ────────────────────
-	// Capture depth before any brace scanning so we can restore if a macro consumes the {
-	int subDepthBeforeScan = _subDefDepth;
-	int funcDepthBeforeScan = _functionDefDepth;
-
 	// By here: brackets are grouped, $variables are ParseVariable, constants resolved.
 	if (!list.empty())
 	{
@@ -6304,7 +6349,8 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		// sub/function body. Must run AFTER header detection so _subDefDepth
 		// is already set to 1 (body level). Captures depth before updating
 		// so the sub-close check can distinguish a nested } from the real one.
-		subDepthBeforeScan = _subDefDepth;
+		// Skip during macro expansion — macro { } are while/if blocks, not function depth.
+		int subDepthBeforeScan = _subDefDepth;
 		if (_inSubDef && _subDefDepth > 0 && !list.empty())
 		{
 			for (const BaseParse* p : list)
@@ -6320,7 +6366,7 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		}
 
 		// Same depth tracking for function main's body
-		funcDepthBeforeScan = _functionDefDepth;
+		int funcDepthBeforeScan = _functionDefDepth;
 		if (_inFunctionDef && _functionDefDepth > 0 && !list.empty())
 		{
 			for (const BaseParse* p : list)
@@ -6343,6 +6389,7 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		// identified even though the scan may have already decremented _subDefDepth.
 		// Keep _conditionStack.empty() as an additional guard for non-deferred bodies.
 		if (_inSubDef && subDepthBeforeScan == 1 &&
+			_macroParseStack.empty() &&
 			list.size() == 1 &&
 			list.front()->type() == ParseType::Symbol &&
 			dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::EndBlock &&
@@ -6386,7 +6433,10 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 
 		// Detect the function's closing } — it's a lone EndBlock when no
 		// while/if blocks are open (_conditionStack is empty) and no sub is open.
+		// Skip this check while inside a macro body — the } belongs to an inner
+		// block (if/while) inside the macro, not to the function itself.
 		if (_inFunctionDef && funcDepthBeforeScan == 1 && !_inSubDef &&
+			_macroParseStack.empty() &&
 			list.size() == 1 &&
 			list.front()->type() == ParseType::Symbol &&
 			dynamic_cast<const ParseSymbol*>(list.front())->symbol() == SymbolType::EndBlock &&
@@ -6463,7 +6513,7 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 	if (!_parseCompoundAssignment(list))
 		return false;
 
-	// find all properties		
+	// find all properties
 	{
 		std::vector<const BaseParse*> originalList(list);
 		list.clear();
@@ -6471,24 +6521,44 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			return false;
 	}
 
-	// find all function calls
+	// find all function calls (also detects macro keywords and pushes ParseMacro)
 	{
 		std::vector<const BaseParse*> originalList(list);
 		list.clear();
 		if (!parseFunctions(originalList, list))
 			return false;
+	}
 
-		// If parseFunctions detected a block macro, the { that was in the
-		// accumulated list has been consumed by the macro. Undo the depth
-		// increment that the scan above applied for that {, so the depth
-		// counters stay consistent — the macro manages its own { } via
-		// _expandMacro's parseLine calls.
-		if (!_macroStack.empty() && _macroStack.back().inBody)
+	// After parseFunctions: if a macro was just pushed (isBlock()==false),
+	// consume its opening { and mark the body as open. Any remaining same-line
+	// items stay in list and fall through to the normal pipeline below; the
+	// tail of this function will then append them to the macro node.
+	if (_parseMacro(list))
+		return true;
+
+	// If _parseMacro just opened a macro body (isBlock()==true) during THIS call,
+	// scan the remainder of list for raw { and } symbols and update macroNode->depth().
+	// This is necessary when the macro keyword, its opening {, and inner body content
+	// (including nested { and }) all arrive in the same parseLine batch — the drain
+	// at the top of this function was skipped (isBlock was false at entry), so any
+	// inner { from e.g. "while(...) {" inside the body would not have been counted,
+	// causing the next } to prematurely set depth to 0 and trigger _macroDone early.
+	// Guard: only run when the depth-drain did NOT run for this call.
+	// If the drain ran, it already counted {/} so we must not count them again.
+	if (!macroDepthDrainRan && !_macroParseStack.empty() && _macroParseStack.back()->isBlock())
+	{
+		ParseMacro* macroNode = _macroParseStack.back();
+		int depthBefore = macroNode->depth();
+		for (const BaseParse* p : list)
 		{
-			if (_functionDefDepth > funcDepthBeforeScan)
-				_functionDefDepth = funcDepthBeforeScan;
-			if (_subDefDepth > subDepthBeforeScan)
-				_subDefDepth = subDepthBeforeScan;
+			if (p->type() == ParseType::Symbol)
+			{
+				const ParseSymbol* sym = dynamic_cast<const ParseSymbol*>(p);
+				if (sym->symbol() == SymbolType::StartBlock)
+					macroNode->setDepth(macroNode->depth() + 1);
+				else if (sym->symbol() == SymbolType::EndBlock)
+					macroNode->setDepth(macroNode->depth() - 1);
+			}
 		}
 	}
 
@@ -6532,11 +6602,32 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		list.clear();
 		if (!_parseExpressions(originalList, list))
 			return false;
+
 	}
 
 	// check for expression errors
 	if (!_checkExpressionValidity(list, true))
 		return false;
+
+	// If we are (or were) inside a macro body, append this line's parsed items
+	// to the macro node, then expand if the body just completed.
+	if (_macroDone || (!_macroParseStack.empty() && _macroParseStack.back()->isBlock()))
+	{
+		ParseMacro* macroNode = _macroParseStack.back();
+		for (auto* item : list)
+			macroNode->addItem(item);
+		list.clear();
+
+		if (_macroDone)
+		{
+			_macroParseStack.pop_back();
+			macroNode->setBodyComplete(true);
+			if (!_expandMacro(macroNode->macro(), macroNode->args(),
+				macroNode->argNodes(), {}, macroNode->macroLinePos(), macroNode->line(), macroNode))
+				return false;
+		}
+		return true;
+	}
 
 	return true;
 }
@@ -6736,9 +6827,10 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 	}
 	else if (!_prePassMode && !expression->condition() && !list.empty())
 	{
-		// else if: the condition may be on the first function in the list rather
+		// else/elseif: the condition may be on the first function in the list rather
 		// than directly on the expression (set by parseFunctions line 2514).
-		// Push the condition stack so inline functions know they're inside else-if.
+		// Push the condition stack so EndBlock knows to pop an else/elseif entry.
+		// The actual else/elseif command is emitted by _runFunction in the loop below.
 		if (list.front()->type() == ParseType::Function)
 		{
 			const ParseFunction* fn = dynamic_cast<const ParseFunction*>(list.front());
@@ -6803,7 +6895,18 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 			}
 		}
 
-		if (parse->type() == ParseType::Expression)
+
+		if (parse->type() == ParseType::Macro)
+		{
+			const ParseMacro* macroNode = dynamic_cast<const ParseMacro*>(parse);
+			if (!macroNode->items().empty())
+			{
+				if (!_runDataList(macroNode->items(), topLevel))
+					return false;
+			}
+			return true;
+		}
+		else if (parse->type() == ParseType::Expression)
 		{
 			if (!_runExpressionList(dynamic_cast<const ParseExpression*>(parse), false, previousExpr, isInCondition))
 				return false;
@@ -7007,17 +7110,20 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		Conditions condType = cond->condition();
 		bool isWhile = (condType == Conditions::While || condType == Conditions::WhileNot);
 
-		// Capture function count before so we can identify post-run entries after flush
-		size_t funcCountBefore = isWhile ? _currentScript->functionCount() : 0;
-
 		_currentScript->addNewExpression(cond);
 
-		// After addNewExpression, any pending post-run has been flushed into _functions.
-		// Store the index range so _emitWhileReEval can duplicate them before continue/}.
+		// After addNewExpression, the while command is the last function added.
+		// Any pending end-block was flushed first by addNewExpression, so we must
+		// capture the count AFTER the call — the while command itself is at [count-1].
+		// postRunStart is count (one past the while command); functions added between
+		// here and the end of expression items are the flushed post-run entries.
 		if (isWhile && !_conditionStack.empty() &&
 			_conditionStack.back().type == ConditionType::While)
 		{
-			size_t postRunStart = funcCountBefore + 1;
+			size_t postRunStart = _currentScript->functionCount(); // one past the while cmd
+			// Run expression items first so any post-run flush happens
+			for (auto itr = expression->list().begin(); itr != expression->list().end(); itr++)
+				_addExpressionItem(*itr);
 			size_t funcCountAfter = _currentScript->functionCount();
 			if (postRunStart < funcCountAfter)
 			{
@@ -7026,9 +7132,12 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 			}
 		}
 
-		// Run expression items
-		for (auto itr = expression->list().begin(); itr != expression->list().end(); itr++)
-			_addExpressionItem(*itr);
+		// Run expression items (already run above for while loops that need post-run tracking)
+		if (!(isWhile && !_conditionStack.empty() && _conditionStack.back().type == ConditionType::While))
+		{
+			for (auto itr = expression->list().begin(); itr != expression->list().end(); itr++)
+				_addExpressionItem(*itr);
+		}
 
 		if (addEndBlock)
 		{
@@ -7295,6 +7404,18 @@ bool CScriptParser::_runDataList(const std::vector<const BaseParse*>& list, bool
 				dynamic_cast<const ParseFunction*>(parse));
 			if (!_runFunction(func, InlineState::Normal))
 				return false;
+		}
+		else if (parse->type() == ParseType::Macro)
+		{
+			// Body items placed here by _expandMacro's BlockCommands case.
+			// The while-loop header was already emitted before this node in _currentDataList,
+			// and the closing } symbol follows after it.
+			const ParseMacro* macroNode = dynamic_cast<const ParseMacro*>(parse);
+			if (!macroNode->items().empty())
+			{
+				if (!_runDataList(macroNode->items(), topLevel))
+					return false;
+			}
 		}
 		else
 		{
@@ -8036,7 +8157,7 @@ bool CScriptParser::_parseUserFunctionDefinition(const std::vector<const BasePar
 			pd = _data->getParDefData(static_cast<ParDef>(9)); // VALUE
 			if (pd)
 			{
-				pardef = pd->id;
+				pardef        = pd->id;
 				paramTypeName = pd->code;
 			}
 			// Don't increment pi — fall through to the variable-reading block below
@@ -8058,7 +8179,7 @@ bool CScriptParser::_parseUserFunctionDefinition(const std::vector<const BasePar
 				pd = _data->findParDefForDataType(dt);
 				if (pd)
 				{
-					pardef = pd->id;
+					pardef        = pd->id;
 					paramTypeName = pd->code;
 				}
 				else
