@@ -2184,7 +2184,7 @@
 				<Argument pardef="VALUE" description="The data"/>
 			</Arguments>
 		</Function>
-		<Function id="156" name="getData"description="Gets a value from local script data storage by key. Returns the stored value or 0 if not set.">
+		<Function id="156" name="getData" description="Gets a value from local script data storage by key. Returns the stored value or 0 if not set.">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_SHIP</RefObjectType>
@@ -3740,7 +3740,6 @@
 				<Argument pardef="VARSECTOR" description="The sector to search from"/>
 				<Argument pardef="STATIONSHIP" description="The reference object"/>
 				<Argument pardef="ARRAYTABLE" description="The exclude array"/>
-				<Argument pardef="WARE" description="The resource ware"/>
 			</Arguments>
 		</Function>
 		<Function id="665" name="isNPCTrade" description="Does station allow trade from NPC's">
@@ -4266,7 +4265,7 @@
 		<Function id="750" name="addProduct" description="Add a product to a station">
 			<Arguments>
 				<RefObject>
-					<ReturnValue>DATATYPE_STATION</ReturnValue>
+					<RefObjectType>DATATYPE_STATION</RefObjectType>
 				</RefObject>
 				<Argument pardef="WARE" description="The product to add"/>
 			</Arguments>
@@ -4274,7 +4273,7 @@
 		<Function id="751" name="addResource" description="Add a resource to a station">
 			<Arguments>
 				<RefObject>
-					<ReturnValue>DATATYPE_STATION</ReturnValue>
+					<RefObjectType>DATATYPE_STATION</RefObjectType>
 				</RefObject>
 				<Argument pardef="WARE" description="The resource to add"/>
 			</Arguments>
@@ -4282,7 +4281,7 @@
 		<Function id="752" name="addSecondaryResource" description="Add secondary resource to station">
 			<Arguments>
 				<RefObject>
-					<ReturnValue>DATATYPE_STATION</ReturnValue>
+					<RefObjectType>DATATYPE_STATION</RefObjectType>
 				</RefObject>
 				<Argument pardef="WARE" description="The resource to add"/>
 			</Arguments>
@@ -13258,14 +13257,15 @@
 			</Arguments>
 			<Example>$ret = menuCloseReturn($selectedValue)</Example>
 		</Function>
-		<Function id="1933" name="stringTrim" description="Trims leading and trailing whitespace from a string and returns the result.">
+		<Function id="1933" name="stringTrim" description="Shortens the string with '...' so that it fits the given width in pixels in the HUD font (the game's CheckString). Returns the string unchanged if it already fits.">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_STRING</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="11" description="String to trim"/>
+				<Argument pardef="11" description="String to shorten"/>
+				<Argument pardef="NUMBER" description="Maximum width in pixels"/>
 			</Arguments>
-			<Example>$trimmed = stringTrim("  hello  ")</Example>
+			<Example>$short = stringTrim($text, 200)</Example>
 		</Function>
 		<Function id="1934" name="menuWidth" description="Creates a menu width specification value of the specified pixel width.">
 			<Arguments>
@@ -17355,7 +17355,7 @@
 			</Arguments>
 			<Example>$str = stringCombineArray($parts, ", ")</Example>
 		</Function>
-		<Function id="2348" name="getSectorProducts" description="Gets an array of wares produced by stations in this sector. Pass true to include all wares, false for tradeable products only.">
+		<Function id="2348" name="getSectorProducts" description="Gets an array of the wares produced by the stations in this sector.">
 			<Arguments>
 				<RefObject>
 					<RefObjectType>DATATYPE_SECTOR</RefObjectType>
@@ -17363,9 +17363,10 @@
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_ARRAY</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="VARBOOLEAN" description="True for all products, false for tradeable only"/>
+				<Argument pardef="VARBOOLEAN" description="True to include the player's own stations"/>
+				<Argument pardef="VARBOOLEAN" description="True to skip stations the player does not know"/>
 			</Arguments>
-			<Example>$products = $sector->sectorGetProducts(false)</Example>
+			<Example>$products = $sector->sectorGetProducts(false, true)</Example>
 		</Function>
 		<Function id="2349" name="getSectorResources" description="Gets an array of wares consumed as resources by stations in this sector.">
 			<Arguments>
@@ -17421,25 +17422,27 @@
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="11" description="Hotkey display name string"/>
-				<Argument pardef="NUMBER" description="Primary key code"/>
-				<Argument pardef="NUMBER" description="Modifier key flags"/>
-				<Argument pardef="NUMBER" description="Hotkey flags"/>
+				<Argument pardef="11" description="Name of the script the hotkey calls"/>
+				<Argument pardef="NUMBER" description="Value stored with the hotkey"/>
+				<Argument pardef="NUMBER" description="Default key"/>
+				<Argument pardef="NUMBER" description="Text ID of the hotkey name"/>
+				<Argument pardef="NUMBER" description="Hotkey ID to reuse (1536 or above), 0 for a new one"/>
 			</Arguments>
-			<Example>$handle = hotkeyRegisterEventString("My Hotkey", 70, 0, 0)</Example>
+			<Example>$handle = hotkeyRegisterEventString("plugin.myhotkey", 0, 0, 1000, 0)</Example>
 		</Function>
 		<Function id="2354" name="hotkeyRegisterMenuString" description="Registers a hotkey by display name string that opens a menu. Returns the hotkey handle.">
 			<Arguments>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="11" description="Menu script display name string"/>
-				<Argument pardef="NUMBER" description="Primary key code"/>
-				<Argument pardef="NUMBER" description="Modifier key flags"/>
-				<Argument pardef="NUMBER" description="Hotkey flags"/>
-				<Argument pardef="VARBOOLEAN" description="True to show in hotkey list"/>
+				<Argument pardef="11" description="Name of the menu script the hotkey calls"/>
+				<Argument pardef="NUMBER" description="Value stored with the hotkey"/>
+				<Argument pardef="NUMBER" description="Default key"/>
+				<Argument pardef="NUMBER" description="Text ID of the hotkey name"/>
+				<Argument pardef="VARBOOLEAN" description="Hotkey context: true for context 1022, false for context 2"/>
+				<Argument pardef="NUMBER" description="Hotkey ID to reuse (1536 or above), 0 for a new one"/>
 			</Arguments>
-			<Example>$handle = hotkeyRegisterMenuString("My Menu", 70, 0, 0, true)</Example>
+			<Example>$handle = hotkeyRegisterMenuString("plugin.mymenu", 0, 0, 1000, false, 0)</Example>
 		</Function>
 		<Function id="2355" name="propertyAdd" description="Registers a new custom property group with the specified name. Returns the property group ID.">
 			<Arguments>
@@ -17882,8 +17885,10 @@
 				<Argument pardef="NUMBER" description="Turret slot index"/>
 				<Argument pardef="VALUE" description="Command parameter 1"/>
 				<Argument pardef="VALUE" description="Command parameter 2"/>
+				<Argument pardef="VALUE" description="Command parameter 3"/>
+				<Argument pardef="VALUE" description="Command parameter 4"/>
 			</Arguments>
-			<Example>$ship->shipStartTurretCmd($turretCmd, 0, null, null)</Example>
+			<Example>$ship->shipStartTurretCmd($turretCmd, 0, null, null, null, null)</Example>
 		</Function>
 		<Function id="2398" name="getCommandTask" description="Gets the command task running on the specified task slot of this ship.">
 			<Arguments>
@@ -18078,15 +18083,16 @@
 			</Arguments>
 			<Example>abbrevRemove(1, $value)</Example>
 		</Function>
-		<Function id="2419" name="abbrevAdd" description="Adds a custom abbreviation mapping for the specified ID and value, with text page/ID and priority.">
+		<Function id="2419" name="abbrevAdd" description="Adds a custom abbreviation for the value in the category: a text and a description, each given as text page and text ID (read back by abbrevGetText / abbrevGetDesc).">
 			<Arguments>
 				<Argument pardef="NUMBER" description="Abbreviation category ID"/>
 				<Argument pardef="VALUE" description="Value to map"/>
 				<Argument pardef="NUMBER" description="Text page ID"/>
 				<Argument pardef="NUMBER" description="Text ID"/>
-				<Argument pardef="NUMBER" description="Priority"/>
+				<Argument pardef="NUMBER" description="Description text page ID"/>
+				<Argument pardef="NUMBER" description="Description text ID"/>
 			</Arguments>
-			<Example>abbrevAdd(1, $value, 17, 1000, 10)</Example>
+			<Example>abbrevAdd(1, $value, 17, 1000, 17, 1001)</Example>
 		</Function>
 		<Function id="2420" name="getUsedDockingPorts" description="Gets the number of docking ports currently occupied on this object.">
 			<Arguments>
@@ -19734,10 +19740,11 @@
 				<ReturnValue type="no_if">
 					<ReturnValue>DATATYPE_OBJECT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="39" description="Parameter 1"/>
+				<Argument pardef="39" description="Gate to convert"/>
 				<Argument pardef="NUMBER" description="New gate type ID"/>
-				<Argument pardef="VARBOOLEAN" description="True to convert immediately, false to queue"/>
+				<Argument pardef="VARBOOLEAN" description="True to allow the conversion while the player is in another sector"/>
 				<Argument pardef="21" description="Ship to use for the conversion sequence"/>
+				<Argument pardef="VARBOOLEAN" description="True to convert without closing the player's menus, as if the player were in another sector"/>
 			</Arguments>
 		</Function>
 		<Function id="2594" name="getOxygen" description="Gets the current oxygen level of the ship (used in life support systems).">
@@ -22008,6 +22015,7 @@
 		</Function>
 		<Function id="2854" name="diplomacySetDefaultNotify" description="Enables or disables the default diplomacy completion notification.">
 			<Arguments>
+				<Argument pardef="VARBOOLEAN" description="True to enable the notification"/>
 			</Arguments>
 		</Function>
 		<Function id="2855" name="shipTypeGetClassCode" description="Gets the single-letter class code string for the specified ship type (e.g. M, L).">
@@ -22015,6 +22023,7 @@
 				<ReturnValue type="return">
 					<ReturnValue>5</ReturnValue>
 				</ReturnValue>
+				<Argument pardef="SHIPSTATIONTYPE" description="Ship type"/>
 			</Arguments>
 		</Function>
 		<Function id="2856" name="shipTypeGetClassLongName" description="Gets the full class name string for the specified ship type.">
@@ -22027,26 +22036,36 @@
 		</Function>
 		<Function id="2857" name="godAddExcludeProduct" description="Adds a product ware to the GOD engine exclusion list (will not build stations producing this).">
 			<Arguments>
+				<Argument pardef="WARE" description="Product ware"/>
 			</Arguments>
 		</Function>
 		<Function id="2858" name="godAddExcludeResource" description="Adds a resource ware to the GOD engine exclusion list.">
 			<Arguments>
+				<Argument pardef="WARE" description="Resource ware"/>
 			</Arguments>
 		</Function>
 		<Function id="2859" name="godRemoveExcludeProduct" description="Removes a product ware from the GOD engine exclusion list.">
 			<Arguments>
+				<Argument pardef="WARE" description="Product ware"/>
 			</Arguments>
 		</Function>
 		<Function id="2860" name="godRemoveExcludeResource" description="Removes a resource ware from the GOD engine exclusion list.">
 			<Arguments>
+				<Argument pardef="WARE" description="Resource ware"/>
 			</Arguments>
 		</Function>
-		<Function id="2861" name="godGetExcludeProducts" description="Gets the array of product wares on the GOD engine exclusion list.">
+		<Function id="2861" name="godGetExcludeProducts" description="Gets the table of product wares on the GOD engine exclusion list.">
 			<Arguments>
+				<ReturnValue type="return">
+					<ReturnValue>DATATYPE_TABLE</ReturnValue>
+				</ReturnValue>
 			</Arguments>
 		</Function>
-		<Function id="2862" name="godGetExcludeResources" description="Gets the array of resource wares on the GOD engine exclusion list.">
+		<Function id="2862" name="godGetExcludeResources" description="Gets the table of resource wares on the GOD engine exclusion list.">
 			<Arguments>
+				<ReturnValue type="return">
+					<ReturnValue>DATATYPE_TABLE</ReturnValue>
+				</ReturnValue>
 			</Arguments>
 		</Function>
 		<Function id="2863" name="setWasCaptured" description="Sets or clears the captured flag on this pilot NPC.">
@@ -22070,14 +22089,19 @@
 		</Function>
 		<Function id="2865" name="playerSetHonour" description="Sets the player's honour points directly.">
 			<Arguments>
+				<Argument pardef="NUMBER" description="Honour points"/>
 			</Arguments>
 		</Function>
 		<Function id="2866" name="playerAddHonour" description="Adds honour points to the player's total.">
 			<Arguments>
+				<Argument pardef="NUMBER" description="Honour points to add"/>
 			</Arguments>
 		</Function>
 		<Function id="2867" name="playerGetHonour" description="Gets the player's current honour point total.">
 			<Arguments>
+				<ReturnValue type="return">
+					<ReturnValue>DATATYPE_INT</ReturnValue>
+				</ReturnValue>
 			</Arguments>
 		</Function>
 		<Function id="2868" name="checkWingCmdExtra" description="Returns true if the wing meets extra requirements for the specified wing command.">
@@ -24330,26 +24354,26 @@
 		</Function>
 		<Function id="3163" name="raceIsActive" description="Returns true if the specified race is currently active in the game universe.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3164" name="raceHasEconomy" description="Returns true if the specified race participates in the trade economy.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3165" name="raceIsOrganised" description="Returns true if the specified race is organised (has structured command hierarchy).">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3166" name="raceClearAllThreats" description="Clears all registered threat entries for the specified race.">
@@ -24359,98 +24383,98 @@
 		</Function>
 		<Function id="3167" name="raceIsPiloted" description="Returns true if the specified race has piloted ships.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3168" name="raceIsPirate" description="Returns true if the specified race is classified as a pirate faction.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3169" name="raceCanHaveMarines" description="Returns true if the specified race is allowed to deploy marines.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3170" name="raceIsFixedNoto" description="Returns true if the specified race has a fixed (unchangeable) notoriety level.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3171" name="raceIsXUniverse" description="Returns true if the specified race is a core X-Universe race.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3172" name="raceIsTerran" description="Returns true if the specified race is Terran-aligned.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3173" name="raceIsAggressive" description="Returns true if the specified race has an aggressive combat stance by default.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3174" name="raceIsDefault" description="Returns true if the specified race is a default (hardcoded) race.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3175" name="raceIsSubRace" description="Returns true if the specified race is a sub-race of another.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3176" name="raceIsNPC" description="Returns true if the specified race is an NPC-only race (not player-controllable).">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3177" name="raceIsPlayer" description="Returns true if the specified race is the player corporation race.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3178" name="raceIsNonTalking" description="Returns true if the specified race does not communicate via comm messages.">
 			<Arguments>
+				<Argument pardef="RACE" description="Race to check"/>
 				<ReturnValue type="if">
 					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="RACE" description="Race to check"/>
 			</Arguments>
 		</Function>
 		<Function id="3179" name="godRegisterEvent" description="Registers a script to be called when GOD engine events occur, with a priority value.">
@@ -24930,35 +24954,52 @@
 			</Arguments>
 		</Function>
 		<Function id="3238" name="raceAddFaceID" description="Adds a face ID to the specified race face pool.">
+			<Example>$race->raceAddFaceID($face, true, null)</Example>
 			<Arguments>
-				<Argument pardef="NUMBER" description="Race to add the face to"/>
-				<Argument pardef="VARBOOLEAN" description="Face ID to add"/>
-				<Argument pardef="RACE" description="True for female face pool, false for male"/>
+				<RefObject>
+					<RefObjectType>DATATYPE_RACE</RefObjectType>
+				</RefObject>
+				<Argument pardef="NUMBER" description="Face ID to add"/>
+				<Argument pardef="VARBOOLEAN" description="True for the female face pool, false for male"/>
+				<Argument pardef="RACE" description="Race entry inside the pool (null = this race)"/>
 			</Arguments>
 		</Function>
 		<Function id="3239" name="raceRemoveFaceID" description="Removes a face ID from the specified race face pool.">
+			<Example>$race->raceRemoveFaceID($face, true, null)</Example>
 			<Arguments>
-				<Argument pardef="NUMBER" description="Race to remove the face from"/>
-				<Argument pardef="VARBOOLEAN" description="Face ID to remove"/>
-				<Argument pardef="RACE" description="True for female pool, false for male"/>
+				<RefObject>
+					<RefObjectType>DATATYPE_RACE</RefObjectType>
+				</RefObject>
+				<Argument pardef="NUMBER" description="Face ID to remove"/>
+				<Argument pardef="VARBOOLEAN" description="True for the female face pool, false for male"/>
+				<Argument pardef="RACE" description="Race entry inside the pool (null = this race)"/>
 			</Arguments>
 		</Function>
 		<Function id="3240" name="raceGetFaces" description="Gets an array of all face IDs in the specified race face pool.">
+			<Example>$faces = $race->raceGetFaces(true, null)</Example>
 			<Arguments>
+				<RefObject>
+					<RefObjectType>DATATYPE_RACE</RefObjectType>
+				</RefObject>
 				<ReturnValue type="return">
 					<ReturnValue>DATATYPE_ARRAY</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="VARBOOLEAN" description="Race to query"/>
-				<Argument pardef="RACE" description="True for female pool, false for male"/>
+				<Argument pardef="VARBOOLEAN" description="True for the female face pool, false for male"/>
+				<Argument pardef="RACE" description="Race entry inside the pool (null = this race)"/>
 			</Arguments>
 		</Function>
 		<Function id="3241" name="raceGetFaceByID" description="Gets the face data for the specified face ID in the race face pool.">
+			<Example>$face = $race->raceGetFaceByID($index, true, null)</Example>
 			<Arguments>
+				<RefObject>
+					<RefObjectType>DATATYPE_RACE</RefObjectType>
+				</RefObject>
 				<ReturnValue type="return">
+					<ReturnValue>DATATYPE_INT</ReturnValue>
 				</ReturnValue>
-				<Argument pardef="NUMBER" description="Race to query"/>
-				<Argument pardef="VARBOOLEAN" description="Face ID to look up"/>
-				<Argument pardef="RACE" description="True for female pool, false for male"/>
+				<Argument pardef="NUMBER" description="Face index (taken modulo the pool size)"/>
+				<Argument pardef="VARBOOLEAN" description="True for the female face pool, false for male"/>
+				<Argument pardef="RACE" description="Race entry inside the pool (null = this race)"/>
 			</Arguments>
 		</Function>
 		<Function id="3242" name="mathBitShiftLeft" description="Left-shifts the first integer by the specified number of bit positions.">
@@ -25884,7 +25925,7 @@
 			</Arguments>
 			<Routine>
 				<Expression value="%ARG1%_counter = 0"/>
-				<Expression value="while(%ARG1%_counter < $0)">
+				<Expression value="while(%ARG1%_counter &lt; $0)">
 					<FunctionArgument id="131">
 						<PassedArgument pos="1"/>
 					</FunctionArgument>					
