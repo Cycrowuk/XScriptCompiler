@@ -12,11 +12,21 @@
 
 static SPK::CVirtualFileSystem* s_vfs = nullptr;
 static std::set<int> s_loadedTextPages; // track which text pages have been loaded
+static std::wstring s_tempDir; // custom temp directory (empty = use CPackages default)
+
+void VFSHelper_SetTempDir(const wchar_t* tempDir)
+{
+	s_tempDir = tempDir ? tempDir : L"";
+}
 
 void VFSHelper_SetDir(const wchar_t* dir, const wchar_t* mod)
 {
 	if (!s_vfs)
 		s_vfs = new SPK::CVirtualFileSystem();
+
+	// Apply custom temp dir before loading so all extractions go there
+	if (!s_tempDir.empty())
+		s_vfs->setTempDir(Utils::WString(s_tempDir.c_str()));
 
 	if (s_vfs->LoadFilesystem(Utils::WString(dir)))
 	{

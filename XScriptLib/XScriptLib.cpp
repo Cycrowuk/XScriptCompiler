@@ -28,6 +28,12 @@ CScriptData* g_scriptData;
 
 void setGameDir(const std::wstring& dir, const std::wstring& mod)
 {
+	// Route all VFS temp extractions to the system temp directory so no
+	// files are left behind in the working directory after builddata.
+	wchar_t tempDir[MAX_PATH];
+	if (GetTempPathW(MAX_PATH, tempDir) > 0)
+		VFSHelper_SetTempDir(tempDir);
+
 	VFSHelper_SetDir(dir.c_str(), mod.empty() ? nullptr : mod.c_str());
 	std::wcout << L"\tVirtualFileSystem loading from: " << dir << std::endl;
 	if (!mod.empty())
@@ -859,20 +865,20 @@ static bool _parseXmlArguments(const std::wstring& path, CScriptData::ScriptDef&
 	return true;
 }
 
-bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output)
+// ── Internal helper: scan one resolved directory ─────────────────────────────
+// xsNames tracks base names of .xs files seen across ALL directories so that
+// an .xml in a later directory is suppressed when an .xs with the same base
+// name was found in an earlier directory.
+// Returns the number of new script definitions registered.
+static unsigned int _scanOneDir(const std::wstring& workingDir, std::set<std::wstring>& xsNames)
 {
-	if (!g_scriptData)
-		return false;
-
 	std::wstring dir = workingDir.empty() ? L"." : workingDir;
-	// Ensure no trailing backslash issues
 	if (!dir.empty() && dir.back() != L'\\' && dir.back() != L'/')
 		dir += L'\\';
 
 	unsigned int found = 0;
 
 	// ── Step 1: scan .xs files ────────────────────────────────────────────────
-	std::set<std::wstring> xsNames; // base names of .xs files found (for dedup)
 	{
 		std::wstring pattern = dir + L"*.xs";
 		_wfinddata_t fd;
@@ -882,7 +888,6 @@ bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output)
 			do
 			{
 				std::wstring fname(fd.name);
-				// Strip .xs extension to get the base script name
 				std::wstring baseName = fname.substr(0, fname.size() - 3);
 				xsNames.insert(baseName);
 
@@ -899,7 +904,7 @@ bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output)
 		}
 	}
 
-	// ── Step 2: scan .xml files where no .xs exists ───────────────────────────
+	// ── Step 2: scan .xml files where no .xs exists (in any dir so far) ───────
 	{
 		std::wstring pattern = dir + L"*.xml";
 		_wfinddata_t fd;
@@ -909,14 +914,12 @@ bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output)
 			do
 			{
 				std::wstring fname(fd.name);
-				// Strip .xml extension
 				std::wstring baseName = fname.substr(0, fname.size() - 4);
-				// Skip if we already have a .xs version
+				// Skip if any directory already provided a .xs for this name
 				if (xsNames.find(baseName) != xsNames.end()) continue;
 
 				CScriptData::ScriptDef def;
 				def.name = baseName;
-				// .xml-only: no return type available
 
 				if (_parseXmlArguments(dir + fname, def) && !def.args.empty())
 				{
@@ -928,10 +931,41 @@ bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output)
 		}
 	}
 
+	return found;
+}
+
+bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output)
+{
+	if (!g_scriptData)
+		return false;
+
+	std::set<std::wstring> xsNames;
+	unsigned int found = _scanOneDir(workingDir, xsNames);
+
 	std::cout << "\tRegistered " << found << " script definition(s)" << std::endl;
 
 	// Re-save the .dat with the new SCRIPTS section — skipped when output is
 	// empty, which signals memory-only mode (e.g. during compile).
+	if (output.empty())
+		return true;
+	return g_scriptData->saveData(output);
+}
+
+bool scanScriptFiles(const std::vector<std::wstring>& dirs, const std::wstring& output)
+{
+	if (!g_scriptData)
+		return false;
+
+	// xsNames is shared across all directories so .xs found in any dir
+	// suppresses an .xml of the same base name in any other dir.
+	std::set<std::wstring> xsNames;
+	unsigned int found = 0;
+
+	for (const auto& dir : dirs)
+		found += _scanOneDir(dir, xsNames);
+
+	std::cout << "\tRegistered " << found << " script definition(s)" << std::endl;
+
 	if (output.empty())
 		return true;
 	return g_scriptData->saveData(output);

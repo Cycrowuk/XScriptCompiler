@@ -6,6 +6,9 @@
 
 void         VFSHelper_SetDir(const wchar_t* dir, const wchar_t* mod = nullptr);
 void         VFSHelper_SetAddon(const wchar_t* addon); // set the addon subdirectory (e.g. "addon2")
+// Set the directory used for temporary extracted files (must exist; trailing separator optional).
+// Call before VFSHelper_SetDir. Defaults to CPackages::tempDirectory() if not set.
+void         VFSHelper_SetTempDir(const wchar_t* tempDir);
 bool         VFSHelper_IsLoaded();
 std::wstring VFSHelper_ExtractFile(const wchar_t* vfsPath, const wchar_t* tempPath);
 std::wstring VFSHelper_FindText(int lang, int page, int id);

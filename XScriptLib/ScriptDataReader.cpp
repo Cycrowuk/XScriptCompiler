@@ -8,6 +8,7 @@
 
 #include <sstream>
 #include <io.h>
+#include <windows.h>
 
 using namespace XScript;
 
@@ -1093,8 +1094,15 @@ bool ScriptDataReader::_extractTypesFile(const std::wstring& file, std::vector<s
 		if (slash != std::wstring::npos)
 			baseName = file.substr(slash + 1);
 
+		// Place the temp file in the system temp directory so it never
+		// lingers in the working directory if the process is interrupted.
+		wchar_t tempDir[MAX_PATH];
+		DWORD tempDirLen = GetTempPathW(MAX_PATH, tempDir);
+		if (tempDirLen == 0 || tempDirLen >= MAX_PATH)
+			tempDir[0] = L'\0'; // fall back to current directory on failure
+
 		std::wstring vfsPath = L"types\\" + baseName;
-		tempFile = L"_temp_types_" + baseName;
+		tempFile = std::wstring(tempDir) + L"xscript_types_" + baseName;
 		std::wstring extracted = vfsExtractFile(vfsPath, tempFile);
 		if (!extracted.empty())
 			actualPath = extracted;

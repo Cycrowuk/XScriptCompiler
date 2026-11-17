@@ -35,7 +35,14 @@ std::wstring vfsFindText(int lang, int page, int id);
 // Scan a directory for .xs and .xml script files, extract argument/return type
 // information from their function main() headers, and register the results in
 // the loaded data, then re-save the .dat file. Call AFTER loadXmlData.
+// Pass an empty workingDir to scan the current directory.
 bool scanScriptFiles(const std::wstring& workingDir, const std::wstring& output);
+
+// Scan multiple directories. Include an empty string to scan the current directory.
+// Script names are deduplicated across all directories (.xs takes priority over .xml
+// with the same base name, regardless of which directory each came from).
+// The .dat is re-saved once after all directories are scanned.
+bool scanScriptFiles(const std::vector<std::wstring>& dirs, const std::wstring& output);
 
 bool exportUDL(const std::wstring& udlFile, const std::wstring& autoFile);
 bool exportUDL(const std::string& udlFile, const std::string& autoFile);

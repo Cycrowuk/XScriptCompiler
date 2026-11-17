@@ -19,6 +19,7 @@ int main(int argc, char *argv[])
     std::cout << std::endl;
 
     std::map<std::string, std::string> commands;
+    std::vector<std::string> workingDirs; // collected separately — --working may appear multiple times
 
     std::string currentCmd;
     std::stringstream currentRest;
@@ -29,7 +30,17 @@ int main(int argc, char *argv[])
         if (str.substr(0, 2) == "--")
         {
             if (!currentCmd.empty())
-                commands[currentCmd] = currentRest.str();
+            {
+                // Flush previous command — multi-value flag handled separately
+                if (currentCmd == "working")
+                {
+                    std::string val = currentRest.str();
+                    if (!val.empty())
+                        workingDirs.push_back(val);
+                }
+                else
+                    commands[currentCmd] = currentRest.str();
+            }
             currentCmd = str.substr(2);
             currentRest.str(std::string());
         }
@@ -47,7 +58,16 @@ int main(int argc, char *argv[])
     }
 
     if (!currentCmd.empty())
-        commands[currentCmd] = currentRest.str();
+    {
+        if (currentCmd == "working")
+        {
+            std::string val = currentRest.str();
+            if (!val.empty())
+                workingDirs.push_back(val);
+        }
+        else
+            commands[currentCmd] = currentRest.str();
+    }
 
     std::string exe = argv[0];
     auto pos = exe.find_last_of('\\');
@@ -73,8 +93,8 @@ int main(int argc, char *argv[])
         std::cout << "\t\t - Loads game data from the installation directory with a mod applied" << std::endl;
         std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat> --scan_scripts" << std::endl;
         std::cout << "\t\t - Builds data file and scans script files for argument/return type definitions" << std::endl;
-        std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat> --scan_scripts --working <dir>" << std::endl;
-        std::cout << "\t\t - Scans for scripts in the specified directory (default: current directory)" << std::endl;
+        std::cout << "\t" << exe << " --builddata <game.xml> --out <data.dat> --scan_scripts --working <dir> [--working <dir2> ...]" << std::endl;
+        std::cout << "\t\t - Also scans each specified directory (current directory always included with --scan_scripts)" << std::endl;
         std::cout << "\t" << exe << " --load_data <datafile> --exportudl" << std::endl;
         std::cout << "\t\t - Exports notepad++ User Defined Language file" << std::endl;
         return 0;
@@ -98,7 +118,7 @@ int main(int argc, char *argv[])
         std::string output;
         std::string file;
         std::string data = "default_data.dat";
-        std::string workingDir; // --working: directory to scan for .xs files
+        // workingDirs collected above from --working (may appear multiple times)
         std::string gameDir;    // --gamedir: X3 game installation directory
         std::string gameMod;    // --gamemod: mod to load into the VFS
         bool scanScripts = false; // --scan_scripts: enable script file scanning in builddata
@@ -113,8 +133,6 @@ int main(int argc, char *argv[])
                 data = itr->second;
             else if (itr->first == "out")
                 output = itr->second;
-            else if (itr->first == "working")
-                workingDir = itr->second;
             else if (itr->first == "gamedir")
                 gameDir = itr->second;
             else if (itr->first == "gamemod")
@@ -271,20 +289,24 @@ int main(int argc, char *argv[])
             std::cout << "\tData file: " << output << " has been written" << std::endl;
 
             // Scan script files for argument/return type information
-            // Only runs when --scan_scripts is specified
+            // Only runs when --scan_scripts is specified.
+            // Always includes the current directory; --working adds extra directories.
             if (scanScripts)
             {
-                std::wstring scanDir = workingDir.empty()
-                    ? L""
-                    : std::wstring(workingDir.begin(), workingDir.end());
+                // Build the directory list: current dir (L"") first, then each --working dir
+                std::vector<std::wstring> scanDirs;
+                scanDirs.push_back(L""); // current directory
+                for (const auto& d : workingDirs)
+                    scanDirs.push_back(std::wstring(d.begin(), d.end()));
+
                 std::wstring woutput(output.begin(), output.end());
 
-                std::cout << "Scanning script files";
-                if (!workingDir.empty())
-                    std::cout << " in: " << workingDir;
+                std::cout << "Scanning script files in: current directory";
+                for (const auto& d : workingDirs)
+                    std::cout << ", " << d;
                 std::cout << "..." << std::endl;
 
-                if (!scanScriptFiles(scanDir, woutput))
+                if (!scanScriptFiles(scanDirs, woutput))
                     std::cout << "\tWarning: script scan failed or no scripts found." << std::endl;
                 else
                     std::cout << "\tScript definitions written to: " << output << std::endl;
