@@ -283,6 +283,7 @@ function main(VARSECTOR $sector, SHIP $ship)
     $shipList[1] = PLAYERSHIP;
     $shipList[2] = PLAYERSHIP;
 
+
     foreach($currentShip, $shipList)
     {
         $count += 1;
@@ -290,7 +291,7 @@ function main(VARSECTOR $sector, SHIP $ship)
 
     // Nested foreach loops
     $itemList[0] = 1;
-    $itemList[1] = 2;
+    $itemList[1] = 2;	
     foreach($currentItem, $itemList)
     {
         foreach($currentShip, $shipList)

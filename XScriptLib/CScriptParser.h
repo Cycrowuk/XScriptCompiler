@@ -261,7 +261,7 @@ namespace XScript {
 		void removeCurrentFile();
 		void addDefine(const std::wstring& name); // add a pre-defined symbol (e.g. from command line)
 		bool includeFile(const std::wstring& filename); // process an #include file inline
-		bool _expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine, const ParseMacro* macroNode = nullptr);
+		bool _expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine, const ParseMacro* macroNode = nullptr, bool nestedDeferred = false);
 		const BaseParse* _resolveMacroReportNode(const BaseParse* parse) const;
 		bool _parseFunctionDefinition(const std::vector<const BaseParse*>& list, size_t linePos);
 		bool _parseSubDefinition(const std::vector<const BaseParse*>& list, size_t linePos);

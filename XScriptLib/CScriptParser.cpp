@@ -238,9 +238,20 @@ bool CScriptParser::includeFile(const std::wstring& filename)
 	return ok;
 }
 
-bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine, const ParseMacro* macroNode)
+bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::wstring>& args, const std::vector<const BaseParse*>& argNodes, const std::vector<std::wstring>& body, size_t linePos, const std::wstring& sourceLine, const ParseMacro* macroNode, bool nestedDeferred)
 {
-	// Helper: substitute %ARG0%, %ARG1% etc. with the actual argument strings
+	// Helper: substitute %ARG0%, %ARG1% etc. with the actual argument strings.
+	// When %ARGn% is immediately followed by _ in the template (i.e. the arg is
+	// being used as a variable name prefix to build a generated name like
+	// %ARG1%_counter), append _<depth> to the substituted value so nested macro
+	// calls that use the same array argument don't share temp variable names.
+	// Use _macroParseStack depth for parse-time nesting, or _conditionStack depth for
+	// deferred nested execution (where _macroParseStack is empty but the outer while
+	// is already on _conditionStack).  This prevents temp variable name collisions
+	// between outer and inner foreach expansions.
+	const std::wstring depthStr = nestedDeferred
+		? std::to_wstring(_conditionStack.size())
+		: std::to_wstring(_macroParseStack.size());
 	auto substitute = [&](const std::wstring& tmpl) -> std::wstring
 		{
 			std::wstring result = tmpl;
@@ -250,8 +261,13 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 				size_t pos = 0;
 				while ((pos = result.find(placeholder, pos)) != std::wstring::npos)
 				{
-					result.replace(pos, placeholder.size(), args[i]);
-					pos += args[i].size();
+					// If the placeholder is immediately followed by _ it is being used
+					// as a variable name prefix — append _depth to keep it unique.
+					bool isPrefix = (pos + placeholder.size() < result.size() &&
+						result[pos + placeholder.size()] == L'_');
+					std::wstring replacement = args[i] + (isPrefix ? L"_" + depthStr : L"");
+					result.replace(pos, placeholder.size(), replacement);
+					pos += replacement.size();
 				}
 			}
 			return result;
@@ -273,10 +289,38 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 	_macroCallArgNames = args;
 	_macroCallArgNodes = argNodes;
 
-	// Replay each routine line
+	// For top-level (non-nested) macro expansion, the routine emits:
+	//   Expression(funcArgs assign) → Expression(while) → StartBlock({) →
+	//   Expression(inner macro while) → BlockCommands(macroNode) → EndBlock(})
+	//
+	// Each Expression calls parseLine(), which eventually triggers _runDataList
+	// via the ';' flush path in _parseDataList, clearing _currentDataList.
+	// This means the while condition gets processed in one _runDataList call,
+	// and the {/macroNode/} end up in a SEPARATE _runDataList call — so when
+	// the } pops _conditionStack, the while is already gone, making continue/break fail.
+	//
+	// Fix: collect the block-structured items ({, macroNode, }) into a deferred
+	// list.  After the loop, append the deferred items to _currentDataList so
+	// they are processed together with whatever the last parseLine left there,
+	// OR immediately flush them together if _currentDataList is currently empty
+	// (meaning the while was already flushed by a parseLine inside the loop).
+	//
+	// For nested expansion (_macroParseStack non-empty + isBlock), route as before
+	// into the outer macro's items — the nesting logic is unchanged.
+
+	// Items deferred from StartBlock/BlockCommands/EndBlock for top-level expansion.
+	std::vector<const BaseParse*> _deferredBlockItems;
+
+	// Set by EndBlock when nestedDeferred=true: emit closing } AFTER the deferred body runs.
+	bool _deferredEndBlock = false;
+	size_t _deferredEndBlockLinePos = 0;
+
 	bool anyError = false;
-	for (const MacroRoutineLine& rline : macro->routine)
+	// Iterate with index so we can peek at the next routine line.
+	const auto& routine = macro->routine;
+	for (size_t rlineIdx = 0; rlineIdx < routine.size(); rlineIdx++)
 	{
+		const MacroRoutineLine& rline = routine[rlineIdx];
 		bool ok = true;
 		switch (rline.type)
 		{
@@ -300,8 +344,10 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 					if (fa.argPos >= 0 && fa.argPos < static_cast<int>(args.size()))
 						callArg = args[fa.argPos];
 
-					// Generate a unique temp variable name
-					std::wstring tempVar = L"$_macro_" + fn->name + L"_" + std::to_wstring(fi);
+					// Generate a unique temp variable name, qualified by nesting depth
+					// so nested macros don't clobber each other's temp variables.
+					std::wstring tempVar = L"$_macro_" + fn->name + L"_" +
+						depthStr + L"_" + std::to_wstring(fi);
 
 					// Emit: $tempVar = funcName(arg);
 					std::wstring assignLine = tempVar + L" = " + fn->name + L"(" + callArg + L");";
@@ -343,47 +389,167 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 			if (needsSemicolon)
 				expanded += L";";
 			ok = parseLine(linePos, expanded);
+
+			// KEY FIX: if the NEXT routine line is a StartBlock and this is a
+			// top-level expansion (not nested inside an outer macro's body collection),
+			// mark the while condition we just added to _currentDataList as isBlock=true
+			// NOW — before any further parseLine (e.g. the inner foreach's counter
+			// assignment) can flush _currentDataList and lose the while expression.
+			// Without this, the while is processed in single-line mode (no isBlock),
+			// the conditionStack entry is popped immediately, and continue/break fail.
+			if (ok &&
+				(rlineIdx + 1 < routine.size()) &&
+				(routine[rlineIdx + 1].type == MacroRoutineLine::Type::StartBlock) &&
+				(_macroParseStack.empty() || !_macroParseStack.back()->isBlock()))
+			{
+				for (int i = static_cast<int>(_currentDataList.size()) - 1; i >= 0; --i)
+				{
+					const BaseParse* item = _currentDataList[i];
+					if (item->type() == ParseType::Expression)
+					{
+						const ParseExpression* expr = dynamic_cast<const ParseExpression*>(item);
+						if (expr && expr->condition())
+						{
+							const_cast<ParseCondition*>(
+								dynamic_cast<const ParseCondition*>(expr->condition())
+							)->setBlock(true);
+							break;
+						}
+					}
+				}
+			}
 			break;
 		}
 		case MacroRoutineLine::Type::StartBlock:
 		{
-			// Add { directly to _currentDataList rather than via parseLine.
-			// The foreach { was already decremented in parseFunctions when the
-			// macro was detected — this re-adds it so the depth scan counts it.
-			// The matching } comes from the user's source falling through after
-			// _expandMacro returns, so no EndBlock parseLine call is needed.
-			ParseSymbol* startBrace = new ParseSymbol(sourceLine, L"{");
-			startBrace->setData(L"{");
-			startBrace->setLinePosition(linePos);
-			startBrace->setFile(_currentFile.empty() ? L"" : _currentFile.back());
-			_currentDataList.push_back(startBrace);
+			if (!_macroParseStack.empty() && _macroParseStack.back()->isBlock())
+			{
+				// Nested: add { to the outer macro's items for depth tracking.
+				ParseSymbol* startBrace = new ParseSymbol(sourceLine, L"{");
+				startBrace->setData(L"{");
+				startBrace->setLinePosition(linePos);
+				startBrace->setFile(_currentFile.empty() ? L"" : _currentFile.back());
+				_macroParseStack.back()->addItem(startBrace);
+			}
+			else
+			{
+				// Top-level: _currentDataList holds raw while tokens [while, (, ..., )].
+				// Do NOT flush now with a lone ';' — that leaves a trailing empty
+				// ParseExpression after while+{ which fails _checkExpressionValidity.
+				//
+				// Instead, just append '{' to _currentDataList and do nothing else.
+				// The NEXT inner-block Expression parseLine call (e.g. "$item = $arr[$i];")
+				// will naturally flush _currentDataList as:
+				//   [while, (, ..., ), {, $item, =, $arr, [, $i, ]]
+				// _parseExpressions sees while+{ → setBlock(true), finalises the while
+				// expression, then the "$item = ..." tokens fill the new expression —
+				// no trailing empty expression, no error.  This mirrors exactly how
+				// normal XScript source "while(...) { $item = ...;" works.
+				if (!_currentDataList.empty())
+				{
+					ParseSymbol* startBrace = new ParseSymbol(sourceLine, L"{");
+					startBrace->setData(L"{");
+					startBrace->setLinePosition(linePos);
+					startBrace->setFile(_currentFile.empty() ? L"" : _currentFile.back());
+					_currentDataList.push_back(startBrace);
+				}
+			}
 			ok = true;
 			break;
 		}
 		case MacroRoutineLine::Type::EndBlock:
 		{
-			// Emit the closing } to close the while loop.
-			// The } goes straight into _currentDataList and is never run through
-			// the parser, so _runParse won't decrement the depth counters for it.
-			// Decrement them here to keep the depth balanced.
-			ParseSymbol* endBrace = new ParseSymbol(sourceLine, L"}");
-			endBrace->setData(L"}");
-			endBrace->setLinePosition(linePos);
-			endBrace->setFile(_currentFile.empty() ? L"" : _currentFile.back());
-			_currentDataList.push_back(endBrace);
+			if (!_macroParseStack.empty() && _macroParseStack.back()->isBlock())
+			{
+				// Nested: the closing } must be captured into the outer macro's items
+				// so that _runDataList can close the while block when it processes the
+				// outer macroNode->items() later (paired with the { added by StartBlock).
+				ParseSymbol* endBrace = new ParseSymbol(sourceLine, L"}");
+				endBrace->setData(L"}");
+				endBrace->setLinePosition(linePos);
+				endBrace->setFile(_currentFile.empty() ? L"" : _currentFile.back());
+				_macroParseStack.back()->addItem(endBrace);
+			}
+			// Top-level outermost: the user-source } arrives via parseLine after _expandMacro
+			// returns, so do NOT emit a } here — it would double-close the block.
+			// Nested-deferred: no user-source } is coming (this macro was called from
+			// _runDataList during deferred execution), so we MUST emit } — but AFTER
+			// the deferred body items run (so the body executes inside the while block).
+			if (nestedDeferred)
+			{
+				_deferredEndBlock = true;
+				_deferredEndBlockLinePos = linePos;
+				ok = true;
+			}
+			else
+				ok = true;
 			if (_functionDefDepth > 1) _functionDefDepth--;
 			if (_subDefDepth > 1)      _subDefDepth--;
-			ok = true;
 			break;
 		}
 		case MacroRoutineLine::Type::BlockCommands:
-			// Push the ParseMacro node itself — _runDataList will run its body items here
+			// Push the macro node so _runDataList can insert the body items at this position.
+			// The while-loop header and { have already been emitted by Expression/StartBlock
+			// routine lines above; the } will be emitted by EndBlock below.
+			// _runDataList runs macroNode->items() directly when it sees a ParseMacro node.
 			if (macroNode)
-				_currentDataList.push_back(macroNode);
+			{
+				if (!_macroParseStack.empty() && _macroParseStack.back()->isBlock())
+					_macroParseStack.back()->addItem(macroNode);
+				else
+					_deferredBlockItems.push_back(macroNode);
+			}
 			ok = true;
 			break;
 		}
 		if (!ok) anyError = true;
+	}
+
+	// Flush deferred block items (macroNode) for top-level expansion.
+	// The while was already flushed (with isBlock=true) by the StartBlock handler.
+	// Run macroNode now so the body executes while the while's _conditionStack
+	// entry is still live — continue/break can find the While entry.
+	// The closing } is NOT deferred here; it arrives from user source after
+	// _expandMacro returns (top-level) or is already in macroNode->items() (nested).
+	// Flush deferred body items.
+	// _deferredBlockItems contains the current foreach's own ParseMacro node
+	// (placed here by BlockCommands).  We run macroNode->items() directly —
+	// the user body content — rather than re-expanding the macro, which would
+	// cause infinite recursion.  Nested ParseMacro nodes within items() are
+	// handled by _runDataList's ParseMacro handler which calls _expandMacro.
+	if (!_deferredBlockItems.empty())
+	{
+		for (const BaseParse* deferredItem : _deferredBlockItems)
+		{
+			if (deferredItem->type() == ParseType::Macro)
+			{
+				const ParseMacro* deferredMacro = dynamic_cast<const ParseMacro*>(deferredItem);
+				if (!deferredMacro->items().empty())
+				{
+					if (!_runDataList(deferredMacro->items(), true))
+					{
+						anyError = true;
+						break;
+					}
+				}
+			}
+			else
+			{
+				// Non-macro deferred item: run directly
+				const BaseParse* prev = nullptr;
+				if (!_runParse(deferredItem, prev, nullptr, true, InlineState::Normal))
+				{
+					anyError = true;
+					break;
+				}
+			}
+		}
+		// Emit the deferred EndBlock closing } NOW — after body items ran inside the while.
+		if (_deferredEndBlock && !anyError)
+		{
+			if (!parseLine(_deferredEndBlockLinePos, L"}"))
+				anyError = true;
+		}
 	}
 
 	// Restore previous macro context (supports nested macro expansion)
@@ -5134,6 +5300,8 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 			for (const auto& entry : _conditionStack)
 				if (entry.type == ConditionType::While) { inWhile = true; break; }
 
+			for (size_t _ci=0; _ci<_conditionStack.size(); _ci++)
+
 			if (!inWhile)
 			{
 				_addError(ParseErrors::MissingWhile, functionData);
@@ -6004,7 +6172,7 @@ bool CScriptParser::_parseMacro(std::vector<const BaseParse*>& list)
 			if (!macro->hasBlock)
 			{
 				// Inline (non-block) macro — expand immediately
-				if (!_expandMacro(macro, macroArgs, macroArgNodes, {}, macroLinePos, macroSourceLine))
+				if (!_expandMacro(macro, macroArgs, macroArgNodes, {}, macroLinePos, macroSourceLine, nullptr, false))
 					return false;
 				// Put remainder back and let _parseDataList continue
 				list.insert(list.end(), remainder.begin(), remainder.end());
@@ -6041,12 +6209,24 @@ bool CScriptParser::_parseMacro(std::vector<const BaseParse*>& list)
 			// The depth scan in _parseDataList already incremented _functionDefDepth
 			// and _subDefDepth for this {; undo that since _expandMacro's StartBlock
 			// case will emit its own { which _runParse will count.
+			//
+			// If there is an outer macro body already open (size >= 2), the drain
+			// in _parseDataList already incremented the outer macro's depth for
+			// this same {.  Undo that increment here so the outer macro's depth
+			// stays balanced — it will never see the matching } for this { because
+			// the inner macro consumes it.
 			delete p;
 			it = list.erase(it);
 			macroNode->setBlock(true);
 			macroNode->setDepth(1);
 			if (_functionDefDepth > 1) _functionDefDepth--;
 			if (_subDefDepth > 1)      _subDefDepth--;
+			if (_macroParseStack.size() >= 2)
+			{
+				ParseMacro* outerMacro = _macroParseStack[_macroParseStack.size() - 2];
+				if (outerMacro->isBlock() && outerMacro->depth() > 1)
+					outerMacro->setDepth(outerMacro->depth() - 1);
+			}
 			// Leave remaining items in list so the caller (_parseDataList) can
 			// process them through the normal pipeline then append to the macro node.
 			list = std::vector<const BaseParse*>(it, list.end());
@@ -6529,12 +6709,47 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 			return false;
 	}
 
-	// After parseFunctions: if a macro was just pushed (isBlock()==false),
-	// consume its opening { and mark the body as open. Any remaining same-line
-	// items stay in list and fall through to the normal pipeline below; the
-	// tail of this function will then append them to the macro node.
-	if (_parseMacro(list))
-		return true;
+	// After parseFunctions: detect and open macro bodies.  We loop because when
+	// the outer macro keyword, its {, and an inner macro keyword + { all arrive
+	// in the same parseLine batch (e.g. "foreach(...) { foreach(...) { stmt; }}")
+	// a single _parseMacro call only handles the outermost layer.  After Phase 2
+	// opens the outer body the remainder still contains the inner macro keyword;
+	// we must run Phase 1 again on that remainder so the inner macro is pushed
+	// before the expression pipeline (which runs below) mangles its keyword tokens.
+	//
+	// Loop invariant:
+	//   - Each iteration calls _parseMacro on the current list.
+	//   - If it returns true  → it is waiting for a { on a future line; stop.
+	//   - If it returns false → it either (a) opened a new body (back isBlock=true)
+	//     and left a remainder in list, or (b) did nothing.  In case (a) run again
+	//     so the remainder's inner macro keyword is detected.  In case (b) the
+	//     back is still isBlock=false (or stack is now empty after a macro was
+	//     expanded inline), so the loop terminates.
+	//
+	// Safety: each iteration either pushes a new macro (stack grows) or does
+	// nothing (terminates).  The stack cannot grow unboundedly because a macro
+	// keyword is consumed on each push, so the list shrinks.
+	{
+		size_t stackSizeBefore = _macroParseStack.size();
+		while (true)
+		{
+			if (_parseMacro(list))
+				return true; // waiting for { on a future line
+
+			// Did _parseMacro just open a new body whose remainder may contain
+			// another macro keyword?
+			if (!_macroParseStack.empty() &&
+				_macroParseStack.back()->isBlock() &&
+				_macroParseStack.size() > stackSizeBefore)
+			{
+				// A new macro was opened this iteration; update baseline and loop
+				// to detect any further nested macro keyword in the remainder.
+				stackSizeBefore = _macroParseStack.size();
+				continue;
+			}
+			break;
+		}
+	}
 
 	// If _parseMacro just opened a macro body (isBlock()==true) during THIS call,
 	// scan the remainder of list for raw { and } symbols and update macroNode->depth().
@@ -6548,7 +6763,6 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 	if (!macroDepthDrainRan && !_macroParseStack.empty() && _macroParseStack.back()->isBlock())
 	{
 		ParseMacro* macroNode = _macroParseStack.back();
-		int depthBefore = macroNode->depth();
 		for (const BaseParse* p : list)
 		{
 			if (p->type() == ParseType::Symbol)
@@ -6622,9 +6836,24 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		{
 			_macroParseStack.pop_back();
 			macroNode->setBodyComplete(true);
-			if (!_expandMacro(macroNode->macro(), macroNode->args(),
-				macroNode->argNodes(), {}, macroNode->macroLinePos(), macroNode->line(), macroNode))
-				return false;
+
+			// If another macro's body-drain is still active (outer foreach collecting
+			// its body), do NOT expand this inner macro right now.  Expanding it here
+			// would cause its parseLine output to be captured into the outer body drain
+			// (double-emission later).  Instead, just add this ParseMacro node to the
+			// outer macro's items list; the deferred _runDataList call will invoke
+			// _expandMacro for it at the correct time (while the while conditionStack
+			// entry is live).
+			if (!_macroParseStack.empty() && _macroParseStack.back()->isBlock())
+			{
+				_macroParseStack.back()->addItem(macroNode);
+			}
+			else
+			{
+				if (!_expandMacro(macroNode->macro(), macroNode->args(),
+					macroNode->argNodes(), {}, macroNode->macroLinePos(), macroNode->line(), macroNode, false))
+					return false;
+			}
 		}
 		return true;
 	}
@@ -6816,10 +7045,14 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 		bool isWhile = (condType == Conditions::While || condType == Conditions::WhileNot);
 		isCurrentCondition = condType != Conditions::None;
 		if (isWhile)
+		{
 			_conditionStack.push_back(ConditionEntry(ConditionType::While, expression));
+		}
 		else if (condType == Conditions::If || condType == Conditions::IfNot ||
 			condType == Conditions::SkipIf || condType == Conditions::SkipIfNot)
+		{
 			_conditionStack.push_back(ConditionEntry(ConditionType::If));
+		}
 		else if (condType == Conditions::ElseIf || condType == Conditions::ElseIfNot)
 			_conditionStack.push_back(ConditionEntry(ConditionType::ElseIf));
 		else if (condType == Conditions::Else)
@@ -6904,7 +7137,7 @@ bool CScriptParser::_runExpressionList(const ParseExpression* expression, bool t
 				if (!_runDataList(macroNode->items(), topLevel))
 					return false;
 			}
-			return true;
+			// Do NOT return here — continue processing remaining items in the list.
 		}
 		else if (parse->type() == ParseType::Expression)
 		{
@@ -7407,15 +7640,15 @@ bool CScriptParser::_runDataList(const std::vector<const BaseParse*>& list, bool
 		}
 		else if (parse->type() == ParseType::Macro)
 		{
-			// Body items placed here by _expandMacro's BlockCommands case.
-			// The while-loop header was already emitted before this node in _currentDataList,
-			// and the closing } symbol follows after it.
+			// Macro node encountered during deferred execution (e.g. a nested foreach
+			// appearing inside the body of an outer foreach).  We must call _expandMacro
+			// to properly emit the while-loop header, push a ConditionEntry, run the
+			// body, and emit the closing end — NOT just run macroNode->items() directly
+			// (which were captured during the parse phase and would double-emit content).
 			const ParseMacro* macroNode = dynamic_cast<const ParseMacro*>(parse);
-			if (!macroNode->items().empty())
-			{
-				if (!_runDataList(macroNode->items(), topLevel))
-					return false;
-			}
+			if (!_expandMacro(macroNode->macro(), macroNode->args(),
+				macroNode->argNodes(), {}, macroNode->macroLinePos(), macroNode->line(), macroNode, true))
+				return false;
 		}
 		else
 		{
