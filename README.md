@@ -1,5 +1,5 @@
 # XScript Compiler
-### Version 0.8 BETA
+### Version 0.9 BETA
 #### X3 Farnham's Legacy Script Compiler
 
 Website: https://www.xpluginmanager.co.uk/xscript/
@@ -24,6 +24,7 @@ XScript Compiler translates human-readable XScript source files (`.xs`) into the
 XScriptCompiler.exe --load_data <datafile> --compile <input.xs> --out <output.xml>
 XScriptCompiler.exe --load_data <datafile> --compile <input.xs> --out <output.xml> --define:MYSYMBOL
 XScriptCompiler.exe --builddata <x3fl.xml> --out <output.dat>
+XScriptCompiler.exe --builddata <x3fl.xml> --out <output.dat> --gamedir <x3fl_dir> --scan_scripts --working <scripts_dir>
 XScriptCompiler.exe --load_data <datafile> --decompile <input.xml> --out <output.xs>
 ```
 
@@ -58,17 +59,21 @@ XScriptCompiler.exe --builddata x3fl.xml --out default_data.dat
 |----------|-------------|
 | `--builddata <file>` | Path to the XScript definition XML file (`x3fl.xml`) |
 | `--out <file>` | Path for the compiled binary data file output |
+| `--gamedir <dir>` | Path to the X3 Farnham's Legacy installation directory. When supplied, game data files (text files, ware type lists) are read directly from the game's `cat`/`dat` archives via the VirtualFileSystem — no manual `Data\` layout required. |
+| `--gamemod <name>` | Name of a mod addon subfolder to load on top of `--gamedir` (e.g. `addon2`). Only used when `--gamedir` is set. |
+| `--scan_scripts` | After building the data file, scan all `.xs` files in the working directory (and any `--working` directories) to register user-defined function argument and return types in the output `.dat`. |
+| `--working <dir>` | Additional directory to include when scanning `.xs` files with `--scan_scripts`. May be specified multiple times for multiple directories. |
 
-**Required game files:**
+**Required game files (without `--gamedir`):**
 
-The build process reads several files from the X3 Farnham's Legacy game data directory. These must be present in a `Data\` subdirectory relative to the working directory.
+When `--gamedir` is not specified the build process expects game data files to be present in a `Data\` subdirectory relative to the working directory.
 
 | File | Description |
 |------|-------------|
 | `Data\0001-L044.xml` | Game text file — display names and descriptions for object commands and ware types |
 | `Data\<name>.txt` | Ware type files — one per `<WareType>` entry in `x3fl.xml` |
 
-A typical directory layout:
+A typical manual directory layout:
 
 ```
 XScriptCompiler.exe
@@ -79,6 +84,24 @@ Data\
     TDocks.txt
     TMissiles.txt
     ... (other ware type files as referenced in x3fl.xml)
+```
+
+**Using `--gamedir` (recommended):**
+
+Point directly at the game installation and the compiler reads game data from the `cat`/`dat` archives automatically. No `Data\` folder needs to be maintained manually:
+
+```
+XScriptCompiler.exe --builddata x3fl.xml --out default_data.dat --gamedir "C:\Games\X3 Farnham's Legacy"
+```
+
+Combined with `--scan_scripts` to also register script function types from your mod's `.xs` files:
+
+```
+XScriptCompiler.exe --builddata x3fl.xml --out default_data.dat ^
+    --gamedir "C:\Games\X3 Farnham's Legacy" ^
+    --scan_scripts ^
+    --working "C:\MyMod\Scripts" ^
+    --working "C:\MyMod\Scripts\Shared"
 ```
 
 ---
@@ -587,6 +610,8 @@ foreach($item, $myArray)
 
 Macros expand at compile time to native XScript. Additional macros may be defined in `x3fl.xml` under `<Macros>`.
 
+Macros may be used freely inside `function` and `sub` bodies, including nested inside other control structures. The compiler correctly isolates macro expansion from the enclosing block depth tracking so that nested `foreach` loops and `foreach` inside a `sub` produce correct output.
+
 ---
 
 ## Type Checking
@@ -617,13 +642,14 @@ The compiler tracks object types through assignments and function return values.
 
 A Visual Studio Code extension (`xscript-x3fl-extension.zip`) provides editor support for `.xs` files.
 
-**Features:**
-- Syntax highlighting — keywords (`function`, `sub`, `endsub`, `void`), function/sub definition headers, pardef return types, variables, operators, strings, preprocessor directives
-- Snippet completions — `function main`, `function`, `sub`, `if`, `while` structural templates with tab stops
-- IntelliSense — autocomplete for all ~2,500 functions, methods, properties, constants, namespaces, and macros
-- Signature help and hover documentation
+**Features (v1.5.0):**
+- Syntax highlighting — keywords (`function`, `sub`, `endsub`, `void`, `foreach`), function/sub definition headers, pardef return types, variables, operators, strings, preprocessor directives
+- Snippet completions — `function main`, `function`, `sub`, `foreach`, `if`, `while` structural templates with tab stops
+- IntelliSense — autocomplete for all ~2,500 functions, methods, properties, constants, namespaces, and macros; `scriptCheck` arguments show script-name completions
+- Signature help and hover documentation, including `allowNullObject`/`call()` bare-invocation functions
 - Compiler errors/warnings appear as squiggles in the editor and in the Problems panel
 - Compile from the editor title bar, right-click menu, or `Ctrl+Shift+B`; optional compile-on-save
+- **XScript: Add Compile-time Define** command — interactively add a `#define` symbol to workspace settings via the Command Palette
 
 **Configuration:**
 
@@ -641,7 +667,17 @@ Place `default_data.dat` (or `x3fl.dat`) in your workspace root and the extensio
 
 ## Version History
 
-**0.8 BETA** — Current release
+**0.9 BETA** — Current release
+- **`--gamedir` flag** — builddata can now read game data files (text pages, ware type lists) directly from the X3 Farnham's Legacy installation's `cat`/`dat` archives via the VirtualFileSystem; no manual `Data\` folder required
+- **`--gamemod <name>`** — load a mod addon subdirectory on top of `--gamedir`
+- **`--scan_scripts` flag** — after building the data file, scans `.xs` files to register user-defined function argument and return types in the output `.dat`
+- **`--working <dir>` flag (multi-directory)** — specifies additional directories scanned by `--scan_scripts`; may be given multiple times; `.xs` files take priority over same-named `.xml` files across all directories
+- **`foreach` macro nested sub fix** — `foreach` (and other macros) now work correctly inside `sub` bodies and when nested inside other block structures; the compiler's block-depth tracking is correctly isolated from macro expansion
+- **`scriptCheck` and `allowNullObject` function argument flags** — functions can mark an argument as expecting a script name (`scriptCheck`) or accepting `call()` bare invocation (`allowNullObject`); the VS Code extension uses these for context-sensitive completions
+- **Dynamic text file scanning** — `--builddata` scans `Data\t\*-L044.xml` dynamically rather than using a hardcoded filename
+- **VS Code extension v1.5.0** — `foreach` snippet and highlighting; `scriptCheck` script-name completions; `addDefine` command; binary `.dat` loader (`binaryParser.ts`)
+
+**0.8 BETA** — Previous release
 - **`function main(...)` wrapper** — all scripts wrap their body in a `function main(...)` block; arguments declared as typed parameters; `#DESCRIPTION`, `#VERSION`, `#COMMAND` replace the equivalent runtime calls; `return(value)` at end of main
 - **User-defined local-scoped functions** — `function name(params) { ... }` with full variable isolation via automatic name mangling (`$var` → `$var_fn.name`); `return($x)` exits the function; forward declarations via prepass scan; recursion warning; name-collision checking against existing commands
 - **`sub name() { ... }` block syntax** — readable wrapper for native label/gosub/endsub; subs share the global variable scope; `endsub;` for early exit; correct output ordering regardless of source position relative to `main`
