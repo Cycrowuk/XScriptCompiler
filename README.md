@@ -59,8 +59,8 @@ XScriptCompiler.exe --builddata x3fl.xml --out default_data.dat
 |----------|-------------|
 | `--builddata <file>` | Path to the XScript definition XML file (`x3fl.xml`) |
 | `--out <file>` | Path for the compiled binary data file output |
-| `--gamedir <dir>` | Path to the X3 Farnham's Legacy installation directory. When supplied, game data files (text files, ware type lists) are read directly from the game's `cat`/`dat` archives via the VirtualFileSystem — no manual `Data\` layout required. |
-| `--gamemod <name>` | Name of a mod addon subfolder to load on top of `--gamedir` (e.g. `addon2`). Only used when `--gamedir` is set. |
+| `--gamedir <dir>` | Path to the X3 Farnham's Legacy installation directory. When supplied, game data files (text files, ware type lists) are read directly from the game's `cat`/`dat` archives via the VirtualFileSystem — no manual `Data\` layout required. Use `--gamemod` to additionally layer a mod's `cat`/`dat` on top. |
+| `--gamemod <name>` | Name of a mod `cat`/`dat` file (without extension) to load on top of the base game archives when `--gamedir` is set. Allows the compiler to read files overridden or added by a mod (e.g. `--gamemod MyMod` loads `MyMod.cat`/`MyMod.dat` from the game directory). |
 | `--scan_scripts` | After building the data file, scan all `.xs` files in the working directory (and any `--working` directories) to register user-defined function argument and return types in the output `.dat`. |
 | `--working <dir>` | Additional directory to include when scanning `.xs` files with `--scan_scripts`. May be specified multiple times for multiple directories. |
 
@@ -669,7 +669,7 @@ Place `default_data.dat` (or `x3fl.dat`) in your workspace root and the extensio
 
 **0.9 BETA** — Current release
 - **`--gamedir` flag** — builddata can now read game data files (text pages, ware type lists) directly from the X3 Farnham's Legacy installation's `cat`/`dat` archives via the VirtualFileSystem; no manual `Data\` folder required
-- **`--gamemod <name>`** — load a mod addon subdirectory on top of `--gamedir`
+- **`--gamemod <name>`** — name of a mod `cat`/`dat` file to layer on top of the base game archives when using `--gamedir`; allows the compiler to pick up files added or overridden by a mod
 - **`--scan_scripts` flag** — after building the data file, scans `.xs` files to register user-defined function argument and return types in the output `.dat`
 - **`--working <dir>` flag (multi-directory)** — specifies additional directories scanned by `--scan_scripts`; may be given multiple times; `.xs` files take priority over same-named `.xml` files across all directories
 - **`foreach` macro nested sub fix** — `foreach` (and other macros) now work correctly inside `sub` bodies and when nested inside other block structures; the compiler's block-depth tracking is correctly isolated from macro expansion
