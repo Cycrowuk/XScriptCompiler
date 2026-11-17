@@ -1,0 +1,756 @@
+<!-- WordPress page content — paste into the Block Editor (HTML block) or Classic Editor (Text tab) -->
+<!-- Headings use H2/H3/H4 so your TOC plugin picks them up correctly -->
+
+<style>
+.xs-hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%);color:#fff;padding:3rem 2rem;border-radius:8px;margin-bottom:2rem;text-align:center}
+.xs-hero h1{color:#fff;font-size:2.2rem;margin-bottom:.5rem}
+.xs-hero .xs-version{display:inline-block;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:.25rem 1rem;font-size:.85rem;margin-bottom:1rem}
+.xs-hero p{color:rgba(255,255,255,.8);font-size:1.1rem;max-width:600px;margin:0 auto 1.5rem}
+.xs-dl-btn{display:inline-block;background:#e8b84b;color:#1a1a2e;font-weight:700;padding:.75rem 2rem;border-radius:6px;text-decoration:none;font-size:1rem;margin:.25rem}
+.xs-dl-btn:hover{background:#d4a43a;color:#1a1a2e}
+.xs-dl-btn.secondary{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4)}
+.xs-dl-btn.secondary:hover{background:rgba(255,255,255,.25);color:#fff}
+.xs-features{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin:1.5rem 0}
+.xs-feat{background:#f8f8f8;border-left:4px solid #0f3460;border-radius:4px;padding:1rem 1.2rem}
+.xs-feat strong{display:block;margin-bottom:.3rem;color:#0f3460}
+.xs-feat p{margin:0;font-size:.9rem;color:#555}
+.xs-codeblock{background:#1e1e2e;color:#cdd6f4;border-radius:6px;padding:1.2rem 1.5rem;overflow-x:auto;font-family:monospace;font-size:.9rem;margin:1rem 0;line-height:1.7}
+.xs-codeblock .c-comment{color:#6c7086}
+.xs-codeblock .c-kw{color:#cba6f7}
+.xs-codeblock .c-pp{color:#89dceb}
+.xs-codeblock .c-fn{color:#89b4fa}
+.xs-codeblock .c-str{color:#a6e3a1}
+.xs-codeblock .c-num{color:#fab387}
+.xs-codeblock .c-var{color:#f38ba8}
+.xs-codeblock .c-const{color:#f9e2af}
+.xs-codeblock .c-op{color:#89dceb}
+.xs-cmds{background:#f0f4ff;border-radius:6px;padding:1rem 1.5rem;margin:1rem 0;font-family:monospace;font-size:.88rem;line-height:2}
+.xs-badge{display:inline-block;background:#0f3460;color:#fff;border-radius:12px;padding:.15rem .75rem;font-size:.78rem;margin-left:.5rem;vertical-align:middle}
+.xs-badge.beta{background:#e8b84b;color:#1a1a2e}
+.xs-badge.new{background:#2d6a4f;color:#fff}
+.xs-warn{background:#fff8e1;border-left:4px solid #e8b84b;border-radius:4px;padding:1rem 1.2rem;margin:1rem 0}
+.xs-warn strong{color:#7a5c00}
+.xs-info{background:#e8f4fd;border-left:4px solid #0f3460;border-radius:4px;padding:1rem 1.2rem;margin:1rem 0}
+.xs-tbl{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.9rem}
+.xs-tbl th{background:#0f3460;color:#fff;padding:.6rem 1rem;text-align:left}
+.xs-tbl td{padding:.6rem 1rem;border-bottom:1px solid #e8e8e8}
+.xs-tbl tr:nth-child(even) td{background:#f8f8f8}
+.xs-tbl code{background:#eef;border-radius:3px;padding:.1rem .4rem;font-size:.85rem}
+.xs-cols{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin:1rem 0}
+@media(max-width:640px){.xs-cols{grid-template-columns:1fr}}
+</style>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  HERO                                                   -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="xs-hero">
+  <div class="xs-version">Version 0.9 BETA</div>
+  <h1>XScript Compiler</h1>
+  <p>A modern scripting language and compiler for X3 Farnham's Legacy — write cleaner scripts, catch errors before they reach the game.</p>
+  <a href="#download" class="xs-dl-btn">⬇ Download</a>
+  <a href="#quick-start" class="xs-dl-btn secondary">Quick Start</a>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  OVERVIEW                                               -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2>Overview</h2>
+
+<p>XScript is a high-level scripting language that compiles to the native XML format used by X3 Farnham's Legacy. Rather than working directly in the game's built-in editor with its limitations, you write scripts in a clean, readable syntax and let the compiler produce correct, optimised XML output.</p>
+
+<p>XScript adds a number of capabilities that aren't possible in standard X3 scripts:</p>
+
+<div class="xs-features">
+  <div class="xs-feat">
+    <strong>Type checking</strong>
+    <p>Object types are tracked through assignments. Calling a ship method on a sector variable produces a warning.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Nested calls</strong>
+    <p>Use function return values directly as arguments or chain with <code>-></code> without intermediate variables.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Compound assignment</strong>
+    <p><code>$x += 1</code>, <code>++$count</code>, <code>$x *= 2</code> — all translated automatically.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Preprocessor</strong>
+    <p><code>#ifdef</code>, <code>#define</code>, <code>#include</code> — conditional compilation and file inclusion.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>While loop expressions</strong>
+    <p><code>while($i++)</code>, <code>while(arraySize($a) &lt; 10)</code> — increment and function calls in conditions re-evaluated correctly each iteration.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Sub variable tracking</strong>
+    <p>Variables assigned inside a <code>gosub</code> sub are visible to the calling code via a pre-pass.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>User-defined functions <span class="xs-badge new">v0.8</span></strong>
+    <p><code>function test($arg) { return($x); }</code> — local-scoped, with full variable isolation. Call like any built-in function.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Sub block syntax <span class="xs-badge new">v0.8</span></strong>
+    <p><code>sub myHelper() { ... }</code> — readable wrapper for the native label/gosub/endsub pattern, sharing the global variable scope.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Decompiler</strong>
+    <p>Convert existing compiled XML scripts back to readable XScript source — now outputs v0.8 syntax with <code>function main()</code> and <code>sub</code> blocks.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Namespaces <span class="xs-badge new">v0.7</span></strong>
+    <p><code>Utils::random(...)</code> — group related functions and constants for cleaner code and better autocomplete.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Function macros <span class="xs-badge new">v0.7</span></strong>
+    <p><code>foreach($item, $array) { ... }</code> — X3 has no native for/foreach; the compiler expands macros to <code>while</code> loops at compile time.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Function overloads <span class="xs-badge new">v0.7</span></strong>
+    <p>Multiple function signatures share one name — the compiler picks the right one by argument count and type.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Game directory integration <span class="xs-badge new">v0.9</span></strong>
+    <p><code>--gamedir</code> reads data files directly from the game's <code>cat</code>/<code>dat</code> archives — no manual <code>Data\</code> folder needed. <code>--gamemod</code> layers a mod's archive on top.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Script type scanning <span class="xs-badge new">v0.9</span></strong>
+    <p><code>--scan_scripts</code> scans your <code>.xs</code> files and registers user-defined function argument and return types in the data file for use by the VS Code extension.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>VS Code extension</strong>
+    <p>IntelliSense, syntax highlighting, hover docs, and one-click compile from the editor.</p>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  DOWNLOAD                                               -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2 id="download">Download</h2>
+
+<div class="xs-warn">
+  <strong>Beta release</strong> — XScript 0.9 is functional but under active development. Please report any issues.
+</div>
+
+<table class="xs-tbl">
+  <thead><tr><th>File</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>XScriptCompiler-0.9.zip</code></td><td>Compiler executable, data builder, and decompiler</td></tr>
+    <tr><td><code>x3fl.xml</code></td><td>XScript definition file — function database, constants, datatypes, namespaces, and macros</td></tr>
+    <tr><td><code>default_data.dat</code></td><td>Pre-built binary data file. Use <code>--gamedir</code> to regenerate directly from your game installation.</td></tr>
+    <tr><td><code>xscript-x3fl-extension.zip</code></td><td>VS Code extension v1.5.0 — syntax highlighting, IntelliSense, and compiler integration</td></tr>
+  </tbody>
+</table>
+
+<p><a href="https://www.xpluginmanager.co.uk/download/xscript-compiler/" class="xs-dl-btn">⬇ Download XScript 0.9 BETA</a></p>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  QUICK START                                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2 id="quick-start">Quick Start</h2>
+
+<h3>1. Set up the folder</h3>
+
+<p>Place the compiler and data file in a working folder. If you need to regenerate the data file from scratch, your <code>Data\</code> folder from the game installation must be present:</p>
+
+<pre><code>XScriptCompiler.exe
+default_data.dat
+x3fl.xml
+Data\
+    0001-L044.xml
+    TShips.txt
+    TDocks.txt
+    TMissiles.txt
+    ... (other game data files)</code></pre>
+
+<h3>2. Write a script</h3>
+
+<p>Create a <code>.xs</code> file. Every v0.8 script wraps its body in a <code>function main(...)</code> block:</p>
+
+<div class="xs-codeblock">
+<span class="c-comment">// myscript.xs — shows a message to the player</span><br>
+<span class="c-pp">#DESCRIPTION</span> <span class="c-str">"My Plugin Script"</span><br>
+<span class="c-pp">#VERSION</span> <span class="c-num">1</span><br>
+<br>
+<span class="c-kw">function</span> <span class="c-fn">main</span>(<span class="c-const">VARSECTOR</span> <span class="c-var">$sector</span>)<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$message</span> = <span class="c-str">"Hello from XScript"</span>;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-fn">incomingMessage</span>(<span class="c-var">$message</span>, <span class="c-const">PlayerLog::Alert</span>, <span class="c-const">TRUE</span>);<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">return</span>(<span class="c-const">null</span>);<br>
+}
+</div>
+
+<h3>3. Compile</h3>
+
+<div class="xs-cmds">
+XScriptCompiler.exe --load_data default_data.dat --compile myscript.xs --out myscript.xml
+</div>
+
+<p>The output <code>myscript.xml</code> can be placed directly in your mod's script folder.</p>
+
+<h3>4. Rebuild the data file (optional)</h3>
+
+<p>Only needed when <code>x3fl.xml</code> has been updated. If you have the game installed, point <code>--gamedir</code> at it and the compiler reads all data files directly from the game archives — no manual <code>Data\</code> folder needed:</p>
+
+<div class="xs-cmds">
+XScriptCompiler.exe --builddata x3fl.xml --out default_data.dat --gamedir "C:\Games\X3 Farnham's Legacy"
+</div>
+
+<p>To also register your mod's script function types in the data file, add <code>--scan_scripts</code> and one or more <code>--working</code> directories:</p>
+
+<div class="xs-cmds">
+XScriptCompiler.exe --builddata x3fl.xml --out default_data.dat --gamedir "C:\Games\X3 Farnham's Legacy" --scan_scripts --working "C:\MyMod\Scripts"
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  COMMAND REFERENCE                                       -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2>Command Reference</h2>
+
+<table class="xs-tbl">
+  <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>--load_data &lt;file&gt;</code></td>
+      <td>Load the compiled data file (<code>default_data.dat</code> or <code>x3fl.dat</code>). Required for compile and decompile.</td>
+    </tr>
+    <tr>
+      <td><code>--compile &lt;file&gt;</code></td>
+      <td>Compile an XScript <code>.xs</code> source file to XML.</td>
+    </tr>
+    <tr>
+      <td><code>--out &lt;file&gt;</code></td>
+      <td>Output file path. Required for all commands.</td>
+    </tr>
+    <tr>
+      <td><code>--define:NAME</code></td>
+      <td>Pre-define a symbol for use with <code>#ifdef</code>. Multiple <code>--define:</code> flags are supported.</td>
+    </tr>
+    <tr>
+      <td><code>--builddata &lt;file&gt;</code></td>
+      <td>Build the binary data file from <code>x3fl.xml</code> and game data.</td>
+    </tr>
+    <tr>
+      <td><code>--gamedir &lt;dir&gt;</code></td>
+      <td>Path to the X3 FL installation directory. Game data files are read from <code>cat</code>/<code>dat</code> archives — no manual <code>Data\</code> folder required. Used with <code>--builddata</code>. <span class="xs-badge new">v0.9</span></td>
+    </tr>
+    <tr>
+      <td><code>--gamemod &lt;name&gt;</code></td>
+      <td>Name of a mod <code>cat</code>/<code>dat</code> file (without extension) to layer on top of the base game archives. Used with <code>--gamedir</code>. <span class="xs-badge new">v0.9</span></td>
+    </tr>
+    <tr>
+      <td><code>--scan_scripts</code></td>
+      <td>After building the data file, scan <code>.xs</code> files in the working directory (and any <code>--working</code> directories) to register user-defined function argument and return types. <span class="xs-badge new">v0.9</span></td>
+    </tr>
+    <tr>
+      <td><code>--working &lt;dir&gt;</code></td>
+      <td>Additional directory to scan for <code>.xs</code> files when using <code>--scan_scripts</code>. May be specified multiple times. <span class="xs-badge new">v0.9</span></td>
+    </tr>
+    <tr>
+      <td><code>--decompile &lt;file&gt;</code></td>
+      <td>Decompile a compiled XML script back to XScript source.</td>
+    </tr>
+    <tr>
+      <td><code>--usenamespace</code></td>
+      <td>When decompiling, emit namespaced calls (e.g. <code>Utils::random</code>) instead of the plain function name, where a namespace mapping exists.</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  LANGUAGE OVERVIEW                                       -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2>Language Overview</h2>
+
+<p>All statements end with a semicolon. Variables begin with <code>$</code> and may contain letters, numbers, underscores, and periods. X3 only supports integer values — no floating point.</p>
+
+<h3>Script Structure <span class="xs-badge new">v0.8</span></h3>
+
+<p>Every v0.8 script must wrap its body in a <code>function main(...)</code> block. Optional metadata directives and user-defined functions/subs appear outside it:</p>
+
+<div class="xs-codeblock">
+<span class="c-pp">#DESCRIPTION</span> <span class="c-str">"My plugin script"</span><br>
+<span class="c-pp">#VERSION</span> <span class="c-num">1</span><br>
+<br>
+<span class="c-comment">// Optional: user-defined functions and subs</span><br>
+<span class="c-kw">function</span> <span class="c-const">DATATYPE_INT</span> <span class="c-fn">clamp</span>(<span class="c-const">NUMBER</span> <span class="c-var">$v</span>, <span class="c-const">NUMBER</span> <span class="c-var">$lo</span>, <span class="c-const">NUMBER</span> <span class="c-var">$hi</span>)<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">if</span> (<span class="c-var">$v</span> <span class="c-op">&lt;</span> <span class="c-var">$lo</span>) { <span class="c-kw">return</span>(<span class="c-var">$lo</span>); }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">if</span> (<span class="c-var">$v</span> <span class="c-op">&gt;</span> <span class="c-var">$hi</span>) { <span class="c-kw">return</span>(<span class="c-var">$hi</span>); }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">return</span>(<span class="c-var">$v</span>);<br>
+}<br>
+<br>
+<span class="c-kw">sub</span> <span class="c-fn">initialise</span>()<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> = <span class="c-num">0</span>;<br>
+}<br>
+<br>
+<span class="c-comment">// Required: main function</span><br>
+<span class="c-kw">function</span> <span class="c-fn">main</span>(<span class="c-const">VARSECTOR</span> <span class="c-var">$sector</span>)<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-fn">gosub</span> initialise;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> = <span class="c-fn">clamp</span>(<span class="c-var">$count</span>, <span class="c-num">0</span>, <span class="c-num">100</span>);<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">return</span>(<span class="c-const">null</span>);<br>
+}
+</div>
+
+<h3>User-Defined Functions <span class="xs-badge new">v0.8</span></h3>
+
+<p>Define your own reusable functions with full variable isolation. All <code>$variables</code> inside a user function are private — the compiler mangles them automatically so they never collide with variables elsewhere in the script.</p>
+
+<div class="xs-codeblock">
+<span class="c-comment">// Function with typed parameters and a return value</span><br>
+<span class="c-kw">function</span> <span class="c-const">DATATYPE_INT</span> <span class="c-fn">getSectorCount</span>(<span class="c-const">VARSECTOR</span> <span class="c-var">$sector</span>)<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">if</span> (<span class="c-var">$sector</span> <span class="c-op">==</span> <span class="c-const">NULL</span>) { <span class="c-kw">return</span>(<span class="c-num">0</span>); }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> = <span class="c-var">$sector</span>-><span class="c-fn">shipCount</span>(<span class="c-const">TRUE</span>);<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">return</span>(<span class="c-var">$count</span>);<br>
+}<br>
+<br>
+<span class="c-comment">// Untyped parameters default to VALUE (accepts anything)</span><br>
+<span class="c-kw">function</span> <span class="c-fn">getDoubled</span>(<span class="c-var">$value</span>)<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">return</span>(<span class="c-var">$value</span> <span class="c-op">*</span> <span class="c-num">2</span>);<br>
+}<br>
+<br>
+<span class="c-comment">// Calling user functions</span><br>
+<span class="c-var">$ships</span> = <span class="c-fn">getSectorCount</span>(<span class="c-var">$sector</span>);   <span class="c-comment">// with return value</span><br>
+<span class="c-fn">getDoubled</span>(<span class="c-var">$x</span>);                          <span class="c-comment">// without</span>
+</div>
+
+<p>User functions can appear before or after <code>main</code> — forward declarations work automatically via a prepass scan. Recursive calls are allowed but produce a warning.</p>
+
+<h3>Sub Blocks <span class="xs-badge new">v0.8</span></h3>
+
+<p>Subs are the X3-native <code>label:</code>/<code>endsub;</code> pattern in a more readable form. Unlike user functions, subs <strong>share the global variable scope</strong> — variables assigned inside a sub are visible everywhere.</p>
+
+<div class="xs-codeblock">
+<span class="c-kw">sub</span> <span class="c-fn">initialise</span>()<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> = <span class="c-num">0</span>;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$flag</span>  = <span class="c-const">TRUE</span>;<br>
+}<br>
+<br>
+<span class="c-kw">function</span> <span class="c-fn">main</span>(<span class="c-const">VARSECTOR</span> <span class="c-var">$sector</span>)<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-fn">gosub</span> initialise;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> <span class="c-op">+=</span> <span class="c-num">1</span>;   <span class="c-comment">// $count is accessible here</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">return</span>(<span class="c-const">null</span>);<br>
+}
+</div>
+
+<p>Use <code>endsub;</code> inside a sub body to exit early. The classic <code>label:</code>/<code>endsub;</code> inline syntax also remains valid.</p>
+
+<table class="xs-tbl">
+  <thead><tr><th></th><th>User function</th><th>Sub</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Variable scope</strong></td><td>Private (isolated)</td><td>Shared with global</td></tr>
+    <tr><td><strong>Arguments</strong></td><td>Declared in <code>(...)</code></td><td>None</td></tr>
+    <tr><td><strong>Return value</strong></td><td>Yes, via <code>return($x)</code></td><td>No</td></tr>
+    <tr><td><strong>Call syntax</strong></td><td><code>$r = test($arg);</code></td><td><code>gosub test;</code></td></tr>
+  </tbody>
+</table>
+
+<h3>Variables and Assignment</h3>
+
+<div class="xs-codeblock">
+<span class="c-var">$count</span> = <span class="c-num">0</span>;<br>
+<span class="c-var">$my.variable</span> = <span class="c-str">"hello"</span>;<br>
+<span class="c-var">$ship</span> = <span class="c-const">PLAYERSHIP</span>;<br>
+<span class="c-var">$array</span>[<span class="c-num">0</span>] = <span class="c-num">42</span>;
+</div>
+
+<h3>Object Methods and Properties</h3>
+
+<p>Use <code>-></code> to call methods or access properties on an object:</p>
+
+<div class="xs-codeblock">
+<span class="c-var">$exists</span> = <span class="c-var">$ship</span>-><span class="c-fn">exists</span>();<br>
+<span class="c-var">$ship</span>-><span class="c-fn">setCommand</span>(<span class="c-const">null</span>);<br>
+<br>
+<span class="c-var">$name</span>   = <span class="c-var">$ship</span>-><span class="c-fn">name</span>;           <span class="c-comment">// getter</span><br>
+<span class="c-var">$ship</span>-><span class="c-fn">name</span> = <span class="c-str">"My Freighter"</span>;    <span class="c-comment">// setter</span>
+</div>
+
+<h3>Nested Function Calls <span class="xs-badge new">XScript only</span></h3>
+
+<p>Standard X3 scripts require every return value to be assigned to a variable first. XScript allows direct nesting:</p>
+
+<div class="xs-cols">
+  <div>
+    <strong style="font-size:.85rem;color:#888">Standard X3 (2 lines)</strong>
+    <div class="xs-codeblock" style="margin-top:.4rem">
+    <span class="c-var">$sector</span> = <span class="c-fn">getSectorByCoord</span>(<span class="c-num">22</span>, <span class="c-num">3</span>);<br>
+    <span class="c-var">$name</span> = <span class="c-var">$sector</span>-><span class="c-fn">name</span>;
+    </div>
+  </div>
+  <div>
+    <strong style="font-size:.85rem;color:#888">XScript (1 line)</strong>
+    <div class="xs-codeblock" style="margin-top:.4rem">
+    <span class="c-var">$name</span> = <span class="c-fn">getSectorByCoord</span>(<span class="c-num">22</span>, <span class="c-num">3</span>)-><span class="c-fn">name</span>;
+    </div>
+  </div>
+</div>
+
+<h3>Conditions and While Loops</h3>
+
+<div class="xs-codeblock">
+<span class="c-kw">if</span> (<span class="c-var">$value</span> <span class="c-op">></span> <span class="c-num">100</span>) { ... }<br>
+<span class="c-kw">else if</span> (<span class="c-var">$value</span> <span class="c-op">></span> <span class="c-num">50</span>) { ... }<br>
+<span class="c-kw">else</span> { ... }<br>
+<br>
+<span class="c-kw">while</span> (<span class="c-var">$count</span> <span class="c-op">&lt;</span> <span class="c-num">10</span>)<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-kw">if</span> (<span class="c-var">$count</span> <span class="c-op">==</span> <span class="c-num">5</span>) <span class="c-kw">continue</span>;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> <span class="c-op">+=</span> <span class="c-num">1</span>;<br>
+}
+</div>
+
+<h3>While Loop Expressions <span class="xs-badge new">v0.6</span></h3>
+
+<p><code>inc</code>/<code>dec</code> and <code>++</code>/<code>--</code> operators can appear directly in a <code>while</code> condition. Function calls in conditions are also re-evaluated correctly on each iteration:</p>
+
+<div class="xs-codeblock">
+<span class="c-kw">while</span> (<span class="c-var">$i</span><span class="c-op">++</span> <span class="c-op">&lt;</span> <span class="c-num">10</span>) { ... }<br>
+<span class="c-kw">while</span> (<span class="c-fn">arraySize</span>(<span class="c-var">$myArray</span>) <span class="c-op">&lt;</span> <span class="c-num">10</span>) { ... }
+</div>
+
+<h3>Constants</h3>
+
+<div class="xs-codeblock">
+<span class="c-var">$flag</span> = <span class="c-const">RaceFlag::NPC</span>;<br>
+<span class="c-var">$page</span> = <span class="c-const">TextPage::MiscVoice</span>;<br>
+<span class="c-var">$race</span> = <span class="c-const">Xenon</span>;<br>
+<span class="c-var">$ship</span> = <span class="c-const">PLAYERSHIP</span>;&nbsp;&nbsp;<span class="c-var">$null</span> = <span class="c-const">NULL</span>;
+</div>
+
+<h3>Labels, Goto and Gosub</h3>
+
+<p>Plain labels and jump instructions are still available alongside the new <code>sub</code> block syntax:</p>
+
+<div class="xs-codeblock">
+<span class="c-fn">gosub</span> doWork;<br>
+<br>
+<span class="c-var">$result</span> = <span class="c-var">$workVar</span>;<br>
+<span class="c-kw">goto</span> cleanup;<br>
+<br>
+cleanup:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> = <span class="c-num">0</span>;<br>
+<br>
+doWork:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$workVar</span> = <span class="c-fn">random</span>(<span class="c-num">10</span>);<br>
+<span class="c-fn">endsub</span>;
+</div>
+
+<div class="xs-info">
+  <strong>Sub variable pre-pass</strong> — the compiler scans each <code>gosub</code> target before compiling the calling code, so variables assigned inside a sub are correctly typed in the code that follows the <code>gosub</code>. This is handled automatically.
+</div>
+
+<h3>Compound Assignment and Increment</h3>
+
+<div class="xs-codeblock">
+<span class="c-var">$count</span> <span class="c-op">+=</span> <span class="c-num">1</span>;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> <span class="c-op">-=</span> <span class="c-num">1</span>;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> <span class="c-op">*=</span> <span class="c-num">2</span>;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span> <span class="c-op">/=</span> <span class="c-num">2</span>;<br>
+<span class="c-op">++</span><span class="c-var">$count</span>;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span><span class="c-op">++</span>;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-op">--</span><span class="c-var">$count</span>;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-var">$count</span><span class="c-op">--</span>;<br>
+<br>
+<span class="c-comment">// Post-increment in array subscript</span><br>
+<span class="c-var">$array</span>[<span class="c-var">$i</span><span class="c-op">++</span>] = <span class="c-num">10</span>;&nbsp;&nbsp;<span class="c-comment">// uses $i as index, then increments</span>
+</div>
+
+<h3>Chained Assignment <span class="xs-badge new">v0.7</span></h3>
+
+<div class="xs-codeblock">
+<span class="c-var">$x</span> = <span class="c-var">$y</span> = <span class="c-op">-</span><span class="c-num">1</span>;<br>
+<span class="c-var">$x</span> = <span class="c-var">$y</span> = <span class="c-fn">random</span>(<span class="c-num">2</span>);
+</div>
+
+<h3>Namespaces <span class="xs-badge new">v0.7</span></h3>
+
+<div class="xs-codeblock">
+<span class="c-var">$x</span> = <span class="c-const">Utils</span>::<span class="c-fn">random</span>(<span class="c-num">10</span>);&nbsp;&nbsp;<span class="c-comment">// same as random(10)</span><br>
+<span class="c-var">$flag</span> = <span class="c-const">RaceFlag::NPC</span>;&nbsp;&nbsp;<span class="c-comment">// namespaced constant</span>
+</div>
+
+<h3>Function Overloads <span class="xs-badge new">v0.7</span></h3>
+
+<div class="xs-codeblock">
+<span class="c-var">$x</span> = <span class="c-fn">random</span>(<span class="c-num">10</span>);&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-comment">// random(max) — 1 argument</span><br>
+<span class="c-var">$x</span> = <span class="c-fn">random</span>(<span class="c-num">5</span>, <span class="c-num">10</span>);&nbsp;&nbsp;<span class="c-comment">// random(min, max) — 2 arguments, same name</span>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  PREPROCESSOR                                           -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2>Preprocessor <span class="xs-badge new">v0.7</span></h2>
+
+<p>Preprocessor directives begin with <code>#</code> and are processed before compilation. They control which code is compiled, set script metadata, allow file inclusion, and provide type hints.</p>
+
+<h3>Script Metadata</h3>
+
+<p>Metadata directives appear before <code>function main(...)</code>:</p>
+
+<div class="xs-codeblock">
+<span class="c-pp">#DESCRIPTION</span> <span class="c-str">"My plugin script"</span><br>
+<span class="c-pp">#VERSION</span> <span class="c-num">42</span><br>
+<span class="c-pp">#COMMAND</span> <span class="c-num">1234</span>
+</div>
+
+<h3>Datatype Hints <span class="xs-badge new">v0.7</span></h3>
+
+<div class="xs-codeblock">
+<span class="c-pp">#datatype</span> <span class="c-var">$wing</span> <span class="c-const">DATATYPE_WING</span><br>
+<span class="c-pp">#datatype</span> <span class="c-var">$obj</span> <span class="c-const">DATATYPE_SHIP</span><span class="c-op">|</span><span class="c-const">DATATYPE_STATION</span>
+</div>
+
+<h3>Defines</h3>
+
+<div class="xs-codeblock">
+<span class="c-pp">#define</span> <span class="c-const">MAX_COUNT</span> <span class="c-num">100</span><br>
+<span class="c-pp">#define</span> <span class="c-fn">ADD</span>(a, b) a <span class="c-op">+</span> b<br>
+<span class="c-pp">#define</span> <span class="c-const">DEBUG</span>&nbsp;&nbsp;<span class="c-comment">// presence-only define for #ifdef</span><br>
+<span class="c-pp">#undef</span> <span class="c-const">DEBUG</span><br>
+<br>
+<span class="c-var">$limit</span> = <span class="c-const">MAX_COUNT</span>;<br>
+<span class="c-var">$sum</span>   = <span class="c-fn">ADD</span>(<span class="c-var">$x</span>, <span class="c-var">$y</span>);
+</div>
+
+<p><strong>Multi-line defines <span class="xs-badge new">v0.7</span></strong> — a trailing <code>\</code> continues the define onto the next line.</p>
+
+<h3>Conditional Compilation</h3>
+
+<div class="xs-codeblock">
+<span class="c-pp">#ifdef</span> <span class="c-const">PLATFORM_PC</span><br>
+<span class="c-var">$platform</span> = <span class="c-num">1</span>;<br>
+<span class="c-pp">#elseif</span> <span class="c-const">PLATFORM_LINUX</span><br>
+<span class="c-var">$platform</span> = <span class="c-num">2</span>;<br>
+<span class="c-pp">#else</span><br>
+<span class="c-var">$platform</span> = <span class="c-num">0</span>;<br>
+<span class="c-pp">#endif</span><br>
+<br>
+<span class="c-pp">#ifndef</span> <span class="c-const">DEBUG</span><br>
+<span class="c-var">$logLevel</span> = <span class="c-num">0</span>;<br>
+<span class="c-pp">#endif</span>
+</div>
+
+<p>Comparison operators in <code>#ifdef</code>: <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>. Symbols can also be pre-defined on the command line:</p>
+
+<div class="xs-cmds">
+XScriptCompiler.exe --load_data data.dat --compile script.xs --out script.xml --define:DEBUG --define:PLATFORM_PC
+</div>
+
+<h3>Include Files</h3>
+
+<div class="xs-codeblock">
+<span class="c-pp">#include</span> <span class="c-str">"utils.xs"</span><br>
+<span class="c-pp">#include</span> <span class="c-str">"common/helpers.xs"</span>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  FUNCTION MACROS                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2>Function Macros <span class="xs-badge new">v0.7</span></h2>
+
+<p>X3 has no native <code>for</code>/<code>foreach</code> — only <code>while</code>. XScript provides language-level macros that expand to native <code>while</code> loops at compile time. Macros work correctly inside <code>sub</code> bodies and when nested inside other block structures <span class="xs-badge new">v0.9</span>:</p>
+
+<div class="xs-codeblock">
+<span class="c-kw">foreach</span>(<span class="c-var">$item</span>, <span class="c-var">$myArray</span>)<br>
+{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-fn">incomingMessage</span>(<span class="c-var">$item</span>-><span class="c-fn">name</span>, <span class="c-const">PlayerLog::Alert</span>, <span class="c-const">TRUE</span>);<br>
+}
+</div>
+
+<p>Additional macros can be defined in <code>x3fl.xml</code> under <code>&lt;Macros&gt;</code>.</p>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  ERROR OUTPUT                                           -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2>Error Output</h2>
+
+<p>Errors and warnings are printed to stdout with the exact file, line, and column, plus the source line and a caret pointing to the problem:</p>
+
+<div class="xs-codeblock">
+<span style="color:#f38ba8">Compile Error [#5]:&nbsp;&nbsp; [myscript.xs:12:4]&nbsp; - Unknown function 'createSheep'</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;$result = createSheep(RACE.Argon, $sector, 100)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;^<br>
+<br>
+<span style="color:#f9e2af">Compile Warning [#2]: [myscript.xs:7:0]&nbsp;&nbsp; - Object '$ship' datatype mismatch</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;$result = $ship->getSectorName()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;^
+</div>
+
+<p>Errors prevent the output file from being written. Warnings are informational — the script still compiles.</p>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  MOD SUPPORT                                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2>Mod Support</h2>
+
+<h3>Custom Commands</h3>
+
+<p>Third-party mods can add ship commands that aren't in the base data file. XScript supports these via a prefix notation defined in <code>x3fl.xml</code>:</p>
+
+<div class="xs-codeblock">
+<span class="c-var">$cmd</span> = <span class="c-const">SHIPCOMMAND_1000</span>;&nbsp;&nbsp;<span class="c-comment">// mod-added command with ID 1000</span>
+</div>
+
+<h3>Rebuilding the Data File</h3>
+
+<p>If you have the game installed, use <code>--gamedir</code> to load data directly from the game archives. To include your mod's archives, add <code>--gamemod</code>:</p>
+
+<div class="xs-cmds">
+XScriptCompiler.exe --builddata x3fl.xml --out default_data.dat --gamedir "C:\Games\X3 Farnham's Legacy" --gamemod MyMod
+</div>
+
+<p>Without <code>--gamedir</code>, the compiler falls back to reading a manually extracted <code>Data\</code> folder:</p>
+
+<div class="xs-cmds">
+XScriptCompiler.exe --builddata x3fl.xml --out default_data.dat
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  VS CODE INTEGRATION                                    -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2>VS Code Integration <span class="xs-badge beta">v1.5.0</span></h2>
+
+<p>A Visual Studio Code extension is included (<code>xscript-x3fl-extension.zip</code>) providing full editor support for <code>.xs</code> files.</p>
+
+<div class="xs-features">
+  <div class="xs-feat">
+    <strong>Syntax highlighting</strong>
+    <p>Keywords (<code>function</code>, <code>sub</code>, <code>endsub</code>, <code>void</code>), function/sub definition headers, return types, variables, operators, strings, and all preprocessor directives.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Snippet completions <span class="xs-badge new">v1.4</span></strong>
+    <p><code>function main</code>, <code>function</code>, <code>sub</code>, <code>if</code>, <code>while</code>, <code>foreach</code> — structural templates with tab stops that appear in autocomplete.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>IntelliSense</strong>
+    <p>Autocomplete for all ~2,500 functions, methods, properties, constants, namespaces (<code>Utils::</code>), function macros (<code>foreach</code>), and <code>scriptCheck</code> script-name completions.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Hover docs</strong>
+    <p>Hover over any function, constant, or namespace member to see its description, parameters, and return type.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Error squiggles</strong>
+    <p>Compiler errors and warnings appear as underlines directly in the editor and in the Problems panel.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>One-click compile</strong>
+    <p>Click the play button in the editor title bar, press <kbd>Ctrl+Shift+B</kbd>, or right-click for compile options. Optional compile-on-save.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Add Define command <span class="xs-badge new">v1.5</span></strong>
+    <p>Command Palette → <strong>XScript: Add Define</strong> — interactively adds a compile-time <code>#define</code> symbol to your workspace settings without editing <code>settings.json</code> manually.</p>
+  </div>
+  <div class="xs-feat">
+    <strong>Binary .dat database <span class="xs-badge new">v1.5</span></strong>
+    <p>Loads the compact binary <code>.dat</code> format produced by <code>--builddata</code> — significantly faster than the XML fallback.</p>
+  </div>
+</div>
+
+<h3>Installing the Extension</h3>
+
+<ol>
+  <li>Extract <code>xscript-x3fl-extension.zip</code></li>
+  <li>Open Visual Studio Code</li>
+  <li>Press <kbd>Ctrl+Shift+X</kbd> to open the Extensions panel</li>
+  <li>Click the <strong>…</strong> menu (top right) and choose <strong>Install from VSIX…</strong></li>
+  <li>Select the <code>.vsix</code> file and reload when prompted</li>
+</ol>
+
+<h3>Configuring the Extension</h3>
+
+<p>Place <code>default_data.dat</code> (or <code>x3fl.dat</code>) in your workspace root — the extension loads it automatically on startup.</p>
+
+<table class="xs-tbl">
+  <thead><tr><th>Setting</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>xscript.compiler.exePath</code></td><td>Full path to <code>XScriptCompiler.exe</code>.</td></tr>
+    <tr><td><code>xscript.compiler.dataFile</code></td><td>Path to <code>default_data.dat</code>. Auto-detected if left blank.</td></tr>
+    <tr><td><code>xscript.compiler.outputDir</code></td><td>Where compiled <code>.xml</code> files are written. Defaults to alongside the source file.</td></tr>
+    <tr><td><code>xscript.compiler.compileOnSave</code></td><td>Set to <code>true</code> to compile automatically on every save.</td></tr>
+    <tr><td><code>xscript.compiler.defines</code></td><td>Array of symbols to pre-define, e.g. <code>["DEBUG", "PLATFORM_PC"]</code>.</td></tr>
+  </tbody>
+</table>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  VERSION HISTORY                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<h2>Version History</h2>
+
+<h3>0.9 BETA — Current</h3>
+<ul>
+  <li><strong><code>--gamedir &lt;dir&gt;</code></strong> — load game data directly from the X3 FL installation's <code>cat</code>/<code>dat</code> archives; no manual <code>Data\</code> extraction needed; temp files are written to the system temp directory and cleaned up automatically</li>
+  <li><strong><code>--gamemod &lt;name&gt;</code></strong> — name of a mod <code>cat</code>/<code>dat</code> file (without extension) to layer on top of the base game archives when using <code>--gamedir</code></li>
+  <li><strong><code>--scan_scripts</code></strong> — after building the data file, scan <code>.xs</code> files in the working directory to register user-defined function argument and return types</li>
+  <li><strong><code>--working &lt;dir&gt;</code></strong> — additional directory for <code>--scan_scripts</code>; may be specified multiple times</li>
+  <li><strong><code>foreach</code> macro nested/sub fix</strong> — macros now expand correctly inside <code>sub</code> bodies and when nested inside other block structures</li>
+  <li><strong>VS Code extension v1.5.0</strong> — <code>foreach</code> snippet; <code>scriptCheck</code> argument completions; <code>allowNullObject</code> support; <code>xscript.addDefine</code> Command Palette shortcut; binary <code>.dat</code> loader (<code>binaryParser.ts</code>)</li>
+</ul>
+
+<h3>0.8 BETA</h3>
+<ul>
+  <li><strong><code>function main(...)</code> wrapper</strong> — all scripts wrap their body in a <code>function main(...)</code> block; script arguments are declared as typed parameters in the function signature instead of <code>SetArgument()</code> calls; <code>#DESCRIPTION</code>, <code>#VERSION</code>, <code>#COMMAND</code> directives replace the equivalent runtime calls; <code>return(value)</code> at end of main</li>
+  <li><strong>User-defined local-scoped functions</strong> — <code>function name(params) { ... }</code> with full variable isolation; <code>return($x)</code> exits the function (not the script); forward declarations work automatically; recursion warning; name-collision checking against existing commands</li>
+  <li><strong><code>sub name() { ... }</code> block syntax</strong> — readable wrapper for native label/gosub/endsub; subs share the global variable scope; <code>endsub;</code> for early exit; correct output ordering regardless of source position relative to <code>main</code></li>
+  <li><strong>Pardef-free parameters</strong> — <code>function test($var)</code> defaults untyped parameters to <code>VALUE</code></li>
+  <li><strong><code>DATATYPE_*</code> constants in parameter lists</strong> — accepted where an exact single-type pardef match exists</li>
+  <li><strong>Duplicate detection</strong> — clear errors for name collisions across labels, subs, and user functions; function names checked against existing script commands</li>
+  <li><strong>Decompiler updated</strong> — output uses <code>function main(...)</code> syntax; sub blocks (<code>label:</code>/<code>endsub;</code> groups) are emitted as <code>sub name() { ... }</code> outside <code>main</code>; <code>sub.</code> label prefix is stripped automatically</li>
+  <li><strong>VS Code extension v1.4.0</strong> — <code>function</code>/<code>sub</code>/<code>endsub</code>/<code>void</code> keyword highlighting; function and sub definition header patterns; structural snippet completions</li>
+</ul>
+
+<h3>0.7 BETA</h3>
+<ul>
+  <li>Chained (double) assignment — <code>$x = $y = -1;</code></li>
+  <li>Function overloads/aliases — multiple functions sharing a name, resolved by argument count</li>
+  <li>Namespaces — <code>Utils::random(...)</code>; namespaced constants (e.g. <code>RaceFlag::NPC</code>)</li>
+  <li>Function macros — <code>foreach($item, $array) { ... }</code> and custom macros in <code>x3fl.xml</code></li>
+  <li><code>#datatype</code> preprocessor directive</li>
+  <li>Multi-line <code>#define</code> with trailing <code>\</code></li>
+  <li><code>--usenamespace</code> decompiler flag</li>
+  <li>VS Code extension v1.3.0 — namespace/macro autocomplete, hover, signature help</li>
+</ul>
+
+<h3>0.6 BETA</h3>
+<ul>
+  <li>While loop condition re-evaluation — <code>++</code>/<code>--</code> and function calls in <code>while(...)</code> conditions</li>
+  <li><code>break</code> and <code>continue</code> inside while loops</li>
+  <li>Nested function calls as arguments and in conditions</li>
+  <li>Post-increment in array subscripts</li>
+  <li>Full preprocessor system — <code>#define</code>, <code>#ifdef</code>/<code>#ifndef</code>/<code>#elseif</code>/<code>#else</code>/<code>#endif</code>, <code>#include</code></li>
+  <li>Script metadata — <code>#DESCRIPTION</code>, <code>#VERSION</code>, <code>#COMMAND</code></li>
+  <li>Command-line <code>--define:NAME</code> flag</li>
+  <li>VS Code extension v1.2.0 — preprocessor syntax highlighting</li>
+</ul>
+
+<h3>0.5 BETA</h3>
+<ul>
+  <li>Full XScript language — arrays, tables, compound assignment, namespace constants, object methods/properties</li>
+  <li>Two-pass compilation for correct type tracking</li>
+  <li>Object type propagation</li>
+  <li>DataType prefix support for mod-added commands (<code>SHIPCOMMAND_1000</code>)</li>
+</ul>

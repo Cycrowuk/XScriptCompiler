@@ -27,7 +27,7 @@ v0.6
 	Added Preprocessor metadata, #DESCRIPTION, #VERSION, #COMMAND
 	Added #include, to include other script files
 	Improved uninitialized variable checks
-	
+
 v0.7
 	Fixed minus operator '-' correctly working as negative integer
 	Fixed nested if with incorrect "end"
@@ -47,5 +47,11 @@ v0.8
 	Added sub blocks
 	Updated decompiler to decompile to function blocks
 
-
-	
+v0.9
+	Added --gamedir flag to load game data directly from cat/dat archives
+	Added --gamemod flag to layer a mod's cat/dat file on top of the base game archives
+	Added --scan_scripts flag to register user-defined function argument/return types in the data file
+	Added --working flag to specify additional directories for --scan_scripts (repeatable)
+	Fixed foreach macro not expanding correctly inside sub blocks
+	Fixed foreach macro not expanding correctly when nested inside other block structures
+	Updated VS Code extension to v1.5.0
