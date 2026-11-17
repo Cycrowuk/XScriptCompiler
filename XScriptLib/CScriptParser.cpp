@@ -470,21 +470,18 @@ bool CScriptParser::_expandMacro(const MacroData* macro, const std::vector<std::
 				endBrace->setFile(_currentFile.empty() ? L"" : _currentFile.back());
 				_macroParseStack.back()->addItem(endBrace);
 			}
-			// Top-level outermost: the user-source } arrives via parseLine after _expandMacro
-			// returns, so do NOT emit a } here — it would double-close the block.
-			// Nested-deferred: no user-source } is coming (this macro was called from
-			// _runDataList during deferred execution), so we MUST emit } — but AFTER
-			// the deferred body items run (so the body executes inside the while block).
-			if (nestedDeferred)
-			{
-				_deferredEndBlock = true;
-				_deferredEndBlockLinePos = linePos;
-				ok = true;
-			}
-			else
-				ok = true;
-			if (_functionDefDepth > 1) _functionDefDepth--;
-			if (_subDefDepth > 1)      _subDefDepth--;
+			// The user-source } that closes the foreach body is consumed by _parseDataList's
+			// depth-drain (line ~6283) before _expandMacro is called — it never reaches
+			// _runParse as an EndBlock, so _conditionStack is never popped by that path.
+			// We must ALWAYS emit the closing } ourselves — after the deferred body items
+			// run so the body executes inside the while block — for both top-level and
+			// nested-deferred expansions.
+			_deferredEndBlock = true;
+			_deferredEndBlockLinePos = linePos;
+			ok = true;
+			// Do NOT touch _functionDefDepth/_subDefDepth here — the depth scan
+			// in _parseDataList is skipped during macro expansion (_macroCallNode != nullptr),
+			// so those counters are unaffected by macro { } and need no correction here.
 			break;
 		}
 		case MacroRoutineLine::Type::BlockCommands:
@@ -6529,9 +6526,11 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 		// sub/function body. Must run AFTER header detection so _subDefDepth
 		// is already set to 1 (body level). Captures depth before updating
 		// so the sub-close check can distinguish a nested } from the real one.
-		// Skip during macro expansion — macro { } are while/if blocks, not function depth.
+		// Skip during macro expansion — macro { } are while/if blocks, not
+		// function/sub depth; _expandMacro manages its own depth via its EndBlock
+		// handler and the _functionDefDepth/_subDefDepth decrements there.
 		int subDepthBeforeScan = _subDefDepth;
-		if (_inSubDef && _subDefDepth > 0 && !list.empty())
+		if (_inSubDef && _subDefDepth > 0 && !list.empty() && _macroCallNode == nullptr)
 		{
 			for (const BaseParse* p : list)
 			{
@@ -6547,7 +6546,7 @@ bool CScriptParser::_parseDataList(std::vector<const BaseParse*>& list)
 
 		// Same depth tracking for function main's body
 		int funcDepthBeforeScan = _functionDefDepth;
-		if (_inFunctionDef && _functionDefDepth > 0 && !list.empty())
+		if (_inFunctionDef && _functionDefDepth > 0 && !list.empty() && _macroCallNode == nullptr)
 		{
 			for (const BaseParse* p : list)
 			{

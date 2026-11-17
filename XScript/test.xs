@@ -1,7 +1,9 @@
 // ============================================================
 //  XScript Compiler v0.9 Feature Test
-//  Tests: script call type checking, allowNullObject (bare call),
-//         foreach macro, script return type inference
+//  Tests: preprocessor, user functions, subs, while loops,
+//         continue/break, foreach macro (single, nested,
+//         sequential), foreach with continue/break,
+//         script calls (v0.9), arrays, tables, labels/goto
 // ============================================================
 
 #DESCRIPTION "XScript v0.9 Feature Test Script"
@@ -268,35 +270,148 @@ function main(VARSECTOR $sector, SHIP $ship)
     $result = $ship->call("plugin.test.script", $count, $sector);
 
     // allowNullObject — bare call() without an object, auto-inserts NULL
-    // compiles identically to NULL->call("script.name", ...)
     $result = call("plugin.test.script", $count, $sector);
 
-    // Return type inference — if the script is known, $scriptResult
-    // gets the script's declared return datatype automatically
+    // Return type inference
     $scriptResult = call("plugin.test.script", $count, $sector);
 
     // Call on explicit NULL object
     $result = NULL->call("plugin.test.script", $count);
 
-    // ── v0.9: Foreach macro ───────────────────────────────────
+    // ── v0.9: Foreach — single loop, simple body ─────────────
     $shipList[0] = PLAYERSHIP;
     $shipList[1] = PLAYERSHIP;
     $shipList[2] = PLAYERSHIP;
-
 
     foreach($currentShip, $shipList)
     {
         $count += 1;
     }
 
-    // Nested foreach loops
+    // ── v0.9: Foreach — continue inside foreach ───────────────
+    $result = 0;
+    foreach($currentShip, $shipList)
+    {
+        if ($count > 50)
+        {
+            continue;
+        }
+        $result += 1;
+    }
+
+    // ── v0.9: Foreach — break inside foreach ─────────────────
+    $result = 0;
+    foreach($currentShip, $shipList)
+    {
+        if ($result >= 1)
+        {
+            break;
+        }
+        $result += 1;
+    }
+
+    // ── v0.9: Foreach — body with if/else/while ───────────────
     $itemList[0] = 1;
-    $itemList[1] = 2;	
+    $itemList[1] = 2;
+    $itemList[2] = 3;
+
+    foreach($currentItem, $itemList)
+    {
+        $test = $currentItem + 10;
+        if ($test > 11)
+        {
+            $result = $result + $test;
+        }
+        else
+        {
+            $result = 0;
+        }
+        while ($test > 0)
+        {
+            $test -= 1;
+        }
+    }
+
+    // ── v0.9: Foreach — sequential (two foreachs in a row) ───
+    foreach($currentShip, $shipList)
+    {
+        $count += 1;
+    }
+    foreach($currentItem, $itemList)
+    {
+        $result += $currentItem;
+    }
+
+    // ── v0.9: Foreach — nested (inner body simple) ───────────
     foreach($currentItem, $itemList)
     {
         foreach($currentShip, $shipList)
         {
             $result = $currentItem + $count;
+        }
+    }
+
+    // ── v0.9: Foreach — nested with body after inner foreach ──
+    // (tests that outer body content runs AFTER inner while closes)
+    foreach($currentItem, $itemList)
+    {
+        foreach($currentShip, $shipList)
+        {
+            $result = $currentItem + $count;
+        }
+        $count += 1;
+        $result = $currentItem + $count;
+    }
+
+    // ── v0.9: Foreach — nested with continue/break in outer ──
+    foreach($currentItem, $itemList)
+    {
+        foreach($currentShip, $shipList)
+        {
+            $result = $currentShip + $currentItem;
+        }
+        if ($count > 10)
+        {
+            continue;
+        }
+        $result = $currentItem;
+    }
+
+    // ── v0.9: Foreach — nested with if/else/while in outer body
+    foreach($currentItem, $itemList)
+    {
+        foreach($currentShip, $shipList) {
+            $result = 10;
+        }
+        $test = $currentItem + 2;
+        $result = $currentItem + $count;
+        if ($test > 20)
+        {
+            $result = $result + 20;
+            continue;
+        }
+        else
+        {
+            $result = 10;
+        }
+        while ($test)
+        {
+            $result = $result + 10;
+        }
+    }
+
+    // ── v0.9: Foreach — deeply nested (3 levels) ─────────────
+    $levelList[0] = 1;
+    $levelList[1] = 2;
+
+    foreach($a, $itemList)
+    {
+        foreach($b, $shipList)
+        {
+            foreach($c, $levelList)
+            {
+                $result = $a + $b + $c;
+            }
         }
     }
 
