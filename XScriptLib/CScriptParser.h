@@ -77,6 +77,7 @@ namespace XScript {
 		NullVariable,
 		InvalidExpressionOperator,
 		RecursiveFunctionCall,
+		UnknownScript,
 	};
 
 	struct Warnings

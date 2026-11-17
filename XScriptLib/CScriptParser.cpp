@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "CScriptParser.h"
 #include <fstream>
 
@@ -5548,8 +5548,11 @@ bool CScriptParser::_doGlobalFunction(const Function* func, ParseFunction* funct
 					// Unknown script — warn but don't error (real pass only)
 					if (!_prePassMode)
 					{
-						Warnings& warn = _addWarning(ParseWarnings::NullVariable, arg);
-						warn.data.push_back(arg->data());
+						Warnings& warn = _addWarning(ParseWarnings::UnknownScript, arg);
+						std::wstring scriptName = arg->data();
+						if (scriptName.size() >= 2 && scriptName.front() == L'"' && scriptName.back() == L'"')
+							scriptName = scriptName.substr(1, scriptName.size() - 2);
+						warn.data.push_back(scriptName);
 					}
 				}
 				else if (!scriptDef->returnTypes.empty() &&

@@ -119,6 +119,9 @@ void displayWarning(const Warnings& warning)
 	case ParseWarnings::NullVariable:
 		std::cout << "- Variable '" << converter.to_bytes(warning.data[0]) << "' has not be initilised";
 		break;
+	case ParseWarnings::UnknownScript:
+		std::cout << "- Script '" << converter.to_bytes(warning.data[0]) << "' is not defined in the data file";
+		break;
 	case ParseWarnings::InvalidArrayValue:
 		std::cout << "- Array subscript '" << converter.to_bytes(warning.data[0]) << "' must be an integer";
 		if (!warning.data[1].empty())
