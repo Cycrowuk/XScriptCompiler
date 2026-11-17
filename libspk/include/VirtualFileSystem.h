@@ -23,6 +23,7 @@ private:
 	Utils::WStringList *_lAddons;
 	Utils::WString	m_sAddon;
 	Utils::WString	m_sDir;
+	Utils::WString	m_sTempDir; // directory for temporary extracted files
 	bool		m_bLoaded;
 
 	FileList *m_pModMap;
@@ -49,6 +50,7 @@ public:
 	// setters
 	void setAddon(const Utils::WString &addon);
 	void setLanguage(int iLang);
+	void setTempDir(const Utils::WString &tempDir);
 
 	// extractions
 	void extractTexts(CXspFile *pPackage, int textId);
@@ -127,6 +129,7 @@ private:
 	Utils::WStringList *_updateSectionList(const Utils::WString &sFile, bool singleEntry);
 
 	void _removeSameFile(const Utils::WString &sFile, const Utils::WString &sDest, const Utils::WString &ext, FileList *pList);
+	Utils::WString _tempDir() const;
 
 };
 
